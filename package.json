@@ -1,0 +1,35 @@
+{
+  "name": "mousie-pi-game",
+  "version": "1.0.0",
+  "description": "Мышонок Пи - платформер для Android",
+  "main": "www/index.html",
+  "scripts": {
+    "start": "npx serve www",
+    "build": "echo 'Static HTML - no build needed'",
+    "cap:init": "npx cap init \"Мышонок Пи\" com.mousiepi.game --web-dir www",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:release": "cd android && ./gradlew assembleRelease"
+  },
+  "keywords": [
+    "game",
+    "platformer",
+    "android",
+    "capacitor"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^5.0.0",
+    "serve": "^14.0.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^5.0.0",
+    "@capacitor/core": "^5.0.0",
+    "@capacitor/splash-screen": "^5.0.0",
+    "@capacitor/status-bar": "^5.0.0"
+  }
+}

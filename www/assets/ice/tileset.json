@@ -1,0 +1,14 @@
+{
+    "columns": 14,
+    "image": "sheet.png",
+    "imageheight": 490,
+    "imagewidth": 980,
+    "margin": 0,
+    "name": "ice",
+    "spacing": 0,
+    "tilecount": 98,
+    "tileheight": 70,
+    "tilewidth": 70,
+    "type": "tileset",
+    "version": "1.10"
+}

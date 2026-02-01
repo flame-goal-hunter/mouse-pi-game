@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# === Android (Capacitor + Gradle) ===
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/*.iml
+android/.idea/
+android/app/*.iml
+android/capacitor-cordova-android-plugins/build/
+android/capacitor-cordova-android-plugins/*.iml
+
+# Gradle cache
+.gradle/
+
+# APK / AAB bundles
+*.apk
+*.aab
+
+# Keystore (NEVER commit!)
+*.keystore
+*.jks
+*.p12
+keystore.properties
+
+# === iOS (if added later) ===
+ios/App/Pods/
+ios/App/build/
+ios/App/*.xcworkspace/xcuserdata/
+ios/App/*.xcodeproj/xcuserdata/
+ios/App/*.xcodeproj/project.xcworkspace/xcshareddata/
+ios/DerivedData/
+ios/.symlinks/
+*.ipa
+
+# Cocoapods
+ios/App/Podfile.lock
+
+# === IDE / Editors ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# === OS ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Logs ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Claude Code ===
+.claude/
+
+# === Misc ===
+*.tgz
+*.tar.gz
+*.zip
+dist/
+.env
+.env.local
+.env.*.local

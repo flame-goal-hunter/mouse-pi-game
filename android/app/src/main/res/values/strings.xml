@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Мышонок Пи</string>
+    <string name="title_activity_main">Мышонок Пи</string>
+    <string name="package_name">com.mousiepi.game</string>
+    <string name="custom_url_scheme">com.mousiepi.game</string>
+</resources>

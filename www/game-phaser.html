@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>Mousie Pi - Snowball Fight</title>
+
+    <!-- Nunito font for game UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #1a1a2e;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* ========== HUD (hidden until game-active) ========== */
+        #hud {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 10;
+            pointer-events: none;
+            padding: max(10px, env(safe-area-inset-top, 10px)) 20px 10px;
+            display: none;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        body.game-active #hud {
+            display: flex;
+        }
+
+        #hud-player {
+            text-align: left;
+        }
+
+        #hud-center {
+            text-align: center;
+        }
+
+        #hud-opponents {
+            text-align: right;
+        }
+
+        .hud-name {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: min(3.2vw, 13px);
+            color: #fff;
+            text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
+        }
+
+        .hud-name.enemy {
+            color: #ffcc00;
+            text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
+        }
+
+        .hud-hearts {
+            font-size: min(4.5vw, 18px);
+            letter-spacing: 1px;
+        }
+
+        .hud-score {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: min(4.5vw, 18px);
+            color: #fff;
+            text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
+        }
+
+        #hud-pause {
+            font-size: min(4.5vw, 18px);
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        #hud-ping {
+            font-family: 'Nunito', monospace;
+            font-size: min(2.5vw, 10px);
+            color: #88ff88;
+            text-shadow: 0 1px 2px #000;
+            margin-top: 2px;
+        }
+
+        /* ========== Mobile controls (hidden until game-active) ========== */
+        .mobile-controls {
+            display: none !important;
+        }
+
+        #joystick-zone {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 45vw;
+            height: 45vh;
+            z-index: 10;
+        }
+
+        @media (max-width: 1024px), (pointer: coarse) {
+            body.game-active .mobile-controls {
+                display: flex !important;
+            }
+            body.game-active #joystick-zone {
+                display: block !important;
+            }
+        }
+
+        /* ========== Joystick custom style (nipplejs .back/.front) ========== */
+        #joystick-zone .back {
+            background: radial-gradient(circle, rgba(27,94,32,0.75) 0%, rgba(27,94,32,0.85) 100%) !important;
+            border: 2px solid rgba(76,175,80,0.6) !important;
+            box-shadow: 0 4px 20px rgba(27,94,32,0.6), inset 0 0 20px rgba(0,0,0,0.3) !important;
+        }
+
+        #joystick-zone .front {
+            background: radial-gradient(circle at 35% 35%, #81c784, #4caf50) !important;
+            border: 2px solid rgba(255,255,255,0.7) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.5) !important;
+        }
+
+        /* ========== Common button style ========== */
+        .game-btn {
+            position: fixed;
+            z-index: 10;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+
+        .game-btn:active {
+            transform: scale(0.88);
+        }
+
+        /* ========== Jump button — green, bottom-right ========== */
+        #btn-jump {
+            right: 2vw;
+            bottom: 2vh;
+            width: min(24vw, 100px);
+            height: min(24vw, 100px);
+            font-size: min(10vw, 42px);
+            color: rgba(255,255,255,0.85);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            background: radial-gradient(circle at 35% 35%, rgba(102,187,106,0.75), rgba(46,125,50,0.75));
+            border: 3px solid rgba(255,255,255,0.5);
+            box-shadow: 0 4px 15px rgba(46,125,50,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+        }
+
+        #btn-jump .jump-arrow {
+            display: block;
+            width: 0;
+            height: 0;
+            border-left: min(4vw, 16px) solid transparent;
+            border-right: min(4vw, 16px) solid transparent;
+            border-bottom: min(5.5vw, 22px) solid #a5d6a7;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+        }
+
+        /* ========== Hook button — centered above Jump ========== */
+        #btn-hook {
+            right: calc(2vw + (min(24vw, 100px) - min(20vw, 88px)) / 2);
+            bottom: calc(2vh + min(24vw, 100px) + 12px);
+            width: min(20vw, 88px);
+            height: min(20vw, 88px);
+            font-size: min(7vw, 32px);
+            color: rgba(255,255,255,0.85);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            background: radial-gradient(circle at 35% 35%, rgba(253,203,110,0.75), rgba(225,112,85,0.75));
+            border: 3px solid rgba(255,255,255,0.45);
+            box-shadow: 0 4px 15px rgba(225,112,85,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+        }
+
+        /* ========== Fire button — centered vertically with Jump ========== */
+        #btn-fire {
+            position: fixed;
+            right: calc(2vw + min(24vw, 100px) + 12px);
+            bottom: calc(2vh + (min(24vw, 100px) - min(13vw, 56px)) / 2);
+            width: min(32vw, 135px);
+            height: min(13vw, 56px);
+            z-index: 10;
+            border-radius: min(7.5vw, 32px);
+            background: radial-gradient(ellipse at 50% 40%, rgba(255,107,107,0.75), rgba(200,50,50,0.75));
+            border: 3px solid rgba(255,255,255,0.4);
+            box-shadow: 0 4px 15px rgba(200,50,50,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            overflow: hidden;
+        }
+
+        .fire-half {
+            flex: 1;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: min(5.5vw, 24px);
+            color: rgba(255,220,220,0.95);
+            text-shadow: 0 1px 3px rgba(180,50,50,0.5), 0 0 6px rgba(255,100,100,0.3);
+            transition: background 0.1s ease;
+        }
+
+        .fire-half:active {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .fire-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: min(7vw, 28px);
+            pointer-events: none;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+
+    <!-- HUD (hidden until body.game-active) -->
+    <div id="hud">
+        <div id="hud-player">
+            <div class="hud-name" id="hud-player-name"></div>
+            <div class="hud-hearts" id="hud-player-hearts"></div>
+        </div>
+        <div id="hud-center">
+            <div class="hud-score" id="hud-score">0 : 0</div>
+            <div id="hud-pause">⏸️</div>
+            <div id="hud-ping"></div>
+        </div>
+        <div id="hud-opponents"></div>
+    </div>
+
+    <!-- Mobile controls (hidden until body.game-active + mobile) -->
+    <div id="joystick-zone" class="mobile-controls"></div>
+    <div id="btn-jump" class="mobile-controls game-btn"><span class="jump-arrow"></span></div>
+    <div id="btn-hook" class="mobile-controls game-btn">🪝</div>
+    <div id="btn-fire" class="mobile-controls">
+        <div class="fire-half fire-left">❮</div>
+        <div class="fire-half fire-right">❯</div>
+        <div class="fire-icon">❄️</div>
+    </div>
+
+    <!-- Phaser 3 with Matter.js physics -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+
+    <!-- EasyStar.js for AI pathfinding -->
+    <script src="lib/easystar.min.js"></script>
+
+    <!-- PeerJS for multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <!-- nipplejs - DOM-based virtual joystick for touch controls -->
+    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.2/dist/nipplejs.min.js"></script>
+
+    <!-- Behavior3.js for AI behavior trees -->
+    <script src="https://cdn.jsdelivr.net/npm/behavior3js@0.2.2/libs/behavior3-0.2.2.js"></script>
+    <!-- Game modules (ES6) -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
