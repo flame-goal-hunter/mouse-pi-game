@@ -24,9 +24,13 @@ export const PHYS = {
     HOOK_COOLDOWN: 300,     // Cooldown between hooks (ms)
 
     // Combat
-    SNOWBALL_SPEED: 15,     // Snowball velocity
+    SNOWBALL_SPEED: 12,     // Snowball velocity (slightly slower for arc compensation)
     SNOWBALL_DAMAGE: 10,    // Damage per hit (half heart = 10 HP)
     KNOCKBACK_FORCE: 0.02,  // Knockback strength
+    SNOWBALL_GRAVITY_SCALE: 0.5,  // Gravity multiplier for snowballs (lighter than characters)
+    SNOWBALL_BOUNCE: 0.3,         // Bounce off walls/platforms
+    SNOWBALL_LIFETIME: 3000,      // ms before auto-destroy
+    SNOWBALL_COOLDOWN: 400,       // ms between shots
 
     // Coyote time & jump buffer
     COYOTE_TIME: 100,       // ms to jump after leaving ground

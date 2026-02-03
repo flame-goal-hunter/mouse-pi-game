@@ -281,6 +281,10 @@ export class CharacterCore {
     updateFlyingHook(delta) {
         const frames = delta / 16.67;
 
+        // Save position before moving (last known air position = surface point)
+        const prevX = this.hookPos.x;
+        const prevY = this.hookPos.y;
+
         // Move hook
         this.hookPos.x += this.hookVel.x * frames;
         this.hookPos.y += this.hookVel.y * frames;
@@ -292,7 +296,7 @@ export class CharacterCore {
         if (this.scene.platformLayer) {
             const tile = this.scene.platformLayer.getTileAtWorldXY(this.hookPos.x, this.hookPos.y);
             if (tile && tile.index > 0) {
-                // Hit a tile - attach!
+                // Attach at tile center (visually inside the tile texture)
                 this.attachHook(tile.getCenterX(), tile.getCenterY());
                 return true;
             }
@@ -366,10 +370,40 @@ export class CharacterCore {
         // Jump pressed → release with velocity boost
         if (this.jumpBuffer > 0) {
             const currentVel = this.body.velocity;
-            this.scene.matter.body.setVelocity(this.body, {
-                x: currentVel.x * 1.1,
-                y: Math.min(currentVel.y, PHYS.JUMP_FORCE * 0.7)
-            });
+            let vx = currentVel.x * 1.1;
+            let vy = Math.min(currentVel.y, PHYS.JUMP_FORCE * 0.95);
+
+            // Prevent tunneling: check tiles in velocity direction
+            if (this.scene.platformLayer) {
+                const bx = this.body.position.x;
+                const by = this.body.position.y;
+                const halfW = 25;  // half body width
+                const halfH = 30;  // half body height
+
+                // Check horizontal: tile ahead at body edge + 2 frames of travel
+                const checkX = bx + Math.sign(vx) * (halfW + Math.abs(vx) * 2);
+                const tileH = this.scene.platformLayer.getTileAtWorldXY(checkX, by);
+                if (tileH && tileH.index > 0) {
+                    vx = 0;
+                }
+
+                // Check vertical: tile above/below at body edge + 2 frames of travel
+                const checkY = by + Math.sign(vy) * (halfH + Math.abs(vy) * 2);
+                const tileV = this.scene.platformLayer.getTileAtWorldXY(bx, checkY);
+                if (tileV && tileV.index > 0) {
+                    // Don't block jump if the tile is the hook anchor tile
+                    // (we NEED to jump past it to climb up)
+                    const anchorTile = this.hookAnchor ?
+                        this.scene.platformLayer.getTileAtWorldXY(
+                            this.hookAnchor.position.x, this.hookAnchor.position.y
+                        ) : null;
+                    if (!anchorTile || tileV !== anchorTile) {
+                        vy = Math.max(vy, -3);
+                    }
+                }
+            }
+
+            this.scene.matter.body.setVelocity(this.body, { x: vx, y: vy });
 
             this.jumpBuffer = 0;
             this.coyoteTime = 0;
@@ -379,8 +413,10 @@ export class CharacterCore {
             return false;
         }
 
-        // Auto-reel: always shorten rope when attached (Teeworlds-style)
-        if (this.ropeLength > PHYS.HOOK_MIN_LENGTH) {
+        // Auto-reel: shorten rope when attached (Teeworlds-style)
+        // Bots can disable reel via hookNoReel flag to enable pendulum swing
+        const noReel = this.body.gameObject?.getData?.('hookNoReel');
+        if (!noReel && this.ropeLength > PHYS.HOOK_MIN_LENGTH) {
             this.ropeLength -= PHYS.HOOK_REEL_SPEED;
             this.ropeConstraint.length = this.ropeLength;
         }

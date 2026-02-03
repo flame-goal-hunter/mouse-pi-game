@@ -32,7 +32,7 @@ export class NetworkManager {
 
         // Pulse buffering (fire/hookJustPressed are one-frame, throttle can miss them)
         this._pendingFire = false;
-        this._pendingFireDir = 0;
+        this._pendingFireAngle = null;
         this._pendingHookJust = false;
 
         // === HOST (server) state ===
@@ -342,7 +342,7 @@ export class NetworkManager {
         // Accumulate one-frame pulses between sends (they reset after one read)
         if (input.fire) {
             this._pendingFire = true;
-            this._pendingFireDir = input.fireDirection || 0;
+            this._pendingFireAngle = input.fireAngle;
         }
         if (input.hookJustPressed) {
             this._pendingHookJust = true;
@@ -361,13 +361,13 @@ export class NetworkManager {
             hook: !!input.hook,
             hookJustPressed: this._pendingHookJust || !!input.hookJustPressed,
             fire: this._pendingFire || !!input.fire,
-            fireDirection: this._pendingFire ? this._pendingFireDir : (input.fireDirection || 0),
+            fireAngle: this._pendingFire ? this._pendingFireAngle : (input.fireAngle ?? null),
             strength: input.strength || 1
         };
 
         // Reset pending pulses after sending
         this._pendingFire = false;
-        this._pendingFireDir = 0;
+        this._pendingFireAngle = null;
         this._pendingHookJust = false;
 
         this.broadcast({ type: 'input', data });
@@ -379,7 +379,7 @@ export class NetworkManager {
         // Return latest input from guest (or idle input if none received)
         const input = this.remoteInputs.get('guest') || this.remoteInputs.values().next().value;
         if (!input) {
-            return { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireDirection: 0, strength: 1 };
+            return { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
         }
         return { ...input };
     }
@@ -437,7 +437,7 @@ export class NetworkManager {
                     // Preserve fire pulse until host processes it
                     if (existing?.fire && !message.data.fire) {
                         message.data.fire = true;
-                        message.data.fireDirection = existing.fireDirection;
+                        message.data.fireAngle = existing.fireAngle;
                     }
                     // Preserve hook pulse until host processes it
                     if (existing?.hookJustPressed && !message.data.hookJustPressed) {

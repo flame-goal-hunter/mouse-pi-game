@@ -22,7 +22,7 @@ export class HumanInput {
         // Touch state
         this.touchJump = false;
         this.touchHook = false;
-        this.touchFireDirection = 0;
+        this.touchFireAngle = null;
         this.touchFireJustPressed = false;
         this.touchHookJustPressed = false;
 
@@ -45,9 +45,17 @@ export class HumanInput {
             if (zone) zone.style.display = 'none';
         }
 
-        // Desktop mouse
+        // Desktop mouse — fire angle from player to cursor
+        this.fireAngle = null;
         scene.input.on('pointerdown', (pointer) => {
             if (!this.isMobile && pointer.leftButtonDown()) {
+                const player = this.scene.player;
+                if (player && player.active) {
+                    this.fireAngle = Math.atan2(
+                        pointer.worldY - player.y,
+                        pointer.worldX - player.x
+                    );
+                }
                 this.fireJustPressed = true;
             }
         });
@@ -60,7 +68,7 @@ export class HumanInput {
                 this.joystickDir = 0;
                 this.touchJump = false;
                 this.touchHook = false;
-                this.touchFireDirection = 0;
+                this.touchFireAngle = null;
             } else {
                 // Recreate nipplejs — it loses touch state when DOM is hidden
                 this.recreateJoystick();
@@ -197,17 +205,27 @@ export class HumanInput {
             () => this.touchHook = false
         );
 
-        // Fire button — single button with left/right halves
+        // Fire button — circular aim pad (tap position → angle from center)
         const fireBtn = document.getElementById('btn-fire');
         if (fireBtn) {
-            const bindHalf = (el, dir) => {
-                bind(el,
-                    () => { this.touchFireDirection = dir; this.touchFireJustPressed = true; },
-                    () => this.touchFireDirection = 0
-                );
+            const onFireDown = (e) => {
+                e.preventDefault();
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = fireBtn.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const dx = touch.clientX - cx;
+                const dy = touch.clientY - cy;
+                this.touchFireAngle = Math.atan2(dy, dx);
+                this.touchFireJustPressed = true;
             };
-            bindHalf(fireBtn.querySelector('.fire-left'), -1);
-            bindHalf(fireBtn.querySelector('.fire-right'), 1);
+            fireBtn.addEventListener('touchstart', onFireDown, { passive: false });
+            this._buttonListeners.push({
+                el: fireBtn,
+                down: onFireDown,
+                up: () => {},
+                cancel: () => {}
+            });
         }
     }
 
@@ -241,16 +259,18 @@ export class HumanInput {
         const jump = this.keys.SPACE.isDown || this.keys.W.isDown || this.cursors.up.isDown || this.touchJump;
 
         let fire = false;
-        let fireDirection = 0;
+        let fireAngle = null;
 
         if (this.fireJustPressed) {
             fire = true;
+            fireAngle = this.fireAngle;  // desktop: angle from player to cursor
             this.fireJustPressed = false;
+            this.fireAngle = null;
         }
 
         if (this.touchFireJustPressed) {
             fire = true;
-            fireDirection = this.touchFireDirection;
+            fireAngle = this.touchFireAngle;  // mobile: angle from button center
             this.touchFireJustPressed = false;
         }
 
@@ -264,7 +284,7 @@ export class HumanInput {
             hookJustPressed: hookJust,
             hookTarget: null,
             fire,
-            fireDirection,
+            fireAngle,
             strength: this.keys.SHIFT.isDown ? 0.5 : 1
         };
     }

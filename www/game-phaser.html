@@ -206,49 +206,18 @@
             box-shadow: 0 4px 15px rgba(225,112,85,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
         }
 
-        /* ========== Fire button — centered vertically with Jump ========== */
+        /* ========== Fire button — circular aim pad, centered vertically with Jump ========== */
         #btn-fire {
-            position: fixed;
             right: calc(2vw + min(24vw, 100px) + 12px);
-            bottom: calc(2vh + (min(24vw, 100px) - min(13vw, 56px)) / 2);
-            width: min(32vw, 135px);
-            height: min(13vw, 56px);
-            z-index: 10;
-            border-radius: min(7.5vw, 32px);
-            background: radial-gradient(ellipse at 50% 40%, rgba(255,107,107,0.75), rgba(200,50,50,0.75));
+            bottom: 2vh;
+            width: min(24vw, 100px);
+            height: min(24vw, 100px);
+            font-size: min(8vw, 34px);
+            color: rgba(255,255,255,0.85);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            background: radial-gradient(circle at 35% 35%, rgba(255,107,107,0.75), rgba(200,50,50,0.75));
             border: 3px solid rgba(255,255,255,0.4);
             box-shadow: 0 4px 15px rgba(200,50,50,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
-            flex-direction: row;
-            align-items: center;
-            justify-content: center;
-            touch-action: none;
-            overflow: hidden;
-        }
-
-        .fire-half {
-            flex: 1;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: min(5.5vw, 24px);
-            color: rgba(255,220,220,0.95);
-            text-shadow: 0 1px 3px rgba(180,50,50,0.5), 0 0 6px rgba(255,100,100,0.3);
-            transition: background 0.1s ease;
-        }
-
-        .fire-half:active {
-            background: rgba(255,255,255,0.2);
-        }
-
-        .fire-icon {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: min(7vw, 28px);
-            pointer-events: none;
-            opacity: 0.5;
         }
     </style>
 </head>
@@ -273,17 +242,10 @@
     <div id="joystick-zone" class="mobile-controls"></div>
     <div id="btn-jump" class="mobile-controls game-btn"><span class="jump-arrow"></span></div>
     <div id="btn-hook" class="mobile-controls game-btn">🪝</div>
-    <div id="btn-fire" class="mobile-controls">
-        <div class="fire-half fire-left">❮</div>
-        <div class="fire-half fire-right">❯</div>
-        <div class="fire-icon">❄️</div>
-    </div>
+    <div id="btn-fire" class="mobile-controls game-btn">❄️</div>
 
     <!-- Phaser 3 with Matter.js physics -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
-
-    <!-- EasyStar.js for AI pathfinding -->
-    <script src="lib/easystar.min.js"></script>
 
     <!-- PeerJS for multiplayer -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>

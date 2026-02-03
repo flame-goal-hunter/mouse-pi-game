@@ -5,6 +5,9 @@
 import { PHYS, TILE_SIZE, GAME, PLAYER_COLORS, PICKUPS, RAGDOLL, getRandomBotName } from '../config.js';
 import { CharacterCore } from '../physics/CharacterCore.js';
 import { BotBehavior } from '../ai/BotBehavior.js';
+import { PlatformNav, EdgeType } from '../ai/PlatformNav.js';
+import { ObstacleSolver } from '../ai/ObstacleSolver.js';
+import { TriNav } from '../ai/TriNav.js';
 import { HumanInput } from '../input/HumanInput.js';
 import { NetworkManager } from '../network/NetworkManager.js';
 import { Pickup } from '../entities/Pickup.js';
@@ -95,12 +98,55 @@ export class GameScene extends Phaser.Scene {
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setZoom(0.7);
 
+        // === SNOWFALL (world-space via custom emitZone) ===
+        const cam = this.cameras.main;
+        const viewW = cam.width / cam.zoom;
+
+        // Custom zone source — spawns particles at camera position in world coords
+        // Emitter stays at (0,0) so existing particles don't move with camera
+        this._snowZone = {
+            viewW,
+            camScrollX: 0, camScrollY: 0,
+            getRandomPoint: function(point) {
+                point.x = this.camScrollX + Math.random() * this.viewW;
+                point.y = this.camScrollY - 20;
+                return point;
+            }
+        };
+
+        this.snowEmitter = this.add.particles(0, 0, 'snowball', {
+            emitZone: { type: 'random', source: this._snowZone },
+            quantity: 1,
+            frequency: 200,
+            lifespan: { min: 3000, max: 6000 },
+            speedY: { min: 30, max: 80 },
+            speedX: { min: -10, max: 10 },
+            scale: { min: 0.08, max: 0.2 },
+            alpha: 0.7,
+            tint: [0xffffff, 0xe8f0ff],
+            gravityY: 30,
+            maxAliveParticles: 25,
+        });
+        this.snowEmitter.setDepth(150);
+
         // === INPUT (zoom уже 0.7, позиционирование учтёт его) ===
         this.humanInput = new HumanInput(this);
 
         // === GRAPHICS ===
         this.hookGraphics = this.add.graphics();
         this.hookGraphics.setDepth(100);
+
+        // === NAV GRAPH DEBUG ===
+        this.navDebugMode = 0; // 0=off, 1=PlatformNav, 2=TriNav
+        this.navGraphics = null;
+        this.triNavGraphics = null;
+        this.input.keyboard.on('keydown-G', () => {
+            this.navDebugMode = (this.navDebugMode + 1) % 3;
+            if (this.navGraphics) this.navGraphics.clear();
+            if (this.triNavGraphics) this.triNavGraphics.clear();
+            const labels = ['OFF', 'PlatformNav', 'TriNav'];
+            console.log(`[Nav Debug] ${labels[this.navDebugMode]}`);
+        });
 
         // === UI (zoom уже 0.7 для Rex Anchor) ===
         this.createUI();
@@ -156,6 +202,13 @@ export class GameScene extends Phaser.Scene {
         this.events.on('shutdown', () => {
             if (this.humanInput) this.humanInput.destroy();
             document.body.classList.remove('game-active');
+            // Reset slow-mo state
+            if (this._slowmoTimer) {
+                clearTimeout(this._slowmoTimer);
+                this._slowmoTimer = null;
+            }
+            this._slowmoActive = false;
+            this.time.timeScale = 1;
         });
     }
 
@@ -282,25 +335,34 @@ export class GameScene extends Phaser.Scene {
     // === PATHFINDING ===
 
     setupPathfinding() {
-        // EasyStar setup
-        if (typeof EasyStar !== 'undefined') {
-            this.easystar = new EasyStar.js();
-
-            // Build grid from tilemap
-            const grid = [];
-            for (let y = 0; y < this.map.height; y++) {
-                grid[y] = [];
-                for (let x = 0; x < this.map.width; x++) {
-                    const tile = this.platformLayer ? this.platformLayer.getTileAt(x, y) : null;
-                    // 0 = walkable, 1 = blocked
-                    grid[y][x] = (tile && tile.index > 0) ? 1 : 0;
-                }
+        this.platformNav = new PlatformNav();
+        if (this.platformLayer) {
+            this.platformNav.build(
+                this.platformLayer,
+                this.map.width,
+                this.map.height,
+                TILE_SIZE,
+                this.waterY || null
+            );
+            // Load manual nav edges from Tiled (JUMP, FALL, HOOK)
+            const navEdgesLayer = this.map.getObjectLayer('nav_edges');
+            if (navEdgesLayer) {
+                this.platformNav.loadManualEdges(navEdgesLayer.objects);
             }
+            console.log(`[Nav] ${this.platformNav.platforms.length} platforms, ${this.platformNav.edges.length} edges`);
+        }
+        this.obstacleSolver = new ObstacleSolver(this.platformNav, this.platformLayer);
 
-            this.easystar.setGrid(grid);
-            this.easystar.setAcceptableTiles([0]);
-            this.easystar.enableDiagonals();
-            this.easystar.disableCornerCutting();
+        // TriNav — tile-grid free-space navigation (bMod-style)
+        this.triNav = new TriNav();
+        if (this.platformLayer) {
+            this.triNav.build(
+                this.platformLayer,
+                this.map.width,
+                this.map.height,
+                TILE_SIZE,
+                this.waterY || null
+            );
         }
     }
 
@@ -391,7 +453,7 @@ export class GameScene extends Phaser.Scene {
 
             // AI brain
             bot.brain = new BotBehavior(
-                this.easystar,
+                this.platformNav,
                 this.map ? this.map.width : 100,
                 this.map ? this.map.height : 75
             );
@@ -615,40 +677,36 @@ export class GameScene extends Phaser.Scene {
         // Guest doesn't handle snowball collisions — host is authoritative
         if (this.gameMode === 'join') return;
 
+        // Find snowball by label + gameObject (more reliable than body reference comparison)
         let snowball = null;
-        let target = null;
+        let otherBody = null;
 
-        // Find snowball and target
-        for (const sb of this.snowballs) {
-            if (!sb.active) continue;
-            if (sb.body === bodyA) {
-                snowball = sb;
-                target = this.getSpriteFromBody(bodyB);
-            } else if (sb.body === bodyB) {
-                snowball = sb;
-                target = this.getSpriteFromBody(bodyA);
-            }
+        if (bodyA.label === 'snowball' && bodyA.gameObject?.active) {
+            snowball = bodyA.gameObject;
+            otherBody = bodyB;
+        } else if (bodyB.label === 'snowball' && bodyB.gameObject?.active) {
+            snowball = bodyB.gameObject;
+            otherBody = bodyA;
         }
 
-        // Check for any collision where snowball hits something that's not a character
-        // This includes tiles, boundaries, water edges, and any other solid objects
-        if (snowball && !target) {
-            const otherBody = snowball.body === bodyA ? bodyB : bodyA;
-            // Don't play sound if hitting another snowball
+        if (!snowball || !this.snowballs.includes(snowball)) return;
+
+        // Check if other body is a character (player/bot)
+        const target = this.getSpriteFromBody(otherBody);
+
+        // Snowball hits wall/tile — splat and destroy
+        if (!target) {
             if (otherBody.label === 'snowball') return;
-            // Don't play sound if hitting the shooter (shouldn't happen but safety check)
             const shooter = snowball.getData('shooter');
             if (shooter && otherBody === shooter.body) return;
 
-            // Play hit sound at lower volume for wall/environment impact
-            // Snowball bounces naturally via Matter.js restitution (0.5)
-            this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.25);
+            this.showSplatEffect(snowball.x, snowball.y);
+            this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.5);
+            this.destroySnowball(snowball);
             return;
         }
 
-        if (snowball && target) {
-            this.snowballHit(snowball, target);
-        }
+        this.snowballHit(snowball, target);
     }
 
     // === UI ===
@@ -874,14 +932,14 @@ export class GameScene extends Phaser.Scene {
         const spinDirection = Math.random() > 0.5 ? 1 : -1;
         this.matter.body.setAngularVelocity(victim.body, RAGDOLL.TUMBLE_SPEED * spinDirection);
 
-        // 3. Boost knockback from killer
+        // 3. Boost knockback from killer (doubled for dramatic effect)
         if (killer) {
             const dx = victim.x - killer.x;
             const dy = victim.y - killer.y;
             const dist = Math.hypot(dx, dy) || 1;
             this.matter.body.applyForce(victim.body, victim.body.position, {
-                x: (dx / dist) * PHYS.KNOCKBACK_FORCE * RAGDOLL.KNOCKBACK_BOOST,
-                y: -0.015
+                x: (dx / dist) * PHYS.KNOCKBACK_FORCE * RAGDOLL.KNOCKBACK_BOOST * 2,
+                y: -0.025
             });
         }
 
@@ -897,7 +955,35 @@ export class GameScene extends Phaser.Scene {
         // 7. Hide name label
         if (victim.nameLabel) victim.nameLabel.setVisible(false);
 
-        // 8. After DURATION - fade out and handle round logic
+        // 8. Slow-mo effect (local visual only, not affecting network tick rate)
+        const isRelevant = (victim === this.player) || (killer === this.player);
+        if (isRelevant && !this._slowmoActive) {
+            this._slowmoActive = true;
+            this.time.timeScale = 0.3;
+            this.matter.world.engine.timing.timeScale = 0.3;
+
+            // Restore after 500ms (real time, not scaled)
+            const restoreTimer = setTimeout(() => {
+                if (!this.scene.isActive()) return;
+                this.tweens.addCounter({
+                    from: 0.3,
+                    to: 1,
+                    duration: 300,
+                    onUpdate: (tween) => {
+                        const val = tween.getValue();
+                        this.time.timeScale = val;
+                        this.matter.world.engine.timing.timeScale = val;
+                    },
+                    onComplete: () => {
+                        this._slowmoActive = false;
+                    }
+                });
+            }, 500);
+            // Store for cleanup
+            this._slowmoTimer = restoreTimer;
+        }
+
+        // 9. After DURATION - fade out and handle round logic
         this.time.delayedCall(RAGDOLL.DURATION, () => {
             this.tweens.add({
                 targets: victim,
@@ -993,12 +1079,42 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    showHitEffect(x, y) {
-        // Emoji particles for snowball hit feedback
-        const particles = ['❄️', '💥', '✨'];
+    showHitEffect(x, y, hasFire = false) {
+        // Snow chunk particles
+        const snowParticles = this.add.particles(x, y, 'snowball', {
+            speed: { min: 50, max: 150 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.2, end: 0 },
+            alpha: { start: 1, end: 0 },
+            tint: [0xffffff, 0xccddff],
+            lifespan: 400,
+            quantity: 8,
+            gravityY: 200
+        });
+        snowParticles.setDepth(11);
+        snowParticles.explode();
+        this.time.delayedCall(500, () => snowParticles.destroy());
 
+        // Fire explosion for fire snowballs
+        if (hasFire) {
+            const fireParticles = this.add.particles(x, y, 'snowball', {
+                speed: { min: 80, max: 200 },
+                scale: { start: 0.4, end: 0 },
+                tint: [0xff4400, 0xff8800, 0xffcc00],
+                lifespan: 500,
+                quantity: 12,
+                gravityY: 100,
+                blendMode: 'ADD'
+            });
+            fireParticles.setDepth(11);
+            fireParticles.explode();
+            this.time.delayedCall(600, () => fireParticles.destroy());
+        }
+
+        // Emoji burst (kept for extra juice)
+        const emojis = hasFire ? ['🔥', '💥', '✨'] : ['❄️', '💥', '✨'];
         for (let i = 0; i < 3; i++) {
-            const emoji = particles[i % particles.length];
+            const emoji = emojis[i % emojis.length];
             const offsetX = (Math.random() - 0.5) * 40;
             const offsetY = (Math.random() - 0.5) * 40;
 
@@ -1015,6 +1131,22 @@ export class GameScene extends Phaser.Scene {
                 onComplete: () => particle.destroy()
             });
         }
+    }
+
+    showSplatEffect(x, y) {
+        const particles = this.add.particles(x, y, 'snowball', {
+            speed: { min: 30, max: 100 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.15, end: 0 },
+            alpha: { start: 0.9, end: 0 },
+            tint: [0xffffff, 0xe8f0ff, 0xccddff],
+            lifespan: 300,
+            quantity: 6,
+            gravityY: 150,
+        });
+        particles.setDepth(11);
+        particles.explode();
+        this.time.delayedCall(400, () => particles.destroy());
     }
 
     checkMatchEnd() {
@@ -1437,6 +1569,13 @@ export class GameScene extends Phaser.Scene {
             this.waterSprite.tilePositionX -= 0.5;
         }
 
+        // Update snow spawn zone to follow camera (emitter stays at 0,0)
+        if (this._snowZone) {
+            const cam = this.cameras.main;
+            this._snowZone.camScrollX = cam.scrollX;
+            this._snowZone.camScrollY = cam.scrollY;
+        }
+
         // Skip game logic when paused
         if (this.isGamePaused) return;
 
@@ -1452,10 +1591,7 @@ export class GameScene extends Phaser.Scene {
     // === HOST UPDATE (also used for solo mode) ===
 
     updateAsHost(delta) {
-        // Process pathfinding
-        if (this.easystar) {
-            this.easystar.calculate();
-        }
+        // Platform navigation is synchronous (A* on platform graph) — no calculate() needed
 
         // Update ground detection
         this.updateGroundDetection();
@@ -1466,16 +1602,16 @@ export class GameScene extends Phaser.Scene {
         this.updateCharacter(this.player, playerInput, delta);
 
         if (playerInput.fire) {
-            this.shootSnowball(this.player, playerInput.fireDirection);
+            this.shootSnowball(this.player, playerInput.fireAngle);
         }
 
         // 2. Guest character — network input (like a bot, but from network)
         if (this.guestPlayer?.active && !this.guestPlayer.getData('isDying')) {
-            const guestInput = this.network?.getRemoteInput() || { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireDirection: 0, strength: 1 };
+            const guestInput = this.network?.getRemoteInput() || { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
             guestInput.hookTarget = this.findHookTarget(this.guestPlayer);
             this.updateCharacter(this.guestPlayer, guestInput, delta);
             if (guestInput.fire) {
-                this.shootSnowball(this.guestPlayer, guestInput.fireDirection);
+                this.shootSnowball(this.guestPlayer, guestInput.fireAngle);
                 // Reset fire so we don't shoot every frame
                 if (this.network) {
                     const remoteInput = this.network.remoteInputs.get('guest');
@@ -1495,7 +1631,7 @@ export class GameScene extends Phaser.Scene {
                 const botInput = bot.brain.update(bot, this, delta);
                 this.updateCharacter(bot, botInput, delta);
                 if (botInput.fire) {
-                    this.shootSnowball(bot);
+                    this.shootSnowball(bot, botInput.fireAngle);
                 }
             }
         });
@@ -1506,6 +1642,8 @@ export class GameScene extends Phaser.Scene {
 
         // 5. Draw hooks
         this.drawHooks();
+        if (this.navDebugMode === 1) this.drawNavGraph();
+        else if (this.navDebugMode === 2) this.drawTriNavDebug();
 
         // 6. UI
         this.updateHUD();
@@ -1570,8 +1708,24 @@ export class GameScene extends Phaser.Scene {
                 if (evt.type === 'sound') {
                     this.playSpatialSound?.(evt.name, evt.x, evt.y, evt.vol || 0.5);
                 }
-                if (evt.type === 'hitEffect') this.showHitEffect(evt.x, evt.y);
-                if (evt.type === 'deathEffect') this.showDeathEffect(evt.x, evt.y);
+                if (evt.type === 'hitEffect') this.showHitEffect(evt.x, evt.y, evt.hasFire);
+                if (evt.type === 'deathEffect') {
+                    this.showDeathEffect(evt.x, evt.y);
+                    // Guest slow-mo on death event
+                    if (!this._slowmoActive) {
+                        this._slowmoActive = true;
+                        this.time.timeScale = 0.3;
+                        const restoreTimer = setTimeout(() => {
+                            if (!this.scene.isActive()) return;
+                            this.tweens.addCounter({
+                                from: 0.3, to: 1, duration: 300,
+                                onUpdate: (tween) => { this.time.timeScale = tween.getValue(); },
+                                onComplete: () => { this._slowmoActive = false; }
+                            });
+                        }, 500);
+                        this._slowmoTimer = restoreTimer;
+                    }
+                }
             }
             snapshot.events = [];
         }
@@ -1951,6 +2105,102 @@ export class GameScene extends Phaser.Scene {
         });
     }
 
+    drawNavGraph() {
+        const nav = this.platformNav;
+        if (!nav) return;
+        if (!this.navGraphics) {
+            this.navGraphics = this.add.graphics();
+            this.navGraphics.setDepth(150);
+        }
+        this.navGraphics.clear();
+
+        // Platforms — green bars
+        this.navGraphics.fillStyle(0x00ff00, 0.25);
+        for (const p of nav.platforms) {
+            this.navGraphics.fillRect(p.leftX, p.surfaceY - 4, p.width, 8);
+        }
+
+        // Edges — color by type
+        const colors = {
+            WALK: 0x00ff00,
+            JUMP_ACROSS: 0x3399ff,
+            JUMP_UP: 0x00ffff,
+            FALL: 0xffff00,
+            HOOK: 0xff3333,
+        };
+
+        for (const edge of nav.edges) {
+            const from = nav.platforms[edge.from];
+            const to = nav.platforms[edge.to];
+            const color = colors[edge.type] || 0xffffff;
+            const fromY = from.surfaceY - 10;
+            const toY = to.surfaceY - 10;
+
+            this.navGraphics.lineStyle(2, color, 0.6);
+            this.navGraphics.lineBetween(edge.entryX, fromY, edge.exitX, toY);
+
+            // Entry/exit dots
+            this.navGraphics.fillStyle(color, 0.8);
+            this.navGraphics.fillCircle(edge.entryX, fromY, 4);
+            this.navGraphics.fillCircle(edge.exitX, toY, 4);
+        }
+    }
+
+    drawTriNavDebug() {
+        const triNav = this.triNav;
+        if (!triNav || !triNav.navGrid) return;
+
+        if (!this.triNavGraphics) {
+            this.triNavGraphics = this.add.graphics();
+            this.triNavGraphics.setDepth(150);
+        }
+        this.triNavGraphics.clear();
+
+        const T = this.tileSize || TILE_SIZE;
+
+        // Walkable tiles — semi-transparent green
+        this.triNavGraphics.fillStyle(0x00ff00, 0.08);
+        for (let y = 0; y < triNav.mapHeight; y++) {
+            for (let x = 0; x < triNav.mapWidth; x++) {
+                if (triNav.navGrid[y][x]) {
+                    this.triNavGraphics.fillRect(x * T, y * T, T, T);
+                }
+            }
+        }
+
+        // Bot paths — magenta lines + waypoint dots
+        if (this.bots) {
+            for (const bot of this.bots) {
+                if (!bot.active || !bot.brain) continue;
+                const waypoints = bot.brain.blackboard.get('triWaypoints');
+                if (!waypoints || waypoints.length < 1) continue;
+
+                // Path lines
+                this.triNavGraphics.lineStyle(2, 0xff00ff, 0.7);
+                const startX = bot.x, startY = bot.y;
+                this.triNavGraphics.lineBetween(startX, startY, waypoints[0].x, waypoints[0].y);
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    this.triNavGraphics.lineBetween(
+                        waypoints[i].x, waypoints[i].y,
+                        waypoints[i + 1].x, waypoints[i + 1].y);
+                }
+
+                // Waypoint dots
+                this.triNavGraphics.fillStyle(0xff00ff, 0.9);
+                for (const wp of waypoints) {
+                    this.triNavGraphics.fillCircle(wp.x, wp.y, 5);
+                }
+
+                // Current target waypoint — larger, yellow
+                const wpIdx = bot.brain.blackboard.get('triWpIndex') || 0;
+                if (wpIdx < waypoints.length) {
+                    this.triNavGraphics.fillStyle(0xffff00, 1.0);
+                    this.triNavGraphics.fillCircle(waypoints[wpIdx].x, waypoints[wpIdx].y, 8);
+                }
+            }
+        }
+    }
+
     drawHookForCharacter(character) {
         const core = character.core;
 
@@ -1991,68 +2241,42 @@ export class GameScene extends Phaser.Scene {
 
     // === SNOWBALLS ===
 
-    /**
-     * Get all valid targets in a given direction, sorted by distance
-     */
-    getTargetsInDirection(shooter, dirX) {
-        const targets = [];
+    shootSnowball(shooter, angle = null) {
+        // Cooldown check
+        const now = Date.now();
+        const lastFireTime = shooter.getData('lastFireTime') || 0;
+        if (now - lastFireTime < PHYS.SNOWBALL_COOLDOWN) return;
+        shooter.setData('lastFireTime', now);
 
-        if (this.player && this.player !== shooter && this.player.active && this.player.getData('health') > 0) {
-            targets.push(this.player);
-        }
-
-        if (this.guestPlayer && this.guestPlayer !== shooter && this.guestPlayer.active && this.guestPlayer.getData('health') > 0) {
-            targets.push(this.guestPlayer);
-        }
-
-        for (const bot of this.bots || []) {
-            if (bot !== shooter && bot.active && bot.getData('health') > 0) {
-                targets.push(bot);
-            }
-        }
-
-        // Sort by distance in shooting direction
-        return targets.sort((a, b) => {
-            const distA = (a.x - shooter.x) * dirX;
-            const distB = (b.x - shooter.x) * dirX;
-            return distA - distB;
-        });
-    }
-
-    shootSnowball(shooter, forceDirection = 0) {
-        // Use forced direction if provided (from mobile touch buttons), otherwise use facing
-        let dirX;
-        if (forceDirection !== 0) {
-            dirX = forceDirection;
-        } else {
+        // Determine angle: use provided angle, or default to facing direction (horizontal)
+        if (angle === null || angle === undefined) {
             const facingRight = shooter.getData('facingRight');
-            dirX = facingRight ? 1 : -1;
+            angle = facingRight ? 0 : Math.PI;
         }
+
         const hasFire = this.hasPowerup(shooter, 'fire');
+        const speed = PHYS.SNOWBALL_SPEED;
+        // Add shooter's velocity for momentum transfer
+        const shooterVx = shooter.body?.velocity?.x || 0;
+        const shooterVy = shooter.body?.velocity?.y || 0;
+        const vx = Math.cos(angle) * speed + shooterVx * 0.5;
+        const vy = Math.sin(angle) * speed + shooterVy * 0.3;
 
-        // Adaptive spawn distance - spawn closer if enemy is nearby
-        const targets = this.getTargetsInDirection(shooter, dirX);
-        let spawnDistance = 60;  // Default
-
-        for (const target of targets) {
-            const dx = (target.x - shooter.x) * dirX;  // Distance in shooting direction
-            if (dx > 0 && dx < 80) {
-                // Enemy is close - spawn snowball closer (but outside own hitbox)
-                spawnDistance = Math.max(25, dx - 30);
-                break;
-            }
-        }
+        // Spawn offset in the direction of the shot
+        const spawnDist = 50;
+        const spawnX = shooter.x + Math.cos(angle) * spawnDist;
+        const spawnY = shooter.y - 10 + Math.sin(angle) * spawnDist;
 
         const snowball = this.matter.add.sprite(
-            shooter.x + dirX * spawnDistance,
-            shooter.y - 10,
+            spawnX,
+            spawnY,
             'snowball',
             0,
             {
                 shape: { type: 'circle', radius: 10 },
                 friction: 0,
-                frictionAir: 0,
-                restitution: 0.5,
+                frictionAir: 0.01,
+                restitution: 0,
                 isSensor: false,
                 label: 'snowball'
             }
@@ -2080,8 +2304,10 @@ export class GameScene extends Phaser.Scene {
         }
 
         snowball.setDepth(10);
-        snowball.setVelocity(dirX * PHYS.SNOWBALL_SPEED, 0);
+        snowball.setVelocity(vx, vy);
         snowball.setIgnoreGravity(true);
+        // Reduced gravity for snowballs (lighter arc)
+        snowball.setData('gravityScale', PHYS.SNOWBALL_GRAVITY_SCALE);
 
         snowball.setData('shooter', shooter);
         snowball.setData('damage', PHYS.SNOWBALL_DAMAGE);
@@ -2094,8 +2320,8 @@ export class GameScene extends Phaser.Scene {
         // Sound effect with spatial audio
         this.playSpatialSound('sfx-snowball-shot', shooter.x, shooter.y, 0.4);
 
-        // Auto-destroy after 2 seconds (store timer for cancellation on hit)
-        const destroyTimer = this.time.delayedCall(2000, () => {
+        // Auto-destroy after lifetime
+        const destroyTimer = this.time.delayedCall(PHYS.SNOWBALL_LIFETIME, () => {
             this.destroySnowball(snowball);
         });
         snowball.setData('destroyTimer', destroyTimer);
@@ -2150,6 +2376,16 @@ export class GameScene extends Phaser.Scene {
                 sb.setData('ignoreShooterFrames', frames - 1);
             }
 
+            // Apply reduced gravity manually (snowball ignores world gravity)
+            const gScale = sb.getData('gravityScale');
+            if (gScale !== undefined && sb.body) {
+                const gravityAccel = PHYS.GRAVITY * gScale * 0.15;
+                this.matter.body.setVelocity(sb.body, {
+                    x: sb.body.velocity.x,
+                    y: sb.body.velocity.y + gravityAccel
+                });
+            }
+
             return true;
         });
     }
@@ -2192,12 +2428,18 @@ export class GameScene extends Phaser.Scene {
         target.setData('health', newHealth);
 
         // Sound + visual
+        const hasFire = !!snowball.getData('particles');
         this.playSpatialSound('sfx-snowball-hit', target.x, target.y, 1.0);
-        this.showHitEffect(target.x, target.y);
+        this.showHitEffect(target.x, target.y, hasFire);
+
+        // Screen shake when our player is hit
+        if (target === this.player) {
+            this.cameras.main.shake(100, 0.005);
+        }
 
         // Queue visual effect for guest (sound is auto-queued by playSpatialSound)
         if (this.network) {
-            this.network.queueEvent({ type: 'hitEffect', x: target.x, y: target.y });
+            this.network.queueEvent({ type: 'hitEffect', x: target.x, y: target.y, hasFire });
         }
 
         // Flash white
