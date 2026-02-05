@@ -7578,7 +7578,10 @@
                 }
 
                 conn.on('data', (data) => {
-                    console.log('Received:', data);
+                    // Minimal logging - only non-snapshot messages
+                    if (data.type !== 'snapshot' && data.type !== 'pong') {
+                        console.log(`[Net] ${data.type}`);
+                    }
                     handleNetworkMessage(data);
                 });
 

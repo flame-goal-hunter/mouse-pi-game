@@ -522,4 +522,56 @@ export class CharacterCore {
             this.ropeLength = CharacterCore.roundToInt(this.ropeLength * 16) / 16;
         }
     }
+
+    /**
+     * Save full CharacterCore state for input replay.
+     * Used by Teeworlds-style server reconciliation.
+     * @returns {Object} State snapshot
+     */
+    saveState() {
+        return {
+            grounded: this.grounded,
+            facingRight: this.facingRight,
+            jumpBuffer: this.jumpBuffer,
+            coyoteTime: this.coyoteTime,
+            jumpHeld: this.jumpHeld,
+            canJump: this.canJump,
+            airJumpUsed: this.airJumpUsed,
+            hookState: this.hookState,
+            hookPos: { x: this.hookPos.x, y: this.hookPos.y },
+            hookVel: { x: this.hookVel.x, y: this.hookVel.y },
+            hookAnchorPos: this.hookAnchorPos
+                ? { x: this.hookAnchorPos.x, y: this.hookAnchorPos.y }
+                : null,
+            ropeLength: this.ropeLength,
+            hookCooldown: this.hookCooldown,
+            _hookStuckTimer: this._hookStuckTimer || 0
+        };
+    }
+
+    /**
+     * Restore CharacterCore state from snapshot.
+     * Used by Teeworlds-style server reconciliation.
+     * @param {Object} state - State snapshot from saveState()
+     */
+    restoreState(state) {
+        this.grounded = state.grounded;
+        this.facingRight = state.facingRight;
+        this.jumpBuffer = state.jumpBuffer;
+        this.coyoteTime = state.coyoteTime;
+        this.jumpHeld = state.jumpHeld;
+        this.canJump = state.canJump;
+        this.airJumpUsed = state.airJumpUsed;
+        this.hookState = state.hookState;
+        this.hookPos.x = state.hookPos.x;
+        this.hookPos.y = state.hookPos.y;
+        this.hookVel.x = state.hookVel.x;
+        this.hookVel.y = state.hookVel.y;
+        this.hookAnchorPos = state.hookAnchorPos
+            ? { x: state.hookAnchorPos.x, y: state.hookAnchorPos.y }
+            : null;
+        this.ropeLength = state.ropeLength;
+        this.hookCooldown = state.hookCooldown;
+        this._hookStuckTimer = state._hookStuckTimer;
+    }
 }

@@ -63,13 +63,17 @@ export class HumanInput {
         // Handle app minimize/restore (Android background, tab switch)
         this._onVisibilityChange = () => {
             if (!this.isMobile) return;
-            if (document.hidden) {
-                // Reset all touch state to prevent stuck inputs
-                this.joystickDir = 0;
-                this.touchJump = false;
-                this.touchHook = false;
-                this.touchFireAngle = null;
-            } else {
+            // Always reset touch state on visibility change (prevents stuck inputs)
+            this.joystickDir = 0;
+            this.touchJump = false;
+            this.touchHook = false;
+            this.touchFireAngle = null;
+            this.touchFireJustPressed = false;
+            this.fireJustPressed = false;
+            this.hookJustPressed = false;
+            this.wasHookDown = false;
+
+            if (!document.hidden) {
                 // Recreate nipplejs — it loses touch state when DOM is hidden
                 this.recreateJoystick();
             }

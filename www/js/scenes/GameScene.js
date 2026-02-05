@@ -479,7 +479,9 @@ export class GameScene extends Phaser.Scene {
         // v18: Create CharacterCore (same physics as host)
         character.core = new CharacterCore();
         character.core.init(rapierBody, this.predictionWorld, this);
-        character.core.suppressSounds = true;  // Sounds come from host events
+        // v21.3: Guest plays OWN sounds locally for immediate feedback
+        // Other players' sounds come from host events
+        character.core.suppressSounds = false;
 
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('score', 0);
@@ -495,6 +497,7 @@ export class GameScene extends Phaser.Scene {
         this._localCoyoteTime = 0;
         this._lastCorrectedTick = -1;  // Track which snapshot tick was last used for correction
         this._lastReconciledSeq = -1;  // Track last reconciled input sequence
+        this._lastConfirmedTick = -1;  // v23: For input replay reconciliation
 
         console.log('[GameScene] v18: Guest prediction world created with Rapier physics');
     }
@@ -936,16 +939,28 @@ export class GameScene extends Phaser.Scene {
         if (victim.getData('isDying')) return;
         victim.setData('isDying', true);
 
-        // Guest: only visual effect, no state management (snapshot drives respawn)
+        // Guest: visual ragdoll effect, state management via snapshot
         if (this.gameMode === 'join') {
             this.showDeathEffect(victim.x, victim.y);
             this.playSpatialSound('sfx-snowball-hit', victim.x, victim.y, 0.7);
             if (victim.nameLabel) victim.nameLabel.setVisible(false);
-            // Simple fade — snapshot will restore when host respawns
+
+            // Ragdoll spin (same as host)
+            const spinDir = Math.random() > 0.5 ? 1 : -1;
             this.tweens.add({
                 targets: victim,
-                alpha: 0.3,
-                duration: 500
+                angle: spinDir * 360,
+                duration: RAGDOLL.DURATION,
+                ease: 'Linear'
+            });
+
+            // Fade out after ragdoll — snapshot will restore when host respawns
+            this.time.delayedCall(RAGDOLL.DURATION, () => {
+                this.tweens.add({
+                    targets: victim,
+                    alpha: 0,
+                    duration: RAGDOLL.FADE_TIME
+                });
             });
             return;
         }
@@ -1022,7 +1037,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     handleDeathLogic(victim) {
-        // Network host: handle deaths for both players
+        // Network host: handle deaths, then restart round (respawn both)
         if (this.gameMode === 'host') {
             if (victim === this.player) {
                 this.matchData.opponentWins++;
@@ -1034,8 +1049,12 @@ export class GameScene extends Phaser.Scene {
                 this.network.queueEvent({ type: 'deathEffect', x: victim.x, y: victim.y });
             }
             this.updateHUD();
+            // Respawn BOTH players (round restart)
             this.time.delayedCall(2000, () => {
-                this.respawnCharacter(victim);
+                this.respawnCharacter(this.player);
+                if (this.guestPlayer) {
+                    this.respawnCharacter(this.guestPlayer);
+                }
             });
             return;
         }
@@ -1766,15 +1785,21 @@ export class GameScene extends Phaser.Scene {
         const FIXED_DT_S = 1 / 60;
         const FIXED_DT_MS = FIXED_DT_S * 1000;
 
-        // 1. Gather input
+        // 1. v23: SERVER RECONCILIATION with input replay (Teeworlds-style)
+        // Only reconcile when we have a NEW snapshot (tick > last confirmed)
+        const snapshot = network?.lastSnapshot;
+        if (snapshot && snapshot.tick > this._lastConfirmedTick) {
+            this._reconcileWithServer(snapshot);
+        }
+
+        // 2. Gather input
         const playerInput = this.humanInput.getInput();
         playerInput.hookTarget = this.findHookTarget(this.player);
 
-        // 2. Send input to host
+        // 3. Send input to host
         network?.sendInput(playerInput);
 
-        // 3. OWN character: FIXED TIMESTEP physics
-        // v19: Run physics at fixed rate, store prediction for sent input
+        // 4. OWN character: FIXED TIMESTEP physics (local prediction)
         this._guestPhysicsAccum = (this._guestPhysicsAccum || 0) + (delta / 1000);
         this._guestPhysicsAccum = Math.min(this._guestPhysicsAccum, FIXED_DT_S * 4); // Cap at 4 frames
 
@@ -1783,30 +1808,25 @@ export class GameScene extends Phaser.Scene {
             this._guestPhysicsAccum -= FIXED_DT_S;
         }
 
-        // v21: Bending approach - no need to store predicted states
-        // The client smoothly interpolates toward server position instead of replay
-
-        // 3. OTHER players: interpolation from snapshots
+        // 5. OTHER players: interpolation from snapshots
         const interp = network?.getInterpolatedSnapshot();
         if (interp) {
             this._interpolateOtherPlayers(interp);
         }
 
-        // 4. Server position correction for own character
-        const snapshot = network?.lastSnapshot;
+        // 6. Non-physics snapshot processing (health, powerups, events)
         if (snapshot) {
-            this._correctOwnPosition(snapshot);
             this._processSnapshotNonPhysics(snapshot);
         }
 
-        // 5. Hook visuals (from snapshot — server is authoritative)
+        // 7. Hook visuals (from snapshot — server is authoritative)
         this.hookGraphics.clear();
         this._drawHookVisuals(snapshot);
 
-        // 6. Animations
+        // 8. Animations
         this._updateGuestAnimations(playerInput, snapshot);
 
-        // 7. UI
+        // 9. UI
         this.updateHUD();
         this.updateNameLabels();
         network?.update(delta);
@@ -1835,9 +1855,27 @@ export class GameScene extends Phaser.Scene {
         // v18: Quantize for determinism (same as host)
         this.player.core.quantize();
 
-        // Sync sprite position from Rapier body
+        // Sync sprite position from Rapier body (with visual smoothing)
         const pos = this.player.rapierBody.translation();
-        this.player.setPosition(pos.x, pos.y);
+
+        // Visual smoothing: interpolate sprite toward physics position
+        const diffX = pos.x - this.player.x;
+        const diffY = pos.y - this.player.y;
+        const diffDist = Math.sqrt(diffX * diffX + diffY * diffY);
+
+        const SMOOTH_THRESHOLD = 2;    // pixels - below this, snap instantly
+        const SMOOTH_FACTOR = 0.5;     // 50% per frame toward target
+        const SNAP_THRESHOLD = 100;    // pixels - above this, snap instantly
+
+        if (diffDist < SMOOTH_THRESHOLD || diffDist > SNAP_THRESHOLD) {
+            // Small difference or huge jump - snap instantly
+            this.player.setPosition(pos.x, pos.y);
+        } else {
+            // Smooth interpolation
+            const newX = this.player.x + diffX * SMOOTH_FACTOR;
+            const newY = this.player.y + diffY * SMOOTH_FACTOR;
+            this.player.setPosition(newX, newY);
+        }
 
         // Cache velocity for reconciliation
         const vel = this.player.rapierBody.linvel();
@@ -1892,58 +1930,106 @@ export class GameScene extends Phaser.Scene {
      * v21 BENDING: Smooth interpolation toward server state instead of instant reset.
      * Industry-standard approach used by Teeworlds, Source Engine, etc.
      *
-     * Key insight: Don't try to match prediction exactly - just gently guide
-     * the client toward the server's authoritative position over time.
+     * v21.1: Added VELOCITY BENDING to prevent oscillation.
+     * v21.2: Reduced bending during HOOK to prevent fighting hook physics.
      */
+    /* === v21-v22 BENDING CODE (DEPRECATED by v23 Input Replay) ===
+     * Kept for rollback - uncomment if input replay causes issues
+
     _correctOwnPosition(snapshot) {
         const myData = snapshot.players?.find(p => p.id === 'guest');
         if (!myData || this.player.getData('isDying')) return;
-        if (!this.predictionWorld) return;
+        if (!this.predictionWorld || !this.player.rapierBody) return;
 
-        // Calculate difference between current client position and server position
+        const hookActive = myData.hookState === 'ATTACHED' || myData.hookState === 'FLYING';
         const dx = myData.x - this.player.x;
         const dy = myData.y - this.player.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
+        const serverVx = (myData.vx || 0) / 256;
+        const serverVy = (myData.vy || 0) / 256;
+        const clientVel = this.player.rapierBody.linvel();
+        const dvx = serverVx - clientVel.x;
+        const dvy = serverVy - clientVel.y;
+        const velDist = Math.sqrt(dvx * dvx + dvy * dvy);
 
-        // TELEPORT threshold - for large discrepancies (spawn, major desync)
         const TELEPORT_THRESHOLD = 150;
-
-        // BEND_FACTOR: How much to correct per frame (0.15 = 15%)
-        // Higher = snappier but more visible; Lower = smoother but laggy
-        const BEND_FACTOR = 0.15;
-
-        // SNAP_THRESHOLD: Below this, just snap to exact position
-        const SNAP_THRESHOLD = 0.5;
+        const POS_SNAP_THRESHOLD = 0.5;
+        const VEL_SNAP_THRESHOLD = 5;
+        const POS_BEND_FACTOR = hookActive ? 0.40 : 0.25;
+        const VEL_BEND_FACTOR = hookActive ? 0.50 : 0.35;
 
         if (dist > TELEPORT_THRESHOLD) {
-            // Large discrepancy - instant teleport (spawn, major lag spike)
             this._applyServerState(myData);
-            console.log(`[Bending] Teleport: ${dist.toFixed(1)}px`);
-        } else if (dist > SNAP_THRESHOLD) {
-            // Normal case: smoothly blend toward server position
-            const newX = this.player.x + dx * BEND_FACTOR;
-            const newY = this.player.y + dy * BEND_FACTOR;
-
-            // Update sprite position
-            this.player.setPosition(newX, newY);
-
-            // Update Rapier body to match
-            if (this.player.rapierBody) {
-                this.player.rapierBody.setTranslation({ x: newX, y: newY }, true);
-                // Don't change velocity - let prediction continue naturally
+        } else {
+            let newX = this.player.x;
+            let newY = this.player.y;
+            let newVx = clientVel.x;
+            let newVy = clientVel.y;
+            if (dist > POS_SNAP_THRESHOLD) {
+                newX += dx * POS_BEND_FACTOR;
+                newY += dy * POS_BEND_FACTOR;
             }
-
-            // Debug (uncomment for testing)
-            // console.log(`[Bending] Correcting: ${dist.toFixed(1)}px`);
+            if (velDist > VEL_SNAP_THRESHOLD) {
+                newVx += dvx * VEL_BEND_FACTOR;
+                newVy += dvy * VEL_BEND_FACTOR;
+            }
+            this.player.setPosition(newX, newY);
+            this.player.rapierBody.setTranslation({ x: newX, y: newY }, true);
+            this.player.rapierBody.setLinvel({ x: newVx, y: newVy }, true);
+            this._localVel = { x: newVx, y: newVy };
         }
-        // If dist <= SNAP_THRESHOLD: position is close enough, no correction needed
-
-        // Sync grounded state from server (visual polish)
         this._localGrounded = myData.grounded || false;
         if (this.player.core) {
             this.player.core.grounded = this._localGrounded;
+            this._syncHookState(myData);
         }
     }
+
+    _syncHookState(serverData) {
+        const core = this.player.core;
+        const serverState = serverData.hookState || 'IDLE';
+        const clientState = core.hookState;
+        if (clientState === serverState) {
+            this._hookSyncDisagreeCount = 0;
+            if (serverState === 'ATTACHED' && serverData.hookAnchorPos) {
+                core.hookAnchorPos = { ...serverData.hookAnchorPos };
+                core.ropeLength = serverData.ropeLength || 0;
+            }
+            return;
+        }
+        this._hookSyncDisagreeCount = (this._hookSyncDisagreeCount || 0) + 1;
+        if (serverState === 'ATTACHED') {
+            core.hookState = 'ATTACHED';
+            if (serverData.hookAnchorPos) {
+                core.hookAnchorPos = { ...serverData.hookAnchorPos };
+                core.ropeLength = serverData.ropeLength || 0;
+                core.hookPos = serverData.hookPos ? { ...serverData.hookPos } : { x: 0, y: 0 };
+            }
+            this._hookSyncDisagreeCount = 0;
+            return;
+        }
+        if (clientState === 'FLYING' && serverState === 'IDLE') {
+            if (this._hookSyncDisagreeCount < 4) return;
+        }
+        if (clientState === 'ATTACHED' && serverState === 'IDLE') {
+            core.hookState = 'IDLE';
+            core.hookAnchorPos = null;
+            core.ropeLength = 0;
+            this._hookSyncDisagreeCount = 0;
+            return;
+        }
+        if (this._hookSyncDisagreeCount >= 4) {
+            core.hookState = serverState;
+            if (serverState === 'IDLE') {
+                core.hookAnchorPos = null;
+                core.ropeLength = 0;
+            } else if (serverState === 'FLYING' && serverData.hookPos) {
+                core.hookPos = { ...serverData.hookPos };
+            }
+            this._hookSyncDisagreeCount = 0;
+        }
+    }
+    === END DEPRECATED BENDING CODE === */
 
     /**
      * v18: Apply server authoritative state to local player
@@ -1973,21 +2059,192 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
-    // === v17: HOOK VISUALS FROM SNAPSHOT ===
+    // === v23: TEEWORLDS-STYLE INPUT REPLAY RECONCILIATION ===
+
+    /**
+     * Teeworlds-style server reconciliation with input replay.
+     * Instead of percentage-based bending, we:
+     * 1. Reset to server state when prediction error exceeds threshold
+     * 2. Replay all unacknowledged inputs to get correct predicted position
+     * This eliminates "fighting" between physics and bending.
+     */
+    _reconcileWithServer(snapshot) {
+        const myData = snapshot.players?.find(p => p.id === 'guest');
+        if (!myData || this.player.getData('isDying')) return;
+        if (!this.predictionWorld || !this.player.rapierBody || !this.player.core) return;
+
+        const serverTick = snapshot.tick;
+        const lastAckedSeq = snapshot.lastInputSeq;
+
+        // Skip if already processed this tick
+        if (serverTick <= this._lastConfirmedTick) return;
+        this._lastConfirmedTick = serverTick;
+
+        // Calculate prediction error
+        const errorX = myData.x - this.player.x;
+        const errorY = myData.y - this.player.y;
+        const errorDist = Math.sqrt(errorX * errorX + errorY * errorY);
+
+        const serverVx = (myData.vx || 0) / 256;
+        const serverVy = (myData.vy || 0) / 256;
+
+        // Thresholds (pure Teeworlds - no bending)
+        const ERROR_THRESHOLD = 2;        // pixels - skip if tiny error
+        const TELEPORT_THRESHOLD = 150;   // pixels - instant teleport
+
+        // Get state for reconciliation
+        const unackedInputs = this.network.getUnackedInputs(lastAckedSeq);
+        const localHookState = this.player.core.hookState;
+        const serverHookState = myData.hookState || 'IDLE';
+
+        // === LOGGING (only when significant) ===
+        const shouldLog = errorDist >= ERROR_THRESHOLD || localHookState !== serverHookState;
+        if (shouldLog) {
+            console.log(`[Reconcile] tick=${serverTick} err=${errorDist.toFixed(1)}px unacked=${unackedInputs.length} ` +
+                `pos:(${this.player.x.toFixed(0)},${this.player.y.toFixed(0)})→(${myData.x.toFixed(0)},${myData.y.toFixed(0)}) ` +
+                `hook:${localHookState}→${serverHookState}`);
+        }
+
+        // === Check for state mismatches that require reconciliation ===
+        const hookStateMismatch = localHookState !== serverHookState;
+
+        // === SKIP if prediction is very accurate AND states match ===
+        if (errorDist < ERROR_THRESHOLD && !hookStateMismatch) {
+            this.network.clearAckedInputs(lastAckedSeq);
+            return;  // No logging - prediction accurate
+        }
+
+        // Log why we're not skipping
+        if (hookStateMismatch && errorDist < ERROR_THRESHOLD) {
+            console.log(`[Reconcile] Hook mismatch (${localHookState}→${serverHookState}) - forcing replay despite small error`);
+        }
+
+        // === TELEPORT if huge desync ===
+        if (errorDist > TELEPORT_THRESHOLD) {
+            console.warn(`[Reconcile] TELEPORT! ${errorDist.toFixed(1)}px > ${TELEPORT_THRESHOLD}px`);
+            this._applyServerState(myData);
+            this.network.clearAckedInputs(lastAckedSeq);
+            return;
+        }
+
+        // === INPUT REPLAY (Teeworlds-style) ===
+        console.log(`[Reconcile] REPLAY starting - ${unackedInputs.length} inputs to replay`);
+
+        // 1. Reset physics to server state
+        this.player.rapierBody.setTranslation({ x: myData.x, y: myData.y }, true);
+        this.player.rapierBody.setLinvel({ x: serverVx, y: serverVy }, true);
+        this._applyServerCoreState(myData);
+
+        // 2. Replay all unacknowledged inputs
+        const FIXED_DT_S = 1 / 60;
+        const FIXED_DT_MS = FIXED_DT_S * 1000;
+
+        // Suppress sounds during replay - they already played during prediction
+        const prevSuppressSounds = this.player.core.suppressSounds;
+        this.player.core.suppressSounds = true;
+
+        for (const entry of unackedInputs) {
+            // Clone input to avoid modifying history
+            const replayInput = { ...entry.input };
+
+            // Clear one-shot flags that would cause double actions,
+            // BUT only if server already shows that action in progress.
+            // This preserves responsiveness when server hasn't seen our input yet.
+
+            // Snowballs: always clear - server creates them authoritatively
+            replayInput.fire = false;
+
+            // Hook: only clear if server already shows hook active (FLYING/ATTACHED)
+            // If server shows IDLE, we might need to fire it during replay for local prediction
+            if (serverHookState !== 'IDLE') {
+                replayInput.hookJustPressed = false;
+            }
+
+            this.player.core.tick(replayInput, FIXED_DT_MS);
+            this.predictionWorld.step(FIXED_DT_S);
+            this.player.core.quantize();
+        }
+
+        // Restore sound setting
+        this.player.core.suppressSounds = prevSuppressSounds;
+
+        // 3. Sync sprite to final replayed position (with visual smoothing for large corrections)
+        const finalPos = this.player.rapierBody.translation();
+
+        // Visual smoothing: if correction is large, interpolate sprite instead of instant snap
+        const VISUAL_SMOOTH_THRESHOLD = 5;  // pixels - smooth corrections larger than this
+        const VISUAL_SMOOTH_FACTOR = 0.4;   // 40% per frame toward target
+
+        const correctionX = finalPos.x - this.player.x;
+        const correctionY = finalPos.y - this.player.y;
+        const correctionDist = Math.sqrt(correctionX * correctionX + correctionY * correctionY);
+
+        if (correctionDist > VISUAL_SMOOTH_THRESHOLD && correctionDist < TELEPORT_THRESHOLD) {
+            // Smooth visual interpolation (physics is already correct)
+            const newX = this.player.x + correctionX * VISUAL_SMOOTH_FACTOR;
+            const newY = this.player.y + correctionY * VISUAL_SMOOTH_FACTOR;
+            this.player.setPosition(newX, newY);
+        } else {
+            // Small correction or teleport - instant snap
+            this.player.setPosition(finalPos.x, finalPos.y);
+        }
+
+        // 4. Update local state cache
+        const finalVel = this.player.rapierBody.linvel();
+        this._localVel = { x: finalVel.x, y: finalVel.y };
+        this._localGrounded = this.player.core.grounded;
+
+        // 5. Cleanup acknowledged inputs
+        this.network.clearAckedInputs(lastAckedSeq);
+
+        // === POST-REPLAY LOGGING (compact) ===
+        if (unackedInputs.length > 0) {
+            console.log(`[Reconcile] replayed ${unackedInputs.length} inputs, smooth=${correctionDist > VISUAL_SMOOTH_THRESHOLD}`);
+        }
+    }
+
+    /**
+     * Apply server CharacterCore state (hook, grounded, etc.)
+     * Used during input replay to reset core state before replaying.
+     */
+    _applyServerCoreState(serverData) {
+        const core = this.player.core;
+        core.grounded = serverData.grounded || false;
+        core.hookState = serverData.hookState || 'IDLE';
+
+        if (serverData.hookState === 'ATTACHED' && serverData.hookAnchorPos) {
+            core.hookAnchorPos = { ...serverData.hookAnchorPos };
+            core.ropeLength = serverData.ropeLength || 0;
+            core.hookPos = serverData.hookPos
+                ? { ...serverData.hookPos }
+                : { ...serverData.hookAnchorPos };
+        } else if (serverData.hookState === 'FLYING' && serverData.hookPos) {
+            core.hookPos = { ...serverData.hookPos };
+            core.hookAnchorPos = null;
+        } else {
+            core.hookPos = { x: 0, y: 0 };
+            core.hookAnchorPos = null;
+            core.ropeLength = 0;
+        }
+    }
+
+    // === v21.3: UNIFIED HOOK VISUALS ===
 
     _drawHookVisuals(snapshot) {
         if (!snapshot) return;
 
-        // Own hook from snapshot
-        const myData = snapshot.players?.find(p => p.id === 'guest');
-        if (myData?.hookState !== 'IDLE' && myData?.hookPos) {
-            this._drawHookLine(this.player.x, this.player.y, myData.hookPos.x, myData.hookPos.y);
+        // v21.3: Own hook - use CharacterCore (now soft-synced with server)
+        // This unifies rendering with host mode - same drawHookForCharacter()
+        if (this.player?.active && this.player.core) {
+            this.drawHookForCharacter(this.player);
         }
 
-        // Host hook from snapshot
+        // Host hook - must use snapshot (hostSprite has no CharacterCore)
         const hostData = snapshot.players?.find(p => p.id === 'host');
-        if (hostData?.hookState !== 'IDLE' && hostData?.hookPos && this.hostSprite) {
-            this._drawHookLine(this.hostSprite.x, this.hostSprite.y, hostData.hookPos.x, hostData.hookPos.y);
+        if (hostData && this.hostSprite?.active) {
+            if (hostData.hookState !== 'IDLE' && hostData.hookPos) {
+                this._drawHookLine(this.hostSprite.x, this.hostSprite.y, hostData.hookPos.x, hostData.hookPos.y);
+            }
         }
     }
 
@@ -2077,16 +2334,37 @@ export class GameScene extends Phaser.Scene {
         // Host player non-physics
         const hostData = snapshot.players?.find(p => p.id === 'host');
         if (hostData && this.hostSprite) {
-            // Death/respawn
+            // Death: start ragdoll effect
             if (hostData.isDying && !this.hostSprite.getData('isDying')) {
                 this.hostSprite.setData('isDying', true);
+                if (this.hostSprite.nameLabel) this.hostSprite.nameLabel.setVisible(false);
+
+                // Ragdoll spin
+                const spinDir = Math.random() > 0.5 ? 1 : -1;
+                this.tweens.add({
+                    targets: this.hostSprite,
+                    angle: spinDir * 360,
+                    duration: RAGDOLL.DURATION,
+                    ease: 'Linear'
+                });
+
+                // Fade out after ragdoll
+                this.time.delayedCall(RAGDOLL.DURATION, () => {
+                    this.tweens.add({
+                        targets: this.hostSprite,
+                        alpha: 0,
+                        duration: RAGDOLL.FADE_TIME
+                    });
+                });
             }
+            // Respawn: restore visuals
             if (!hostData.isDying && this.hostSprite.getData('isDying')) {
                 this.hostSprite.setData('isDying', false);
                 this.hostSprite.setData('health', hostData.health);
                 this.hostSprite.setAlpha(1);
                 this.hostSprite.setVisible(true);
-                // v17: Direct position set (no Rapier on guest)
+                this.hostSprite.setAngle(0);
+                if (this.hostSprite.nameLabel) this.hostSprite.nameLabel.setVisible(true);
                 this.hostSprite.setPosition(hostData.x, hostData.y);
             }
             this.hostSprite.setData('health', hostData.health);
@@ -2114,6 +2392,14 @@ export class GameScene extends Phaser.Scene {
         if (snapshot.events?.length > 0) {
             for (const evt of snapshot.events) {
                 if (evt.type === 'sound') {
+                    // v21.3: Skip sounds from our own character (already played locally)
+                    // Check if sound origin is very close to our player position
+                    if (this.player?.active) {
+                        const dx = evt.x - this.player.x;
+                        const dy = evt.y - this.player.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 50) continue;  // Skip - this is our own sound
+                    }
                     this.playSpatialSound?.(evt.name, evt.x, evt.y, evt.vol || 0.5);
                 }
                 if (evt.type === 'hitEffect') this.showHitEffect(evt.x, evt.y, evt.hasFire);
