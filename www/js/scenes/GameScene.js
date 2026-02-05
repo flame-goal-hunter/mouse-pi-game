@@ -1799,6 +1799,14 @@ export class GameScene extends Phaser.Scene {
         // 3. Send input to host
         network?.sendInput(playerInput);
 
+        // 3.5. Instant snowball visual feedback (server creates real snowball)
+        if (playerInput.fire) {
+            const dirX = playerInput.fireAngle != null
+                ? Math.sign(Math.cos(playerInput.fireAngle))
+                : (this.player.getData('facingRight') ? 1 : -1);
+            this.createLocalSnowballVisual(dirX || 1);
+        }
+
         // 4. OWN character: FIXED TIMESTEP physics (local prediction)
         this._guestPhysicsAccum = (this._guestPhysicsAccum || 0) + (delta / 1000);
         this._guestPhysicsAccum = Math.min(this._guestPhysicsAccum, FIXED_DT_S * 4); // Cap at 4 frames
@@ -2510,6 +2518,11 @@ export class GameScene extends Phaser.Scene {
     // === GUEST: LOCAL SNOWBALL VISUAL (instant feedback) ===
 
     createLocalSnowballVisual(fireDirection) {
+        // v24: Cooldown to prevent double visuals/sounds
+        const now = Date.now();
+        if (now - (this._lastLocalSnowballTime || 0) < 100) return;
+        this._lastLocalSnowballTime = now;
+
         const dirX = fireDirection || (this.player.getData('facingRight') ? 1 : -1);
         const sb = this.add.sprite(
             this.player.x + dirX * 60,

@@ -35,6 +35,25 @@ export class CharacterCore {
 
         // Sound suppression (true for guest prediction — sounds come from host events)
         this.suppressSounds = false;
+
+        // v24: Sound cooldowns (real time ms) - prevents double sounds during reconciliation
+        this._soundLastPlayed = {
+            jump: 0,
+            hookFired: 0,
+            hookAttached: 0
+        };
+    }
+
+    /**
+     * Check if sound can play (cooldown elapsed)
+     */
+    _canPlaySound(soundName, cooldownMs = 100) {
+        const now = Date.now();
+        if (now - this._soundLastPlayed[soundName] > cooldownMs) {
+            this._soundLastPlayed[soundName] = now;
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -123,8 +142,8 @@ export class CharacterCore {
                 this.airJumpUsed = true;
             }
 
-            // Sound
-            if (!this.suppressSounds && this.scene.playSpatialSound) {
+            // Sound (with cooldown to prevent doubles during reconciliation)
+            if (!this.suppressSounds && this._canPlaySound('jump') && this.scene.playSpatialSound) {
                 const pos = this.rapierBody.translation();
                 this.scene.playSpatialSound('sfx-jump', pos.x, pos.y, 0.3);
             }
@@ -226,7 +245,7 @@ export class CharacterCore {
         this.hookState = 'FLYING';
         this.hookCooldown = PHYS.HOOK_COOLDOWN;
 
-        if (!this.suppressSounds && this.scene.playSpatialSound) {
+        if (!this.suppressSounds && this._canPlaySound('hookFired') && this.scene.playSpatialSound) {
             this.scene.playSpatialSound('sfx-hook-fired', pos.x, pos.y, 0.2);
         }
 
@@ -308,7 +327,7 @@ export class CharacterCore {
         this.hookPos.y = anchorY;
         this._hookStuckTimer = 0;
 
-        if (!this.suppressSounds && this.scene.playSpatialSound) {
+        if (!this.suppressSounds && this._canPlaySound('hookAttached') && this.scene.playSpatialSound) {
             this.scene.playSpatialSound('sfx-hook-attached', anchorX, anchorY, 0.3);
         }
     }

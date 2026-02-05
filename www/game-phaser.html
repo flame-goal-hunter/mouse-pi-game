@@ -258,7 +258,7 @@
 
     <!-- Rapier2D WASM physics (must init before game) -->
     <script type="module">
-        import RAPIER from 'https://esm.sh/@dimforge/rapier2d-compat@0.14.0';
+        import RAPIER from 'https://esm.sh/@dimforge/rapier2d-deterministic-compat@0.14.0';
         await RAPIER.init();
         window.RAPIER = RAPIER;
         console.log('Rapier2D initialized');
