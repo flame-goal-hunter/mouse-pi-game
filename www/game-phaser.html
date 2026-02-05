@@ -99,10 +99,15 @@
             text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
         }
 
-        #hud-pause {
+        #hud-pause, #hud-debug {
             font-size: min(4.5vw, 18px);
             cursor: pointer;
             pointer-events: auto;
+        }
+
+        #hud-debug {
+            margin-left: 10px;
+            opacity: 0.6;
         }
 
         #hud-ping {
@@ -233,6 +238,7 @@
         <div id="hud-center">
             <div class="hud-score" id="hud-score">0 : 0</div>
             <div id="hud-pause">⏸️</div>
+            <div id="hud-debug">📋</div>
             <div id="hud-ping"></div>
         </div>
         <div id="hud-opponents"></div>
@@ -256,13 +262,70 @@
     <!-- Behavior3.js for AI behavior trees -->
     <script src="https://cdn.jsdelivr.net/npm/behavior3js@0.2.2/libs/behavior3-0.2.2.js"></script>
 
-    <!-- Rapier2D WASM physics (must init before game) -->
+    <!-- Debug Logger for mobile -->
+    <script>
+        window.DebugLog = {
+            _logs: [],
+            _maxLogs: 500,
+
+            log(msg) {
+                const time = new Date().toISOString().substr(11, 12);
+                this._logs.push(`[${time}] ${msg}`);
+                if (this._logs.length > this._maxLogs) this._logs.shift();
+            },
+
+            clear() {
+                this._logs = [];
+            },
+
+            getText() {
+                return this._logs.join('\n');
+            },
+
+            download() {
+                const text = this.getText();
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `debug-${Date.now()}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+            },
+
+            copyToClipboard() {
+                const text = this.getText();
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        alert('Логи скопированы! ' + this._logs.length + ' строк');
+                    });
+                } else {
+                    // Fallback: show in prompt
+                    prompt('Скопируй логи:', text);
+                }
+            },
+
+            showUI() {
+                const div = document.createElement('div');
+                div.id = 'debug-log-ui';
+                div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);z-index:99999;padding:10px;display:flex;flex-direction:column;';
+                div.innerHTML = `
+                    <div style="display:flex;gap:10px;margin-bottom:10px;">
+                        <button onclick="DebugLog.copyToClipboard()" style="flex:1;padding:15px;font-size:16px;">📋 Копировать</button>
+                        <button onclick="DebugLog.download()" style="flex:1;padding:15px;font-size:16px;">💾 Скачать</button>
+                        <button onclick="document.getElementById('debug-log-ui').remove()" style="padding:15px;font-size:16px;">✖</button>
+                    </div>
+                    <textarea readonly style="flex:1;font-family:monospace;font-size:11px;background:#111;color:#0f0;border:none;padding:10px;">${this.getText()}</textarea>
+                `;
+                document.body.appendChild(div);
+            }
+        };
+
+    </script>
+
+    <!-- v28: SimplePhysicsWorld - no external physics engine needed -->
     <script type="module">
-        import RAPIER from 'https://esm.sh/@dimforge/rapier2d-deterministic-compat@0.14.0';
-        await RAPIER.init();
-        window.RAPIER = RAPIER;
-        console.log('Rapier2D initialized');
-        // Now load game modules
+        console.log('v28: Using SimplePhysicsWorld (deterministic)');
         try {
             await import('./js/main.js');
         } catch (e) {

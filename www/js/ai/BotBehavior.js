@@ -193,9 +193,9 @@ function reactiveHookTick(bot, targetX, targetY, input, tick) {
         // bMod: move left/right toward target while swinging
         input.direction = dx > 0 ? 1 : -1;
 
-        // Apply swing force (helps pendulum motion)
-        if (core.rapierBody) {
-            core.rapierBody.addForce({ x: input.direction * 0.25, y: 0 }, true);
+        // v28: Apply swing force via velocity change (helps pendulum motion)
+        if (core.body) {
+            core.body.vx += input.direction * 0.25;
         }
 
         // bMod reel gating: reel only if anchor is toward target
@@ -365,7 +365,7 @@ class SnowballIncoming extends b3.Condition {
             const dist = Math.hypot(dx, dy);
             if (dist > 250) continue;
 
-            const vx = sb.rapierBody ? sb.rapierBody.linvel().x : 0;
+            const vx = sb.vx || 0;
             const heading = vx > 0 ? 1 : -1;
 
             if ((heading > 0 && dx < 0) || (heading < 0 && dx > 0)) {
@@ -443,8 +443,8 @@ class Shoot extends b3.Action {
         if (target) {
             const dx = target.x - bot.x;
             bot.setData('facingRight', dx > 0);
-            const botVx = bot.rapierBody?.linvel()?.x || 0;
-            const botVy = bot.rapierBody?.linvel()?.y || 0;
+            const botVx = bot.simpleBody?.vx || 0;
+            const botVy = bot.simpleBody?.vy || 0;
             input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y, botVx, botVy);
         } else {
             input.fireAngle = bot.getData('facingRight') ? 0 : Math.PI;
@@ -515,7 +515,7 @@ class SwingOnHook extends b3.Action {
         }
 
         const hookTime = tick.blackboard.get('hookTime') || 0;
-        const vy = core.rapierBody ? core.rapierBody.linvel().y : 0;
+        const vy = core.body?.vy || 0;
 
         // 1. Landed — release hook
         if (core.grounded && hookTime > 600) {
@@ -993,7 +993,7 @@ function reactiveMove(bot, targetX, targetY, input, tick) {
         const moveDir = input.direction;
 
         // 3a. Wall ahead → jump (bMod: if position doesn't change, jump)
-        const vxAbs = Math.abs(core.rapierBody?.linvel()?.x || 0);
+        const vxAbs = Math.abs(core.body?.vx || 0);
         const lookAhead = 25 + Math.max(vxAbs, 4) * 4;
         const wallTile = scene.platformLayer.getTileAtWorldXY(
             bot.x + moveDir * lookAhead, bot.y);
@@ -1401,7 +1401,7 @@ function fallbackWalk(tick, bot, targetX, input) {
     // Wall lookahead
     if (bot.core?.grounded && scene.platformLayer) {
         const moveDir = input.direction;
-        const vxAbs = Math.abs(bot.core.rapierBody?.linvel()?.x || 0);
+        const vxAbs = Math.abs(bot.core.body?.vx || 0);
         const lookAhead = 25 + Math.max(vxAbs, 4) * 4;
         const checkX = bot.x + moveDir * lookAhead;
         const wallTile = scene.platformLayer.getTileAtWorldXY(checkX, bot.y);
@@ -1574,7 +1574,7 @@ function executeSegment(tick, bot, segment, input) {
         const { scene } = tick.blackboard.get('context');
         if (bot.core?.grounded && input.direction !== 0 && scene.platformLayer) {
             const moveDir = input.direction > 0 ? 1 : -1;
-            const vxAbs = Math.abs(bot.core.rapierBody?.linvel()?.x || 0);
+            const vxAbs = Math.abs(bot.core.body?.vx || 0);
             const lookAhead = 25 + Math.max(vxAbs, 4) * 4;
             const checkX = bot.x + moveDir * lookAhead;
 
@@ -1980,8 +1980,8 @@ export class BotBehavior {
                     }
                     if (canSee) {
                         bot.setData('facingRight', sdx > 0);
-                        const botVx = bot.rapierBody?.linvel()?.x || 0;
-                        const botVy = bot.rapierBody?.linvel()?.y || 0;
+                        const botVx = bot.simpleBody?.vx || 0;
+                        const botVy = bot.simpleBody?.vy || 0;
                         input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y, botVx, botVy);
                         input.fire = true;
                         this.blackboard.set('shootCooldown',

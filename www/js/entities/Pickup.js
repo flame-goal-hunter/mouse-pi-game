@@ -1,5 +1,6 @@
 // ============================================
 // PICKUP - Collectible power-ups (Emoji-based)
+// v28: No Rapier sensor - collision handled in GameScene.processCollisions()
 // ============================================
 
 import { PICKUPS, GAME } from '../config.js';
@@ -19,15 +20,7 @@ export class Pickup {
         }).setOrigin(0.5);
         this.emoji.setDepth(15);
 
-        // Create Rapier2D sensor for collision detection
-        if (scene.rapierWorld) {
-            this.rapierBody = scene.rapierWorld.createPickupSensor(x, y, 18, `pickup-${type}`);
-            // Link sprite data so collision handler can find this pickup
-            const sensorSprite = { pickupRef: this };
-            scene.rapierWorld.setBodySprite(this.rapierBody, sensorSprite);
-        }
-
-        // Link pickup reference on emoji (for legacy compatibility)
+        // Link pickup reference on emoji (for collision lookup)
         this.emoji.pickup = this;
 
         // Floating animation
@@ -121,10 +114,6 @@ export class Pickup {
         if (this.emoji) {
             this.emoji.destroy();
             this.emoji = null;
-        }
-        if (this.rapierBody && this.scene?.rapierWorld) {
-            this.scene.rapierWorld.removeBody(this.rapierBody);
-            this.rapierBody = null;
         }
     }
 }

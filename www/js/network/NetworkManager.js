@@ -375,14 +375,15 @@ export class NetworkManager {
     }
 
     _playerToSnap(p, id) {
-        // Teeworlds v15: velocity as fixed-point integer (scale 256)
-        const vel = p.rapierBody?.linvel();
+        // v28: Get velocity from SimpleBody
+        const vx = p.simpleBody?.vx || 0;
+        const vy = p.simpleBody?.vy || 0;
         return {
             id,
             x: p.x,
             y: p.y,
-            vx: vel ? Math.round(vel.x * 256) : 0,  // Fixed-point 256
-            vy: vel ? Math.round(vel.y * 256) : 0,  // Fixed-point 256
+            vx: Math.round(vx * 256),  // Fixed-point 256
+            vy: Math.round(vy * 256),  // Fixed-point 256
             facingRight: p.getData('facingRight'),
             health: p.getData('health'),
             animation: p.anims?.currentAnim?.key || 'idle',
@@ -736,7 +737,15 @@ export class NetworkManager {
                     // Sort by sequence (in case of packet reordering)
                     this.inputQueue.sort((a, b) => a.seq - b.seq);
 
-                    // Limit queue size to prevent memory growth
+                    // v25: Aggressive cleanup by age (not just size)
+                    // This prevents 56+ inputs accumulating due to network jitter
+                    const MAX_INPUT_AGE_TICKS = 30; // ~500ms at 60Hz
+                    const currentTick = this.serverTick;
+                    this.inputQueue = this.inputQueue.filter(i =>
+                        currentTick - i.receivedTick < MAX_INPUT_AGE_TICKS
+                    );
+
+                    // Also limit by size as fallback
                     while (this.inputQueue.length > 30) {
                         this.inputQueue.shift();
                     }

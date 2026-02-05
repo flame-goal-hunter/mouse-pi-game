@@ -1,10 +1,10 @@
 // ============================================
-// GAME SCENE - Main Gameplay with Rapier2D
+// GAME SCENE - Main Gameplay with SimplePhysicsWorld (v28)
 // ============================================
 
 import { PHYS, TILE_SIZE, GAME, PLAYER_COLORS, PICKUPS, RAGDOLL, getRandomBotName } from '../config.js';
 import { CharacterCore } from '../physics/CharacterCore.js';
-import { RapierWorld } from '../physics/RapierWorld.js';
+import { SimplePhysicsWorld } from '../physics/SimplePhysicsWorld.js';
 import { BotBehavior } from '../ai/BotBehavior.js';
 import { PlatformNav, EdgeType } from '../ai/PlatformNav.js';
 import { ObstacleSolver } from '../ai/ObstacleSolver.js';
@@ -214,15 +214,9 @@ export class GameScene extends Phaser.Scene {
             this._slowmoActive = false;
             this._physicsTimeScale = 1;
             this.time.timeScale = 1;
-            // Destroy Rapier worlds
-            if (this.rapierWorld) {
-                this.rapierWorld.destroy();
-                this.rapierWorld = null;
-            }
-            if (this.predictionWorld) {
-                this.predictionWorld.destroy();
-                this.predictionWorld = null;
-            }
+            // v28: Clear SimplePhysicsWorld references
+            this.physicsWorld = null;
+            this.predictionWorld = null;
         });
     }
 
@@ -238,17 +232,17 @@ export class GameScene extends Phaser.Scene {
             this.bgLayer.setDepth(-10);
         }
 
-        // Platforms layer (with Rapier2D collision)
+        // Platforms layer (with SimplePhysicsWorld collision)
         this.platformLayer = this.map.createLayer('platforms', tileset, 0, 0);
         if (this.platformLayer) {
             this.platformLayer.setCollisionByExclusion([-1, 0]);
             this.platformLayer.setDepth(0);
         }
 
-        // Create Rapier2D physics world and tilemap colliders
-        this.rapierWorld = new RapierWorld(PHYS.GRAVITY);
+        // v28: Create SimplePhysicsWorld and initialize from tilemap
+        this.physicsWorld = new SimplePhysicsWorld(TILE_SIZE);
         if (this.platformLayer) {
-            this.rapierWorld.createTilemapColliders(this.platformLayer, TILE_SIZE);
+            this.physicsWorld.initFromTilemap(this.platformLayer);
         }
 
         // Physics time scale for slow-motion effects
@@ -321,8 +315,101 @@ export class GameScene extends Phaser.Scene {
             ];
         }
 
+        // v28: Validate spawn points - ensure there's ground below each
+        this._validateSpawnPoints();
+
         // Sky background
         this.cameras.main.setBackgroundColor('#87CEEB');
+    }
+
+    /**
+     * v28: Validate spawn points - ensure ground exists below each spawn
+     * Falls back to finding valid positions if spawns are above empty space
+     */
+    _validateSpawnPoints() {
+        if (!this.platformLayer || !this.physicsWorld) {
+            console.warn('[Spawn] Validation skipped - missing platformLayer or physicsWorld');
+            return;
+        }
+
+        console.log('[Spawn] Validating', this.spawnPoints.length, 'spawn points');
+
+        const validated = [];
+        for (let i = 0; i < this.spawnPoints.length; i++) {
+            const spawn = this.spawnPoints[i];
+            const spawnY = spawn.y - 35; // Body center
+
+            // Check ground below spawn (body.y + halfH + 1)
+            const groundY = spawnY + 30 + 1;
+            const tileX = Math.floor(spawn.x / TILE_SIZE);
+            const tileY = Math.floor(groundY / TILE_SIZE);
+
+            console.log(`[Spawn] Point ${i}: (${spawn.x}, ${spawn.y}) -> tile (${tileX}, ${tileY})`);
+
+            // Check a few tiles below for ground
+            let foundGround = false;
+            for (let checkY = tileY; checkY < tileY + 5 && checkY < this.physicsWorld.gridHeight; checkY++) {
+                const isSolid = this.physicsWorld._isSolid(tileX, checkY);
+                console.log(`[Spawn]   Checking tile (${tileX}, ${checkY}): ${isSolid ? 'SOLID' : 'empty'}`);
+                if (isSolid) {
+                    // Found ground - adjust spawn Y to be above it
+                    const newSpawnY = checkY * TILE_SIZE - 35;
+                    validated.push({ x: spawn.x, y: newSpawnY });
+                    if (newSpawnY !== spawn.y) {
+                        console.log(`[Spawn] Point ${i} adjusted: y ${spawn.y} -> ${newSpawnY} (ground at tile ${checkY})`);
+                    }
+                    foundGround = true;
+                    break;
+                }
+            }
+
+            if (!foundGround) {
+                // No ground found - try to find ANY solid tile nearby
+                const fallback = this._findNearestGroundedSpawn(spawn.x, spawn.y);
+                if (fallback) {
+                    validated.push(fallback);
+                    console.log(`[Spawn] Point ${i} moved: (${spawn.x}, ${spawn.y}) -> (${fallback.x}, ${fallback.y})`);
+                } else {
+                    // Last resort - use original (will float but at least exists)
+                    validated.push(spawn);
+                    console.warn(`[Spawn] Point ${i} at (${spawn.x}, ${spawn.y}) has no ground below!`);
+                }
+            }
+        }
+
+        this.spawnPoints = validated;
+    }
+
+    /**
+     * Find nearest position with solid ground below
+     */
+    _findNearestGroundedSpawn(x, y) {
+        if (!this.physicsWorld?.solidGrid) return null;
+
+        const tileX = Math.floor(x / TILE_SIZE);
+        const startTileY = Math.floor(y / TILE_SIZE);
+
+        // Search in expanding circles
+        for (let radius = 1; radius < 20; radius++) {
+            for (let dy = -radius; dy <= radius; dy++) {
+                for (let dx = -radius; dx <= radius; dx++) {
+                    const tx = tileX + dx;
+                    const ty = startTileY + dy;
+
+                    // Check if this tile is solid (potential ground)
+                    if (this.physicsWorld._isSolid(tx, ty)) {
+                        // Check if tile ABOVE is empty (can stand there)
+                        if (!this.physicsWorld._isSolid(tx, ty - 1)) {
+                            const newX = tx * TILE_SIZE + TILE_SIZE / 2;
+                            const newY = ty * TILE_SIZE - 35; // Spawn above the ground tile
+                            return { x: newX, y: newY };
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -397,16 +484,15 @@ export class GameScene extends Phaser.Scene {
         character.setDepth(10);
         character.setScale(0.45);
 
-        // Rapier2D physics body
-        const rapierBody = this.rapierWorld.createCharacterBody(spawn.x, spawnY, 50, 60, label);
-        rapierBody.userData = character;  // Back-reference for collision lookup
-        this.rapierWorld.setBodySprite(rapierBody, character);
-        character.rapierBody = rapierBody;
+        // v28: SimplePhysicsWorld body (25 = halfW, 30 = halfH)
+        const body = this.physicsWorld.createBody(label, spawn.x, spawnY, 25, 30, 1);
+        body.sprite = character;  // Back-reference for collision lookup
+        character.simpleBody = body;
         character._physLabel = label;
 
-        // CharacterCore (Rapier-based movement controller)
+        // CharacterCore (v28: uses SimpleBody)
         character.core = new CharacterCore();
-        character.core.init(rapierBody, this.rapierWorld, this);
+        character.core.init(body, this.physicsWorld, this, character);
 
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('score', 0);
@@ -448,7 +534,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * v18: Create a separate Rapier world for guest-side prediction.
+     * v28: Create a separate SimplePhysicsWorld for guest-side prediction.
      * Contains: tilemap colliders + own character body with CharacterCore.
      * This ensures physics match the host exactly for proper reconciliation.
      */
@@ -457,10 +543,29 @@ export class GameScene extends Phaser.Scene {
         const spawnY = spawn.y - 35;
         const spriteKey = `p${charNum}-stand`;
 
-        // v18: Create separate Rapier world for prediction (same as host)
-        this.predictionWorld = new RapierWorld(PHYS.GRAVITY);
+        // v28: Create separate SimplePhysicsWorld for prediction (same as host)
+        this.predictionWorld = new SimplePhysicsWorld(TILE_SIZE);
         if (this.platformLayer) {
-            this.predictionWorld.createTilemapColliders(this.platformLayer, TILE_SIZE);
+            this.predictionWorld.initFromTilemap(this.platformLayer);
+            const solidCount = this.predictionWorld.solidGrid.flat().filter(Boolean).length;
+            console.log('[Guest] predictionWorld solidGrid:', this.predictionWorld.gridWidth, 'x', this.predictionWorld.gridHeight,
+                'solidCount:', solidCount);
+
+            // Debug: check if there's ground at spawn position
+            const groundY = spawnY + 35; // Feet position (body.y + halfH + 1)
+            const tileX = Math.floor(spawn.x / TILE_SIZE);
+            const groundTileY = Math.floor(groundY / TILE_SIZE);
+            const isSolid = this.predictionWorld._isSolid(tileX, groundTileY);
+            console.log('[Guest] Ground check at spawn:',
+                'feet Y:', groundY, '-> tileY:', groundTileY,
+                'tileX:', tileX,
+                'isSolid:', isSolid);
+
+            // Also check the actual tile from Phaser
+            const phaserTile = this.platformLayer.getTileAt(tileX, groundTileY);
+            console.log('[Guest] Phaser tile at ground:', phaserTile?.index, 'collides:', phaserTile?.collides);
+        } else {
+            console.error('[Guest] platformLayer is null! predictionWorld will have no collisions!');
         }
 
         // Create sprite
@@ -470,15 +575,14 @@ export class GameScene extends Phaser.Scene {
         character.setScale(0.45);
         character._physLabel = 'player';
 
-        // v18: Create Rapier body for own character (same as host)
-        const rapierBody = this.predictionWorld.createCharacterBody(spawn.x, spawnY, 50, 60, 'player');
-        rapierBody.userData = character;
-        this.predictionWorld.setBodySprite(rapierBody, character);
-        character.rapierBody = rapierBody;
+        // v28: Create SimpleBody for own character (same as host)
+        const body = this.predictionWorld.createBody('player', spawn.x, spawnY, 25, 30, 1);
+        body.sprite = character;
+        character.simpleBody = body;
 
-        // v18: Create CharacterCore (same physics as host)
+        // v28: Create CharacterCore (same physics as host)
         character.core = new CharacterCore();
-        character.core.init(rapierBody, this.predictionWorld, this);
+        character.core.init(body, this.predictionWorld, this, character);
         // v21.3: Guest plays OWN sounds locally for immediate feedback
         // Other players' sounds come from host events
         character.core.suppressSounds = false;
@@ -490,24 +594,26 @@ export class GameScene extends Phaser.Scene {
 
         this.player = character;
 
-        // v18: State for reconciliation
+        // State for reconciliation
         this._localVel = { x: 0, y: 0 };
         this._localGrounded = false;
         this._localJumpHeld = false;
         this._localCoyoteTime = 0;
-        this._lastCorrectedTick = -1;  // Track which snapshot tick was last used for correction
-        this._lastReconciledSeq = -1;  // Track last reconciled input sequence
-        this._lastConfirmedTick = -1;  // v23: For input replay reconciliation
+        this._lastCorrectedTick = -1;
+        this._lastReconciledSeq = -1;
+        this._lastConfirmedTick = -1;
 
-        console.log('[GameScene] v18: Guest prediction world created with Rapier physics');
+        console.log('[GameScene] v28: Guest prediction world created with SimplePhysicsWorld',
+            'spawnPos:', spawn.x, spawnY,
+            'body:', !!body, 'simpleBody:', !!character.simpleBody,
+            'core:', !!character.core);
     }
 
     /**
      * v17: Host sprite on guest side — just visual, no physics
      */
     _createHostPredictionBody() {
-        // v17: No Rapier body for host on guest side — purely visual
-        // The sprite is already created, we don't need to add CharacterCore
+        // Host sprite has no physics on guest side — purely visual
     }
 
     createBots() {
@@ -649,84 +755,87 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Process Rapier collision events (called each frame after physics step)
+     * v28: Process collisions with simple AABB overlap checks
      */
-    processRapierCollisions() {
+    processCollisions() {
         if (this.gameMode === 'join') return; // Guest doesn't handle collisions
 
-        this.rapierWorld.drainCollisions((h1, h2, started) => {
-            if (!started) return; // Only handle collision start
+        // Get all characters
+        const characters = [this.player, this.guestPlayer, ...this.bots].filter(c => c?.active);
 
-            const data1 = this.rapierWorld.getColliderData(h1);
-            const data2 = this.rapierWorld.getColliderData(h2);
-            if (!data1 || !data2) return;
+        // Check snowball vs character collisions
+        for (const snowball of this.snowballs) {
+            if (!snowball.active) continue;
 
-            // Check snowball collisions
-            this.checkRapierSnowballCollision(data1, data2);
-            this.checkRapierSnowballCollision(data2, data1);
+            const shooter = snowball.getData('shooter');
+            const sbR = 10; // snowball radius
 
-            // Check pickup collisions
-            this.checkRapierPickupCollision(data1, data2);
-            this.checkRapierPickupCollision(data2, data1);
-        });
-    }
+            // Check vs characters
+            for (const character of characters) {
+                if (character === shooter) continue;
+                if (!character.active || character.getData('health') <= 0) continue;
 
-    checkRapierPickupCollision(pickupData, characterData) {
-        if (!pickupData.label?.startsWith('pickup-')) return;
-        if (!characterData.sprite) return;
+                const body = character.simpleBody;
+                if (!body) continue;
 
-        const character = characterData.sprite;
-        if (!character.active || character.getData('health') <= 0) return;
+                // Simple circle vs AABB
+                const dx = Math.abs(snowball.x - body.x);
+                const dy = Math.abs(snowball.y - body.y);
 
-        // Find the pickup object
-        const pickup = pickupData.sprite?.pickupRef;
-        if (pickup && pickup.isActive()) {
-            const x = pickup.emoji.x;
-            const y = pickup.startY;
-            const type = pickup.type;
-            const pickupId = pickup.id;
+                if (dx < body.halfW + sbR && dy < body.halfH + sbR) {
+                    this.snowballHit(snowball, character);
+                    break;
+                }
+            }
 
-            pickup.collect(character);
-            this.pickups = this.pickups.filter(p => p !== pickup);
-            this.schedulePickupRespawn(x, y, type, pickupId);
-        }
-    }
-
-    checkRapierSnowballCollision(snowballData, otherData) {
-        if (snowballData.label !== 'snowball') return;
-
-        const snowball = snowballData.sprite;
-        if (!snowball || !snowball.active || !this.snowballs.includes(snowball)) return;
-
-        const shooter = snowball.getData('shooter');
-
-        // Check if other is a character
-        const target = otherData.sprite;
-
-        if (target && target._physLabel && target !== shooter &&
-            target.active && target.getData('health') > 0) {
-            this.snowballHit(snowball, target);
-            return;
+            // Check vs tilemap (if snowball still active)
+            if (snowball.active && this.platformLayer) {
+                const tile = this.platformLayer.getTileAtWorldXY(snowball.x, snowball.y);
+                if (tile && tile.collides) {
+                    this.showSplatEffect(snowball.x, snowball.y);
+                    this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.5);
+                    if (this.network) {
+                        this.network.queueEvent({
+                            type: 'splatEffect',
+                            x: snowball.x,
+                            y: snowball.y
+                        });
+                    }
+                    this.destroySnowball(snowball);
+                }
+            }
         }
 
-        // Snowball-snowball: ignore
-        if (otherData.label === 'snowball') return;
+        // Check pickup vs character collisions
+        for (const pickup of this.pickups) {
+            if (!pickup.isActive()) continue;
 
-        // Snowball hit shooter: ignore
-        if (target === shooter) return;
+            const px = pickup.emoji.x;
+            const py = pickup.emoji.y;
+            const pR = 18; // pickup radius
 
-        // Snowball hits wall/platform — splat
-        this.showSplatEffect(snowball.x, snowball.y);
-        this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.5);
-        // Queue visual effect for guest
-        if (this.network) {
-            this.network.queueEvent({
-                type: 'splatEffect',
-                x: snowball.x,
-                y: snowball.y
-            });
+            for (const character of characters) {
+                if (!character.active || character.getData('health') <= 0) continue;
+
+                const body = character.simpleBody;
+                if (!body) continue;
+
+                const dx = Math.abs(px - body.x);
+                const dy = Math.abs(py - body.y);
+
+                if (dx < body.halfW + pR && dy < body.halfH + pR) {
+                    const x = pickup.emoji.x;
+                    const y = pickup.startY;
+                    const type = pickup.type;
+                    const pickupId = pickup.id;
+
+                    pickup.collect(character);
+                    this.pickups = this.pickups.filter(p => p !== pickup);
+                    this.schedulePickupRespawn(x, y, type, pickupId);
+                    break;
+                }
+            }
         }
-        this.destroySnowball(snowball);
     }
 
     getSpriteFromLabel(label) {
@@ -780,6 +889,12 @@ export class GameScene extends Phaser.Scene {
 
         // Pause button
         if (this.hudPause) this.hudPause.addEventListener('click', () => this.showPauseMenu());
+
+        // Debug log button
+        const hudDebug = document.getElementById('hud-debug');
+        if (hudDebug) hudDebug.addEventListener('click', () => {
+            if (window.DebugLog) window.DebugLog.showUI();
+        });
 
         // === OPPONENTS (right side, stacked) ===
         this.createOpponentPanels();
@@ -1215,14 +1330,16 @@ export class GameScene extends Phaser.Scene {
 
     respawnSingleCharacter(character, spawn) {
         const spawnY = spawn.y - 35; // Above platform surface
-        if (character.rapierBody) {
-            this.rapierWorld.safeTeleport(character.rapierBody, spawn.x, spawnY, 25, 35);
-            character.rapierBody.setLinvel({ x: 0, y: 0 }, true);
-            const pos = character.rapierBody.translation();
-            character.setPosition(pos.x, pos.y);
-        } else {
-            character.setPosition(spawn.x, spawnY);
+
+        // v28: Update SimpleBody position
+        if (character.simpleBody) {
+            character.simpleBody.x = spawn.x;
+            character.simpleBody.y = spawnY;
+            character.simpleBody.vx = 0;
+            character.simpleBody.vy = 0;
         }
+        character.setPosition(spawn.x, spawnY);
+
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
@@ -1256,14 +1373,15 @@ export class GameScene extends Phaser.Scene {
         const spawn = this.spawnPoints[spawnIndex];
         const spawnY = spawn.y - 35; // Above platform surface
 
-        if (character.rapierBody) {
-            this.rapierWorld.safeTeleport(character.rapierBody, spawn.x, spawnY, 25, 35);
-            character.rapierBody.setLinvel({ x: 0, y: 0 }, true);
-            const pos = character.rapierBody.translation();
-            character.setPosition(pos.x, pos.y);
-        } else {
-            character.setPosition(spawn.x, spawnY);
+        // v28: Update SimpleBody position
+        if (character.simpleBody) {
+            character.simpleBody.x = spawn.x;
+            character.simpleBody.y = spawnY;
+            character.simpleBody.vx = 0;
+            character.simpleBody.vy = 0;
         }
+        character.setPosition(spawn.x, spawnY);
+
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
@@ -1715,9 +1833,10 @@ export class GameScene extends Phaser.Scene {
                 }
             });
 
-            this.rapierWorld.step(FIXED_DT_S);
+            // v28: SimplePhysicsWorld step
+            this.physicsWorld.step(FIXED_DT_S);
 
-            // Teeworlds v15: Quantize all characters for network determinism
+            // Quantize all characters for network determinism
             if (this.player.core) this.player.core.quantize();
             if (this.guestPlayer?.core) this.guestPlayer.core.quantize();
             this.bots.forEach(bot => { if (bot.core) bot.core.quantize(); });
@@ -1726,14 +1845,14 @@ export class GameScene extends Phaser.Scene {
             firstTick = false;
         }
 
-        // 5. Sync sprite positions from Rapier bodies
+        // 5. Sync sprite positions from SimpleBody
         this.syncSpriteFromBody(this.player);
-        if (this.guestPlayer?.rapierBody) this.syncSpriteFromBody(this.guestPlayer);
+        if (this.guestPlayer?.simpleBody) this.syncSpriteFromBody(this.guestPlayer);
         this.bots.forEach(bot => this.syncSpriteFromBody(bot));
-        this.syncSnowballBodies();
+        this.updateSnowballPositions();
 
-        // 6. Process Rapier collision events
-        this.processRapierCollisions();
+        // 6. Process collision events (v28: simple overlap checks)
+        this.processCollisions();
 
         // 7. Snowballs, pickups, powerups
         this.updateSnowballs();
@@ -1758,29 +1877,36 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * Sync a sprite's position from its Rapier body
+     * v28: Sync a sprite's position from its SimpleBody
      */
     syncSpriteFromBody(character) {
-        if (!character?.rapierBody || !character.active) return;
-        const pos = character.rapierBody.translation();
-        character.setPosition(pos.x, pos.y);
+        if (!character?.simpleBody || !character.active) return;
+        character.setPosition(character.simpleBody.x, character.simpleBody.y);
     }
 
     /**
-     * Sync all snowball sprite positions from their Rapier bodies
+     * v28: Update snowball positions (simple physics)
      */
-    syncSnowballBodies() {
+    updateSnowballPositions() {
+        const FIXED_DT_S = 1 / 60;
         for (const sb of this.snowballs) {
-            if (sb.rapierBody && sb.active) {
-                const pos = sb.rapierBody.translation();
-                sb.setPosition(pos.x, pos.y);
-            }
+            if (!sb.active) continue;
+
+            // Simple projectile physics
+            sb.vy = (sb.vy || 0) + PHYS.GRAVITY * PHYS.SNOWBALL_GRAVITY_SCALE * FIXED_DT_S;
+            sb.x += (sb.vx || 0) * FIXED_DT_S;
+            sb.y += sb.vy * FIXED_DT_S;
         }
     }
 
     // === GUEST UPDATE (v19: fixed reconciliation) ===
 
     updateAsGuest(delta) {
+        if (!this._loggedGuestStart) {
+            console.log('[Guest] updateAsGuest started, predictionWorld:', !!this.predictionWorld,
+                'player:', !!this.player, 'simpleBody:', !!this.player?.simpleBody);
+            this._loggedGuestStart = true;
+        }
         const network = this.network;
         const FIXED_DT_S = 1 / 60;
         const FIXED_DT_MS = FIXED_DT_S * 1000;
@@ -1840,16 +1966,33 @@ export class GameScene extends Phaser.Scene {
         network?.update(delta);
     }
 
-    // === v18: LOCAL PHYSICS FOR OWN CHARACTER (Rapier-based) ===
+    // === v28: LOCAL PHYSICS FOR OWN CHARACTER (SimplePhysicsWorld) ===
 
     _updateLocalPlayer(input, delta) {
-        if (!this.player?.active || this.player.getData('isDying')) return;
-        if (!this.player.core || !this.predictionWorld) return;  // v18: Require Rapier
+        if (!this.player?.active || this.player.getData('isDying')) {
+            if (!this._loggedGuest1) { console.log('[Guest] _updateLocalPlayer: player not active or dying'); this._loggedGuest1 = true; }
+            return;
+        }
+        if (!this.player.core || !this.predictionWorld) {
+            if (!this._loggedGuest2) {
+                console.log('[Guest] _updateLocalPlayer: missing core or predictionWorld',
+                    'core:', !!this.player.core,
+                    'predWorld:', !!this.predictionWorld,
+                    'simpleBody:', !!this.player.simpleBody);
+                this._loggedGuest2 = true;
+            }
+            return;
+        }
 
-        // v18: Use CharacterCore.tick() — same physics as host
-        const result = this.player.core.tick(input, delta);
+        const FIXED_DT_S = 1 / 60;
+        const FIXED_DT_MS = FIXED_DT_S * 1000;
+
+        // Track local tick for debugging
+        this._localTick = (this._localTick || 0) + 1;
+
+        // Physics tick with FIXED delta
+        const result = this.player.core.tick(input, FIXED_DT_MS);
         this._localGrounded = result.grounded;
-        this._localCoyoteTime = this.player.core.coyoteTime || 0;
 
         // Update facing direction
         if (input.direction !== 0) {
@@ -1857,37 +2000,23 @@ export class GameScene extends Phaser.Scene {
             this.player.setFlipX(input.direction < 0);
         }
 
-        // v18: Step prediction Rapier world
-        this.predictionWorld.step(delta / 1000);
-
-        // v18: Quantize for determinism (same as host)
+        // v28: Step SimplePhysicsWorld
+        this.predictionWorld.step(FIXED_DT_S);
         this.player.core.quantize();
 
-        // Sync sprite position from Rapier body (with visual smoothing)
-        const pos = this.player.rapierBody.translation();
-
-        // Visual smoothing: interpolate sprite toward physics position
-        const diffX = pos.x - this.player.x;
-        const diffY = pos.y - this.player.y;
-        const diffDist = Math.sqrt(diffX * diffX + diffY * diffY);
-
-        const SMOOTH_THRESHOLD = 2;    // pixels - below this, snap instantly
-        const SMOOTH_FACTOR = 0.5;     // 50% per frame toward target
-        const SNAP_THRESHOLD = 100;    // pixels - above this, snap instantly
-
-        if (diffDist < SMOOTH_THRESHOLD || diffDist > SNAP_THRESHOLD) {
-            // Small difference or huge jump - snap instantly
-            this.player.setPosition(pos.x, pos.y);
-        } else {
-            // Smooth interpolation
-            const newX = this.player.x + diffX * SMOOTH_FACTOR;
-            const newY = this.player.y + diffY * SMOOTH_FACTOR;
-            this.player.setPosition(newX, newY);
+        // v28: Direct sprite sync from SimpleBody
+        if (this._localTick % 60 === 1) {
+            const body = this.player.simpleBody;
+            const groundY = body.y + body.halfH + 1;
+            const ts = this.predictionWorld.tileSize;
+            const tileY = Math.floor(groundY / ts);
+            const tileX = Math.floor(body.x / ts);
+            const isSolid = this.predictionWorld._isSolid(tileX, tileY);
+            console.log('[Guest] tick', this._localTick,
+                'y:', body.y.toFixed(1), 'halfH:', body.halfH, 'groundY:', groundY.toFixed(1),
+                'ts:', ts, 'tile:', tileX, tileY, isSolid ? 'SOLID' : 'empty');
         }
-
-        // Cache velocity for reconciliation
-        const vel = this.player.rapierBody.linvel();
-        this._localVel = { x: vel.x, y: vel.y };
+        this.player.setPosition(this.player.simpleBody.x, this.player.simpleBody.y);
     }
 
     // === v17: LOCAL GROUND DETECTION (tilemap collision) ===
@@ -1937,110 +2066,10 @@ export class GameScene extends Phaser.Scene {
     /**
      * v21 BENDING: Smooth interpolation toward server state instead of instant reset.
      * Industry-standard approach used by Teeworlds, Source Engine, etc.
-     *
-     * v21.1: Added VELOCITY BENDING to prevent oscillation.
-     * v21.2: Reduced bending during HOOK to prevent fighting hook physics.
      */
-    /* === v21-v22 BENDING CODE (DEPRECATED by v23 Input Replay) ===
-     * Kept for rollback - uncomment if input replay causes issues
-
-    _correctOwnPosition(snapshot) {
-        const myData = snapshot.players?.find(p => p.id === 'guest');
-        if (!myData || this.player.getData('isDying')) return;
-        if (!this.predictionWorld || !this.player.rapierBody) return;
-
-        const hookActive = myData.hookState === 'ATTACHED' || myData.hookState === 'FLYING';
-        const dx = myData.x - this.player.x;
-        const dy = myData.y - this.player.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const serverVx = (myData.vx || 0) / 256;
-        const serverVy = (myData.vy || 0) / 256;
-        const clientVel = this.player.rapierBody.linvel();
-        const dvx = serverVx - clientVel.x;
-        const dvy = serverVy - clientVel.y;
-        const velDist = Math.sqrt(dvx * dvx + dvy * dvy);
-
-        const TELEPORT_THRESHOLD = 150;
-        const POS_SNAP_THRESHOLD = 0.5;
-        const VEL_SNAP_THRESHOLD = 5;
-        const POS_BEND_FACTOR = hookActive ? 0.40 : 0.25;
-        const VEL_BEND_FACTOR = hookActive ? 0.50 : 0.35;
-
-        if (dist > TELEPORT_THRESHOLD) {
-            this._applyServerState(myData);
-        } else {
-            let newX = this.player.x;
-            let newY = this.player.y;
-            let newVx = clientVel.x;
-            let newVy = clientVel.y;
-            if (dist > POS_SNAP_THRESHOLD) {
-                newX += dx * POS_BEND_FACTOR;
-                newY += dy * POS_BEND_FACTOR;
-            }
-            if (velDist > VEL_SNAP_THRESHOLD) {
-                newVx += dvx * VEL_BEND_FACTOR;
-                newVy += dvy * VEL_BEND_FACTOR;
-            }
-            this.player.setPosition(newX, newY);
-            this.player.rapierBody.setTranslation({ x: newX, y: newY }, true);
-            this.player.rapierBody.setLinvel({ x: newVx, y: newVy }, true);
-            this._localVel = { x: newVx, y: newVy };
-        }
-        this._localGrounded = myData.grounded || false;
-        if (this.player.core) {
-            this.player.core.grounded = this._localGrounded;
-            this._syncHookState(myData);
-        }
-    }
-
-    _syncHookState(serverData) {
-        const core = this.player.core;
-        const serverState = serverData.hookState || 'IDLE';
-        const clientState = core.hookState;
-        if (clientState === serverState) {
-            this._hookSyncDisagreeCount = 0;
-            if (serverState === 'ATTACHED' && serverData.hookAnchorPos) {
-                core.hookAnchorPos = { ...serverData.hookAnchorPos };
-                core.ropeLength = serverData.ropeLength || 0;
-            }
-            return;
-        }
-        this._hookSyncDisagreeCount = (this._hookSyncDisagreeCount || 0) + 1;
-        if (serverState === 'ATTACHED') {
-            core.hookState = 'ATTACHED';
-            if (serverData.hookAnchorPos) {
-                core.hookAnchorPos = { ...serverData.hookAnchorPos };
-                core.ropeLength = serverData.ropeLength || 0;
-                core.hookPos = serverData.hookPos ? { ...serverData.hookPos } : { x: 0, y: 0 };
-            }
-            this._hookSyncDisagreeCount = 0;
-            return;
-        }
-        if (clientState === 'FLYING' && serverState === 'IDLE') {
-            if (this._hookSyncDisagreeCount < 4) return;
-        }
-        if (clientState === 'ATTACHED' && serverState === 'IDLE') {
-            core.hookState = 'IDLE';
-            core.hookAnchorPos = null;
-            core.ropeLength = 0;
-            this._hookSyncDisagreeCount = 0;
-            return;
-        }
-        if (this._hookSyncDisagreeCount >= 4) {
-            core.hookState = serverState;
-            if (serverState === 'IDLE') {
-                core.hookAnchorPos = null;
-                core.ropeLength = 0;
-            } else if (serverState === 'FLYING' && serverData.hookPos) {
-                core.hookPos = { ...serverData.hookPos };
-            }
-            this._hookSyncDisagreeCount = 0;
-        }
-    }
-    === END DEPRECATED BENDING CODE === */
 
     /**
-     * v18: Apply server authoritative state to local player
+     * v28: Apply server authoritative state to local player (SimpleBody)
      */
     _applyServerState(myData) {
         const serverVx = (myData.vx || 0) / 256;
@@ -2049,17 +2078,20 @@ export class GameScene extends Phaser.Scene {
         // Update sprite position
         this.player.setPosition(myData.x, myData.y);
 
-        // Update Rapier body
-        if (this.player.rapierBody) {
-            this.player.rapierBody.setTranslation({ x: myData.x, y: myData.y }, true);
-            this.player.rapierBody.setLinvel({ x: serverVx, y: serverVy }, true);
-            // v18 FIX: Explicitly wake the body after teleport
-            this.player.rapierBody.wakeUp();
+        // v28: Update SimpleBody
+        if (this.player.simpleBody) {
+            this.player.simpleBody.x = myData.x;
+            this.player.simpleBody.y = myData.y;
+            this.player.simpleBody.vx = serverVx;
+            this.player.simpleBody.vy = serverVy;
+
+            // v28 FIX: Re-resolve collisions after teleport to update grounded state
+            this.predictionWorld._resolveCollisions(this.player.simpleBody);
         }
 
         // Update local state
         this._localVel = { x: serverVx, y: serverVy };
-        this._localGrounded = myData.grounded || false;
+        this._localGrounded = myData.grounded || this.player.simpleBody?.grounded || false;
 
         // Update CharacterCore state
         if (this.player.core) {
@@ -2070,144 +2102,114 @@ export class GameScene extends Phaser.Scene {
     // === v23: TEEWORLDS-STYLE INPUT REPLAY RECONCILIATION ===
 
     /**
-     * Teeworlds-style server reconciliation with input replay.
-     * Instead of percentage-based bending, we:
-     * 1. Reset to server state when prediction error exceeds threshold
-     * 2. Replay all unacknowledged inputs to get correct predicted position
-     * This eliminates "fighting" between physics and bending.
+     * v28: Adaptive bending with SimpleBody.
+     * Since SimplePhysicsWorld is deterministic, we should have minimal drift.
+     * Bending handles any remaining discrepancy smoothly.
      */
     _reconcileWithServer(snapshot) {
         const myData = snapshot.players?.find(p => p.id === 'guest');
-        if (!myData || this.player.getData('isDying')) return;
-        if (!this.predictionWorld || !this.player.rapierBody || !this.player.core) return;
+        if (!myData || this.player.getData('isDying')) {
+            if (!this._loggedReconcile1) {
+                console.log('[Guest] _reconcileWithServer: no guest data or dying, players:', snapshot.players?.map(p => p.id));
+                this._loggedReconcile1 = true;
+            }
+            return;
+        }
+        if (!this.predictionWorld || !this.player.simpleBody || !this.player.core) {
+            if (!this._loggedReconcile2) {
+                console.log('[Guest] _reconcileWithServer: missing predictionWorld/simpleBody/core');
+                this._loggedReconcile2 = true;
+            }
+            return;
+        }
 
         const serverTick = snapshot.tick;
         const lastAckedSeq = snapshot.lastInputSeq;
 
         // Skip if already processed this tick
         if (serverTick <= this._lastConfirmedTick) return;
+
+        if (this._lastConfirmedTick < 0) {
+            console.log('[Guest] First reconciliation tick', serverTick,
+                'server pos:', myData.x.toFixed(1), myData.y.toFixed(1),
+                'local pos:', this.player.simpleBody.x.toFixed(1), this.player.simpleBody.y.toFixed(1));
+        }
         this._lastConfirmedTick = serverTick;
 
-        // Calculate prediction error
-        const errorX = myData.x - this.player.x;
-        const errorY = myData.y - this.player.y;
+        // Always clear acknowledged inputs
+        this.network.clearAckedInputs(lastAckedSeq);
+
+        // Always sync hook state from server
+        this._syncHookStateFromServer(myData);
+
+        // v28: Calculate error from SimpleBody
+        const body = this.player.simpleBody;
+        const errorX = myData.x - body.x;
+        const errorY = myData.y - body.y;
         const errorDist = Math.sqrt(errorX * errorX + errorY * errorY);
 
         const serverVx = (myData.vx || 0) / 256;
         const serverVy = (myData.vy || 0) / 256;
 
-        // Thresholds (pure Teeworlds - no bending)
-        const ERROR_THRESHOLD = 2;        // pixels - skip if tiny error
-        const TELEPORT_THRESHOLD = 150;   // pixels - instant teleport
+        // v28: With deterministic physics, threshold can be lower
+        const SKIP_THRESHOLD = 4;
+        const TELEPORT_THRESHOLD = 150;
 
-        // Get state for reconciliation
-        const unackedInputs = this.network.getUnackedInputs(lastAckedSeq);
-        const localHookState = this.player.core.hookState;
-        const serverHookState = myData.hookState || 'IDLE';
-
-        // === LOGGING (only when significant) ===
-        const shouldLog = errorDist >= ERROR_THRESHOLD || localHookState !== serverHookState;
-        if (shouldLog) {
-            console.log(`[Reconcile] tick=${serverTick} err=${errorDist.toFixed(1)}px unacked=${unackedInputs.length} ` +
-                `pos:(${this.player.x.toFixed(0)},${this.player.y.toFixed(0)})→(${myData.x.toFixed(0)},${myData.y.toFixed(0)}) ` +
-                `hook:${localHookState}→${serverHookState}`);
-        }
-
-        // === Check for state mismatches that require reconciliation ===
-        const hookStateMismatch = localHookState !== serverHookState;
-
-        // === SKIP if prediction is very accurate AND states match ===
-        if (errorDist < ERROR_THRESHOLD && !hookStateMismatch) {
-            this.network.clearAckedInputs(lastAckedSeq);
-            return;  // No logging - prediction accurate
-        }
-
-        // Log why we're not skipping
-        if (hookStateMismatch && errorDist < ERROR_THRESHOLD) {
-            console.log(`[Reconcile] Hook mismatch (${localHookState}→${serverHookState}) - forcing replay despite small error`);
-        }
-
-        // === TELEPORT if huge desync ===
-        if (errorDist > TELEPORT_THRESHOLD) {
-            console.warn(`[Reconcile] TELEPORT! ${errorDist.toFixed(1)}px > ${TELEPORT_THRESHOLD}px`);
-            this._applyServerState(myData);
-            this.network.clearAckedInputs(lastAckedSeq);
+        if (errorDist < SKIP_THRESHOLD) {
             return;
         }
 
-        // === INPUT REPLAY (Teeworlds-style) ===
-        console.log(`[Reconcile] REPLAY starting - ${unackedInputs.length} inputs to replay`);
-
-        // 1. Reset physics to server state
-        this.player.rapierBody.setTranslation({ x: myData.x, y: myData.y }, true);
-        this.player.rapierBody.setLinvel({ x: serverVx, y: serverVy }, true);
-        this._applyServerCoreState(myData);
-
-        // 2. Replay all unacknowledged inputs
-        const FIXED_DT_S = 1 / 60;
-        const FIXED_DT_MS = FIXED_DT_S * 1000;
-
-        // Suppress sounds during replay - they already played during prediction
-        const prevSuppressSounds = this.player.core.suppressSounds;
-        this.player.core.suppressSounds = true;
-
-        for (const entry of unackedInputs) {
-            // Clone input to avoid modifying history
-            const replayInput = { ...entry.input };
-
-            // Clear one-shot flags that would cause double actions,
-            // BUT only if server already shows that action in progress.
-            // This preserves responsiveness when server hasn't seen our input yet.
-
-            // Snowballs: always clear - server creates them authoritatively
-            replayInput.fire = false;
-
-            // Hook: only clear if server already shows hook active (FLYING/ATTACHED)
-            // If server shows IDLE, we might need to fire it during replay for local prediction
-            if (serverHookState !== 'IDLE') {
-                replayInput.hookJustPressed = false;
-            }
-
-            this.player.core.tick(replayInput, FIXED_DT_MS);
-            this.predictionWorld.step(FIXED_DT_S);
-            this.player.core.quantize();
+        if (errorDist > TELEPORT_THRESHOLD) {
+            this._applyServerState(myData);
+            if (window.DebugLog) window.DebugLog.log(`TELEPORT err=${errorDist.toFixed(0)}px`);
+            return;
         }
 
-        // Restore sound setting
-        this.player.core.suppressSounds = prevSuppressSounds;
+        const BEND_FACTOR = Math.min(0.5, 0.15 + errorDist * 0.007);
 
-        // 3. Sync sprite to final replayed position (with visual smoothing for large corrections)
-        const finalPos = this.player.rapierBody.translation();
+        const newX = body.x + errorX * BEND_FACTOR;
+        const newY = body.y + errorY * BEND_FACTOR;
 
-        // Visual smoothing: if correction is large, interpolate sprite instead of instant snap
-        const VISUAL_SMOOTH_THRESHOLD = 5;  // pixels - smooth corrections larger than this
-        const VISUAL_SMOOTH_FACTOR = 0.4;   // 40% per frame toward target
+        // v28: Direct body + sprite sync
+        body.x = newX;
+        body.y = newY;
+        this.player.setPosition(newX, newY);
 
-        const correctionX = finalPos.x - this.player.x;
-        const correctionY = finalPos.y - this.player.y;
-        const correctionDist = Math.sqrt(correctionX * correctionX + correctionY * correctionY);
+        // Velocity bending with same factor
+        const newVx = body.vx + (serverVx - body.vx) * BEND_FACTOR;
+        const newVy = body.vy + (serverVy - body.vy) * BEND_FACTOR;
+        body.vx = newVx;
+        body.vy = newVy;
 
-        if (correctionDist > VISUAL_SMOOTH_THRESHOLD && correctionDist < TELEPORT_THRESHOLD) {
-            // Smooth visual interpolation (physics is already correct)
-            const newX = this.player.x + correctionX * VISUAL_SMOOTH_FACTOR;
-            const newY = this.player.y + correctionY * VISUAL_SMOOTH_FACTOR;
-            this.player.setPosition(newX, newY);
+        // v28 FIX: Re-resolve collisions after position change to update grounded state
+        this.predictionWorld._resolveCollisions(body);
+
+        if (window.DebugLog) {
+            window.DebugLog.log(`BEND err=${errorDist.toFixed(1)}px f=${(BEND_FACTOR * 100).toFixed(0)}%`);
+        }
+    }
+
+    /**
+     * v24: Always sync hook state from server
+     */
+    _syncHookStateFromServer(serverData) {
+        const core = this.player.core;
+        const serverState = serverData.hookState || 'IDLE';
+
+        // Always trust server for hook state
+        core.hookState = serverState;
+
+        if (serverState === 'ATTACHED' && serverData.hookAnchorPos) {
+            core.hookAnchorPos = { ...serverData.hookAnchorPos };
+            core.ropeLength = serverData.ropeLength || 0;
+            core.hookPos = serverData.hookPos ? { ...serverData.hookPos } : { x: 0, y: 0 };
+        } else if (serverState === 'FLYING' && serverData.hookPos) {
+            core.hookPos = { ...serverData.hookPos };
+            core.hookAnchorPos = null;
         } else {
-            // Small correction or teleport - instant snap
-            this.player.setPosition(finalPos.x, finalPos.y);
-        }
-
-        // 4. Update local state cache
-        const finalVel = this.player.rapierBody.linvel();
-        this._localVel = { x: finalVel.x, y: finalVel.y };
-        this._localGrounded = this.player.core.grounded;
-
-        // 5. Cleanup acknowledged inputs
-        this.network.clearAckedInputs(lastAckedSeq);
-
-        // === POST-REPLAY LOGGING (compact) ===
-        if (unackedInputs.length > 0) {
-            console.log(`[Reconcile] replayed ${unackedInputs.length} inputs, smooth=${correctionDist > VISUAL_SMOOTH_THRESHOLD}`);
+            core.hookPos = { x: 0, y: 0 };
+            core.hookAnchorPos = null;
+            core.ropeLength = 0;
         }
     }
 
@@ -2811,10 +2813,10 @@ export class GameScene extends Phaser.Scene {
 
         const hasFire = this.hasPowerup(shooter, 'fire');
         const speed = PHYS.SNOWBALL_SPEED;
-        // Add shooter's velocity for momentum transfer
-        const shooterVel = shooter.rapierBody?.linvel();
-        const shooterVx = shooterVel?.x || 0;
-        const shooterVy = shooterVel?.y || 0;
+
+        // v28: Get shooter velocity from SimpleBody
+        const shooterVx = shooter.simpleBody?.vx || 0;
+        const shooterVy = shooter.simpleBody?.vy || 0;
         const vx = Math.cos(angle) * speed + shooterVx * 0.5;
         const vy = Math.sin(angle) * speed + shooterVy * 0.3;
 
@@ -2823,11 +2825,10 @@ export class GameScene extends Phaser.Scene {
         const spawnX = shooter.x + Math.cos(angle) * spawnDist;
         const spawnY = shooter.y - 10 + Math.sin(angle) * spawnDist;
 
-        // Create Rapier body for snowball
-        const rapierBody = this.rapierWorld.createSnowball(spawnX, spawnY, vx, vy, 10, 'snowball');
-
-        // Create visual sprite
+        // v28: Create visual sprite with velocity stored directly
         const snowball = this.add.sprite(spawnX, spawnY, 'snowball');
+        snowball.vx = vx;
+        snowball.vy = vy;
 
         // Fire visual effects
         if (hasFire) {
@@ -2850,10 +2851,6 @@ export class GameScene extends Phaser.Scene {
         }
 
         snowball.setDepth(10);
-        snowball.rapierBody = rapierBody;
-        rapierBody.userData = snowball;
-        this.rapierWorld.setBodySprite(rapierBody, snowball);
-
         snowball.setData('shooter', shooter);
         snowball.setData('damage', PHYS.SNOWBALL_DAMAGE);
         snowball.setData('ignoreShooterFrames', 5);
@@ -2921,7 +2918,7 @@ export class GameScene extends Phaser.Scene {
                 sb.setData('ignoreShooterFrames', frames - 1);
             }
 
-            // Rapier handles snowball gravity via gravity scale on the body
+            // v28: Snowball physics handled in updateSnowballPositions()
 
             return true;
         });
@@ -2941,12 +2938,7 @@ export class GameScene extends Phaser.Scene {
                 particles.destroy();
             }
 
-            // Remove Rapier body
-            if (snowball.rapierBody && this.rapierWorld) {
-                this.rapierWorld.removeBody(snowball.rapierBody);
-                snowball.rapierBody = null;
-            }
-
+            // v28: No Rapier body to remove
             snowball.destroy();
         }
     }
@@ -3013,18 +3005,18 @@ export class GameScene extends Phaser.Scene {
         const mapWidth = this.map ? this.map.widthInPixels : GAME.WIDTH;
 
         const clamp = (character) => {
-            if (!character?.active || !character.rapierBody) return;
-            const pos = character.rapierBody.translation();
-            const vel = character.rapierBody.linvel();
-            if (pos.x < 10) {
-                this.rapierWorld.safeTeleport(character.rapierBody, 10, pos.y, 25, 35);
-                character.rapierBody.setLinvel({ x: 0, y: vel.y }, true);
-                character.setX(character.rapierBody.translation().x);
+            if (!character?.active || !character.simpleBody) return;
+
+            // v28: Clamp SimpleBody position
+            if (character.simpleBody.x < 10) {
+                character.simpleBody.x = 10;
+                character.simpleBody.vx = 0;
+                character.setX(10);
             }
-            if (pos.x > mapWidth - 10) {
-                this.rapierWorld.safeTeleport(character.rapierBody, mapWidth - 10, pos.y, 25, 35);
-                character.rapierBody.setLinvel({ x: 0, y: vel.y }, true);
-                character.setX(character.rapierBody.translation().x);
+            if (character.simpleBody.x > mapWidth - 10) {
+                character.simpleBody.x = mapWidth - 10;
+                character.simpleBody.vx = 0;
+                character.setX(mapWidth - 10);
             }
         };
 
