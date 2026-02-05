@@ -1,9 +1,10 @@
 // ============================================
-// GAME SCENE - Main Gameplay with Matter.js
+// GAME SCENE - Main Gameplay with Rapier2D
 // ============================================
 
 import { PHYS, TILE_SIZE, GAME, PLAYER_COLORS, PICKUPS, RAGDOLL, getRandomBotName } from '../config.js';
 import { CharacterCore } from '../physics/CharacterCore.js';
+import { RapierWorld } from '../physics/RapierWorld.js';
 import { BotBehavior } from '../ai/BotBehavior.js';
 import { PlatformNav, EdgeType } from '../ai/PlatformNav.js';
 import { ObstacleSolver } from '../ai/ObstacleSolver.js';
@@ -65,8 +66,9 @@ export class GameScene extends Phaser.Scene {
         } else if (this.gameMode === 'join') {
             this.bots = [];
             // Create display sprite for host (no physics, position from snapshots)
+            // v17.1 FIX: Host spawns at index 0, guest at index 1
             const hostChar = this.playerCharacter === 1 ? 2 : 1;
-            this.hostSprite = this.createDisplaySprite(1, hostChar);
+            this.hostSprite = this.createDisplaySprite(0, hostChar);
             this.hostSprite.setData('playerId', 'host');
             const hostNick = window.gameConfig?.remoteNickname || 'Противник';
             this.hostSprite.nameLabel = this.add.text(0, 0, hostNick, {
@@ -78,6 +80,8 @@ export class GameScene extends Phaser.Scene {
                 backgroundColor: 'rgba(231, 76, 60, 0.8)',
                 padding: { x: 6, y: 2 }
             }).setOrigin(0.5, 1).setDepth(150);
+
+            // v17: Host sprite has no physics on guest (purely visual)
         } else {
             this.createBots();
         }
@@ -208,7 +212,17 @@ export class GameScene extends Phaser.Scene {
                 this._slowmoTimer = null;
             }
             this._slowmoActive = false;
+            this._physicsTimeScale = 1;
             this.time.timeScale = 1;
+            // Destroy Rapier worlds
+            if (this.rapierWorld) {
+                this.rapierWorld.destroy();
+                this.rapierWorld = null;
+            }
+            if (this.predictionWorld) {
+                this.predictionWorld.destroy();
+                this.predictionWorld = null;
+            }
         });
     }
 
@@ -224,16 +238,21 @@ export class GameScene extends Phaser.Scene {
             this.bgLayer.setDepth(-10);
         }
 
-        // Platforms layer (with Matter.js collision)
+        // Platforms layer (with Rapier2D collision)
         this.platformLayer = this.map.createLayer('platforms', tileset, 0, 0);
         if (this.platformLayer) {
             this.platformLayer.setCollisionByExclusion([-1, 0]);
             this.platformLayer.setDepth(0);
-
-            // Convert tilemap to Matter.js collision bodies
-            // Note: no chamfer - it breaks triangular slope collisions
-            this.matter.world.convertTilemapLayer(this.platformLayer);
         }
+
+        // Create Rapier2D physics world and tilemap colliders
+        this.rapierWorld = new RapierWorld(PHYS.GRAVITY);
+        if (this.platformLayer) {
+            this.rapierWorld.createTilemapColliders(this.platformLayer, TILE_SIZE);
+        }
+
+        // Physics time scale for slow-motion effects
+        this._physicsTimeScale = 1;
 
         // Trees layer (decorative - no collision)
         this.treesLayer = this.map.createLayer('trees', tileset, 0, 0);
@@ -323,7 +342,7 @@ export class GameScene extends Phaser.Scene {
     // === COLLISION CATEGORIES ===
 
     setupCollisionCategories() {
-        // Matter.js collision categories
+        // Collision categories (not used by Rapier — labels in colliderData instead)
         this.CATEGORY = {
             PLAYER: 0x0001,
             BOT: 0x0002,
@@ -370,24 +389,24 @@ export class GameScene extends Phaser.Scene {
 
     createCharacterSprite(spawnIndex, charNum, label) {
         const spawn = this.spawnPoints[spawnIndex % this.spawnPoints.length] || { x: 400, y: 400 };
+        const spawnY = spawn.y - 35; // Offset up by halfH+5 so body doesn't overlap platform
         const spriteKey = `p${charNum}-stand`;
 
-        const character = this.matter.add.sprite(spawn.x, spawn.y, spriteKey, null, {
-            shape: { type: 'rectangle', width: 50, height: 60 },
-            chamfer: { radius: 5 },
-            friction: 0.01,
-            frictionAir: 0.02,
-            restitution: 0,
-            label: label,
-            render: { sprite: { xOffset: 0, yOffset: 0.15 } }
-        });
-
-        character.setFixedRotation();
+        const character = this.add.sprite(spawn.x, spawnY, spriteKey);
+        character.setOrigin(0.5);
         character.setDepth(10);
         character.setScale(0.45);
 
+        // Rapier2D physics body
+        const rapierBody = this.rapierWorld.createCharacterBody(spawn.x, spawnY, 50, 60, label);
+        rapierBody.userData = character;  // Back-reference for collision lookup
+        this.rapierWorld.setBodySprite(rapierBody, character);
+        character.rapierBody = rapierBody;
+        character._physLabel = label;
+
+        // CharacterCore (Rapier-based movement controller)
         character.core = new CharacterCore();
-        character.core.init(this, character.body);
+        character.core.init(rapierBody, this.rapierWorld, this);
 
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('score', 0);
@@ -401,17 +420,13 @@ export class GameScene extends Phaser.Scene {
         const spawn = this.spawnPoints[spawnIndex % this.spawnPoints.length] || { x: 600, y: 400 };
         const spriteKey = `p${charNum}-stand`;
 
-        const sprite = this.matter.add.sprite(spawn.x, spawn.y, spriteKey, null, {
-            shape: { type: 'rectangle', width: 50, height: 60 },
-            isSensor: true,
-            label: 'display'
-        });
-
-        sprite.setFixedRotation();
+        // Display-only sprite (no physics body — position from server snapshots)
+        const sprite = this.add.sprite(spawn.x, spawn.y, spriteKey);
+        sprite.setOrigin(0.5);
         sprite.setDepth(10);
         sprite.setScale(0.45);
-        sprite.setIgnoreGravity(true);
         sprite.animPrefix = `p${charNum}`;
+        sprite._physLabel = 'display';
         sprite.setData('health', GAME.MAX_HEALTH);
         sprite.setData('facingRight', true);
 
@@ -423,14 +438,73 @@ export class GameScene extends Phaser.Scene {
         const charNum = this.playerCharacter || 1;
 
         if (this.gameMode === 'join') {
-            // Guest: display-only sprite (no physics, no CharacterCore)
-            // Position comes from server snapshots — no local physics needed
-            this.player = this.createDisplaySprite(spawnIndex, charNum);
+            // Guest: create prediction world + physics body for local prediction
+            this._createPredictionWorld(spawnIndex, charNum);
         } else {
             this.player = this.createCharacterSprite(spawnIndex, charNum, 'player');
         }
         this.player.setData('colorIndex', 0);
         this.player.setData('playerId', this.isHost ? 'host' : 'guest');
+    }
+
+    /**
+     * v18: Create a separate Rapier world for guest-side prediction.
+     * Contains: tilemap colliders + own character body with CharacterCore.
+     * This ensures physics match the host exactly for proper reconciliation.
+     */
+    _createPredictionWorld(spawnIndex, charNum) {
+        const spawn = this.spawnPoints[spawnIndex % this.spawnPoints.length] || { x: 600, y: 400 };
+        const spawnY = spawn.y - 35;
+        const spriteKey = `p${charNum}-stand`;
+
+        // v18: Create separate Rapier world for prediction (same as host)
+        this.predictionWorld = new RapierWorld(PHYS.GRAVITY);
+        if (this.platformLayer) {
+            this.predictionWorld.createTilemapColliders(this.platformLayer, TILE_SIZE);
+        }
+
+        // Create sprite
+        const character = this.add.sprite(spawn.x, spawnY, spriteKey);
+        character.setOrigin(0.5);
+        character.setDepth(10);
+        character.setScale(0.45);
+        character._physLabel = 'player';
+
+        // v18: Create Rapier body for own character (same as host)
+        const rapierBody = this.predictionWorld.createCharacterBody(spawn.x, spawnY, 50, 60, 'player');
+        rapierBody.userData = character;
+        this.predictionWorld.setBodySprite(rapierBody, character);
+        character.rapierBody = rapierBody;
+
+        // v18: Create CharacterCore (same physics as host)
+        character.core = new CharacterCore();
+        character.core.init(rapierBody, this.predictionWorld, this);
+        character.core.suppressSounds = true;  // Sounds come from host events
+
+        character.setData('health', GAME.MAX_HEALTH);
+        character.setData('score', 0);
+        character.setData('facingRight', true);
+        character.animPrefix = `p${charNum}`;
+
+        this.player = character;
+
+        // v18: State for reconciliation
+        this._localVel = { x: 0, y: 0 };
+        this._localGrounded = false;
+        this._localJumpHeld = false;
+        this._localCoyoteTime = 0;
+        this._lastCorrectedTick = -1;  // Track which snapshot tick was last used for correction
+        this._lastReconciledSeq = -1;  // Track last reconciled input sequence
+
+        console.log('[GameScene] v18: Guest prediction world created with Rapier physics');
+    }
+
+    /**
+     * v17: Host sprite on guest side — just visual, no physics
+     */
+    _createHostPredictionBody() {
+        // v17: No Rapier body for host on guest side — purely visual
+        // The sprite is already created, we don't need to add CharacterCore
     }
 
     createBots() {
@@ -506,7 +580,7 @@ export class GameScene extends Phaser.Scene {
     // === POWERUP SYSTEM ===
 
     addPowerup(character, type, config) {
-        const key = `${character.body.label}-${type}`;
+        const key = `${character._physLabel || 'unknown'}-${type}`;
 
         this.activePowerups.set(key, {
             character,
@@ -533,7 +607,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     hasPowerup(character, type) {
-        const key = `${character.body.label}-${type}`;
+        const key = `${character._physLabel || 'unknown'}-${type}`;
         const powerup = this.activePowerups.get(key);
         if (!powerup) return false;
 
@@ -568,145 +642,98 @@ export class GameScene extends Phaser.Scene {
     // === COLLISIONS ===
 
     setupCollisions() {
-        // Matter.js collision events
-        this.matter.world.on('collisionstart', (event) => {
-            event.pairs.forEach(pair => {
-                this.handleCollisionStart(pair.bodyA, pair.bodyB);
-            });
+        // Rapier2D collision events are drained in processRapierCollisions() each frame
+    }
+
+    /**
+     * Process Rapier collision events (called each frame after physics step)
+     */
+    processRapierCollisions() {
+        if (this.gameMode === 'join') return; // Guest doesn't handle collisions
+
+        this.rapierWorld.drainCollisions((h1, h2, started) => {
+            if (!started) return; // Only handle collision start
+
+            const data1 = this.rapierWorld.getColliderData(h1);
+            const data2 = this.rapierWorld.getColliderData(h2);
+            if (!data1 || !data2) return;
+
+            // Check snowball collisions
+            this.checkRapierSnowballCollision(data1, data2);
+            this.checkRapierSnowballCollision(data2, data1);
+
+            // Check pickup collisions
+            this.checkRapierPickupCollision(data1, data2);
+            this.checkRapierPickupCollision(data2, data1);
         });
-
-        this.matter.world.on('collisionend', (event) => {
-            event.pairs.forEach(pair => {
-                this.handleCollisionEnd(pair.bodyA, pair.bodyB);
-            });
-        });
     }
 
-    handleCollisionStart(bodyA, bodyB) {
-        // Ground detection is now handled by Matter.Query in updateGroundDetection()
+    checkRapierPickupCollision(pickupData, characterData) {
+        if (!pickupData.label?.startsWith('pickup-')) return;
+        if (!characterData.sprite) return;
 
-        // Check for snowball hits
-        this.checkSnowballCollision(bodyA, bodyB);
+        const character = characterData.sprite;
+        if (!character.active || character.getData('health') <= 0) return;
 
-        // Check for pickup collection
-        this.checkPickupCollision(bodyA, bodyB);
-    }
+        // Find the pickup object
+        const pickup = pickupData.sprite?.pickupRef;
+        if (pickup && pickup.isActive()) {
+            const x = pickup.emoji.x;
+            const y = pickup.startY;
+            const type = pickup.type;
+            const pickupId = pickup.id;
 
-    checkPickupCollision(bodyA, bodyB) {
-        // Guest doesn't handle pickups — host is authoritative
-        if (this.gameMode === 'join') return;
-
-        const checkPickup = (pickupBody, characterBody) => {
-            if (!pickupBody.label?.startsWith('pickup-')) return;
-
-            const character = this.getSpriteFromBody(characterBody);
-            if (!character) return;
-
-            // Find the pickup object (stored directly on sensor body)
-            const pickup = pickupBody.pickup;
-            if (pickup && pickup.isActive()) {
-                // Store position and type before collecting
-                const x = pickup.emoji.x;
-                const y = pickup.startY;  // Original Y position
-                const type = pickup.type;
-                const pickupId = pickup.id;
-
-                pickup.collect(character);
-                this.pickups = this.pickups.filter(p => p !== pickup);
-
-                // Schedule respawn
-                this.schedulePickupRespawn(x, y, type, pickupId);
-            }
-        };
-
-        checkPickup(bodyA, bodyB);
-        checkPickup(bodyB, bodyA);
-    }
-
-    handleCollisionEnd() {
-        // Ground detection is now handled by Matter.Query in updateGroundDetection()
-    }
-
-    getSpriteFromBody(body) {
-        if (body.label === 'player') return this.player;
-        if (body.label === 'guest') return this.guestPlayer;
-        if (body.label?.startsWith('bot')) {
-            const index = parseInt(body.label.replace('bot', ''));
-            return this.bots[index];
+            pickup.collect(character);
+            this.pickups = this.pickups.filter(p => p !== pickup);
+            this.schedulePickupRespawn(x, y, type, pickupId);
         }
-        return null;
     }
 
-    updateGroundDetection() {
-        const Matter = Phaser.Physics.Matter.Matter;
+    checkRapierSnowballCollision(snowballData, otherData) {
+        if (snowballData.label !== 'snowball') return;
 
-        const checkGrounded = (character) => {
-            if (!character || !character.active || !character.core) return;
+        const snowball = snowballData.sprite;
+        if (!snowball || !snowball.active || !this.snowballs.includes(snowball)) return;
 
-            // Область под ногами персонажа (для height=60, т.е. 60/2=30 от центра)
-            const sensorBounds = {
-                min: { x: character.x - 20, y: character.y + 25 },
-                max: { x: character.x + 20, y: character.y + 33 }
-            };
+        const shooter = snowball.getData('shooter');
 
-            // Найти все тела в этой области
-            const bodies = Matter.Query.region(
-                this.matter.world.localWorld.bodies,
-                sensorBounds
-            );
+        // Check if other is a character
+        const target = otherData.sprite;
 
-            // Проверить есть ли статические тела (платформы)
-            const isGrounded = bodies.some(body =>
-                body.isStatic && body !== character.body
-            );
-
-            // Обновить состояние
-            if (isGrounded && !character.core.grounded) {
-                character.core.addGroundContact();
-            } else if (!isGrounded && character.core.grounded) {
-                character.core.removeGroundContact();
-            }
-        };
-
-        checkGrounded(this.player);
-        if (this.guestPlayer) checkGrounded(this.guestPlayer);
-        this.bots.forEach(bot => checkGrounded(bot));
-    }
-
-    checkSnowballCollision(bodyA, bodyB) {
-        // Guest doesn't handle snowball collisions — host is authoritative
-        if (this.gameMode === 'join') return;
-
-        // Find snowball by label + gameObject (more reliable than body reference comparison)
-        let snowball = null;
-        let otherBody = null;
-
-        if (bodyA.label === 'snowball' && bodyA.gameObject?.active) {
-            snowball = bodyA.gameObject;
-            otherBody = bodyB;
-        } else if (bodyB.label === 'snowball' && bodyB.gameObject?.active) {
-            snowball = bodyB.gameObject;
-            otherBody = bodyA;
-        }
-
-        if (!snowball || !this.snowballs.includes(snowball)) return;
-
-        // Check if other body is a character (player/bot)
-        const target = this.getSpriteFromBody(otherBody);
-
-        // Snowball hits wall/tile — splat and destroy
-        if (!target) {
-            if (otherBody.label === 'snowball') return;
-            const shooter = snowball.getData('shooter');
-            if (shooter && otherBody === shooter.body) return;
-
-            this.showSplatEffect(snowball.x, snowball.y);
-            this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.5);
-            this.destroySnowball(snowball);
+        if (target && target._physLabel && target !== shooter &&
+            target.active && target.getData('health') > 0) {
+            this.snowballHit(snowball, target);
             return;
         }
 
-        this.snowballHit(snowball, target);
+        // Snowball-snowball: ignore
+        if (otherData.label === 'snowball') return;
+
+        // Snowball hit shooter: ignore
+        if (target === shooter) return;
+
+        // Snowball hits wall/platform — splat
+        this.showSplatEffect(snowball.x, snowball.y);
+        this.playSpatialSound('sfx-snowball-hit', snowball.x, snowball.y, 0.5);
+        // Queue visual effect for guest
+        if (this.network) {
+            this.network.queueEvent({
+                type: 'splatEffect',
+                x: snowball.x,
+                y: snowball.y
+            });
+        }
+        this.destroySnowball(snowball);
+    }
+
+    getSpriteFromLabel(label) {
+        if (label === 'player') return this.player;
+        if (label === 'guest') return this.guestPlayer;
+        if (label?.startsWith('bot')) {
+            const index = parseInt(label.replace('bot', ''));
+            return this.bots[index];
+        }
+        return null;
     }
 
     // === UI ===
@@ -925,44 +952,36 @@ export class GameScene extends Phaser.Scene {
 
         // === RAGDOLL EFFECT (host + solo) ===
 
-        // 1. Unlock rotation for tumbling
-        victim.setFixedRotation(false);
-
-        // 2. Add random spin
-        const spinDirection = Math.random() > 0.5 ? 1 : -1;
-        this.matter.body.setAngularVelocity(victim.body, RAGDOLL.TUMBLE_SPEED * spinDirection);
-
-        // 3. Boost knockback from killer (doubled for dramatic effect)
-        if (killer) {
-            const dx = victim.x - killer.x;
-            const dy = victim.y - killer.y;
-            const dist = Math.hypot(dx, dy) || 1;
-            this.matter.body.applyForce(victim.body, victim.body.position, {
-                x: (dx / dist) * PHYS.KNOCKBACK_FORCE * RAGDOLL.KNOCKBACK_BOOST * 2,
-                y: -0.025
-            });
+        // 1. Knockback from killer (using Rapier impulse)
+        if (killer && victim.core) {
+            victim.core.applyKnockback(killer.x, killer.y, PHYS.KNOCKBACK_FORCE * RAGDOLL.KNOCKBACK_BOOST * 2);
         }
 
-        // 4. Add bounce
-        victim.body.restitution = RAGDOLL.BOUNCE;
+        // 2. Visual tumbling via tween (Rapier body stays locked rotation)
+        const spinDirection = Math.random() > 0.5 ? 1 : -1;
+        this.tweens.add({
+            targets: victim,
+            angle: spinDirection * 360,
+            duration: RAGDOLL.DURATION,
+            ease: 'Linear'
+        });
 
-        // 5. Show death effect
+        // 3. Show death effect
         this.showDeathEffect(victim.x, victim.y);
 
-        // 6. Play death sound
+        // 4. Play death sound
         this.playSpatialSound('sfx-snowball-hit', victim.x, victim.y, 0.7);
 
-        // 7. Hide name label
+        // 5. Hide name label
         if (victim.nameLabel) victim.nameLabel.setVisible(false);
 
-        // 8. Slow-mo effect (local visual only, not affecting network tick rate)
+        // 6. Slow-mo effect (local visual only, not affecting network tick rate)
         const isRelevant = (victim === this.player) || (killer === this.player);
         if (isRelevant && !this._slowmoActive) {
             this._slowmoActive = true;
             this.time.timeScale = 0.3;
-            this.matter.world.engine.timing.timeScale = 0.3;
+            this._physicsTimeScale = 0.3;
 
-            // Restore after 500ms (real time, not scaled)
             const restoreTimer = setTimeout(() => {
                 if (!this.scene.isActive()) return;
                 this.tweens.addCounter({
@@ -972,18 +991,17 @@ export class GameScene extends Phaser.Scene {
                     onUpdate: (tween) => {
                         const val = tween.getValue();
                         this.time.timeScale = val;
-                        this.matter.world.engine.timing.timeScale = val;
+                        this._physicsTimeScale = val;
                     },
                     onComplete: () => {
                         this._slowmoActive = false;
                     }
                 });
             }, 500);
-            // Store for cleanup
             this._slowmoTimer = restoreTimer;
         }
 
-        // 9. After DURATION - fade out and handle round logic
+        // 7. After DURATION - fade out and handle round logic
         this.time.delayedCall(RAGDOLL.DURATION, () => {
             this.tweens.add({
                 targets: victim,
@@ -993,11 +1011,7 @@ export class GameScene extends Phaser.Scene {
                     victim.setActive(false);
                     victim.setVisible(false);
                     victim.setAlpha(1);
-                    victim.setFixedRotation(true);
-                    victim.body.restitution = 0;
-                    // isDying stays true until respawnCharacter() clears it
-                    this.matter.body.setAngularVelocity(victim.body, 0);
-                    this.matter.body.setAngle(victim.body, 0);
+                    victim.setAngle(0);
 
                     this.handleDeathLogic(victim);
                 }
@@ -1026,7 +1040,7 @@ export class GameScene extends Phaser.Scene {
             return;
         }
 
-        // Guest: death is handled via snapshot (applySnapshotToOwnPlayer), no logic here
+        // Guest: death is handled via snapshot (_processSnapshotNonPhysics), no logic here
         if (this.gameMode === 'join') {
             return;
         }
@@ -1170,34 +1184,33 @@ export class GameScene extends Phaser.Scene {
     respawnAllCharacters() {
         // Respawn player at spawn point 0 (always)
         const playerSpawn = this.spawnPoints[0];
-        this.player.setPosition(playerSpawn.x, playerSpawn.y);
-        this.matter.body.setVelocity(this.player.body, { x: 0, y: 0 });
-        if (this.player.core) this.player.core.releaseHook();
-        this.player.setData('health', GAME.MAX_HEALTH);
-        this.player.setData('isDying', false);
-        this.player.setFixedRotation(true);
-        this.player.setAngle(0);
-        this.player.setActive(true);
-        this.player.setVisible(true);
-        if (this.player.nameLabel) {
-            this.player.nameLabel.setVisible(true);
-        }
+        this.respawnSingleCharacter(this.player, playerSpawn);
 
         // Respawn bots at other spawn points
         this.bots.forEach((bot, index) => {
             const spawnIndex = (index + 1) % this.spawnPoints.length;
             const spawn = this.spawnPoints[spawnIndex];
-            bot.setPosition(spawn.x, spawn.y);
-            this.matter.body.setVelocity(bot.body, { x: 0, y: 0 });
-            bot.core.releaseHook();
-            bot.setData('health', GAME.MAX_HEALTH);
-            bot.setData('isDying', false);
-            bot.setFixedRotation(true);
-            bot.setAngle(0);
-            bot.setActive(true);
-            bot.setVisible(true);
-            if (bot.nameLabel) bot.nameLabel.setVisible(true);
+            this.respawnSingleCharacter(bot, spawn);
         });
+    }
+
+    respawnSingleCharacter(character, spawn) {
+        const spawnY = spawn.y - 35; // Above platform surface
+        if (character.rapierBody) {
+            this.rapierWorld.safeTeleport(character.rapierBody, spawn.x, spawnY, 25, 35);
+            character.rapierBody.setLinvel({ x: 0, y: 0 }, true);
+            const pos = character.rapierBody.translation();
+            character.setPosition(pos.x, pos.y);
+        } else {
+            character.setPosition(spawn.x, spawnY);
+        }
+        if (character.core) character.core.releaseHook();
+        character.setData('health', GAME.MAX_HEALTH);
+        character.setData('isDying', false);
+        character.setAngle(0);
+        character.setActive(true);
+        character.setVisible(true);
+        if (character.nameLabel) character.nameLabel.setVisible(true);
     }
 
     respawnCharacter(character) {
@@ -1222,13 +1235,19 @@ export class GameScene extends Phaser.Scene {
             }
         }
         const spawn = this.spawnPoints[spawnIndex];
+        const spawnY = spawn.y - 35; // Above platform surface
 
-        character.setPosition(spawn.x, spawn.y);
-        this.matter.body.setVelocity(character.body, { x: 0, y: 0 });
+        if (character.rapierBody) {
+            this.rapierWorld.safeTeleport(character.rapierBody, spawn.x, spawnY, 25, 35);
+            character.rapierBody.setLinvel({ x: 0, y: 0 }, true);
+            const pos = character.rapierBody.translation();
+            character.setPosition(pos.x, pos.y);
+        } else {
+            character.setPosition(spawn.x, spawnY);
+        }
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
-        character.setFixedRotation(true);
         character.setAngle(0);
         character.setActive(true);
         character.setVisible(true);
@@ -1591,127 +1610,516 @@ export class GameScene extends Phaser.Scene {
     // === HOST UPDATE (also used for solo mode) ===
 
     updateAsHost(delta) {
-        // Platform navigation is synchronous (A* on platform graph) — no calculate() needed
+        const FIXED_DT_S = 1 / 60;
+        const FIXED_DT_MS = FIXED_DT_S * 1000; // 16.67ms
 
-        // Update ground detection
-        this.updateGroundDetection();
-
-        // 1. Own character — human input
+        // 1. Gather inputs (once per frame)
         const playerInput = this.humanInput.getInput();
         playerInput.hookTarget = this.findHookTarget(this.player);
-        this.updateCharacter(this.player, playerInput, delta);
 
+        // Save host input for guest simulation (Teeworlds model)
+        if (this.network) {
+            this.network.setHostInput({
+                direction: playerInput.direction || 0,
+                jump: !!playerInput.jump,
+                hook: !!playerInput.hook,
+                hookJustPressed: !!playerInput.hookJustPressed,
+                hookTarget: playerInput.hookTarget,
+                fire: false  // fire handled by events
+            });
+        }
+
+        let guestInput = null;
+        if (this.guestPlayer?.active && !this.guestPlayer.getData('isDying')) {
+            // v18: Use buffered input for consistent timing
+            const serverTick = this.network?.serverTick || 0;
+            guestInput = this.network?.getInputForTick('guest', serverTick)
+                || { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
+            // Use guest's transmitted hookTarget if available, fallback to local calculation
+            if (!guestInput.hookTarget) {
+                guestInput.hookTarget = this.findHookTarget(this.guestPlayer);
+            }
+        }
+
+        // 2. Handle one-shot actions BEFORE physics loop (once per frame)
         if (playerInput.fire) {
             this.shootSnowball(this.player, playerInput.fireAngle);
         }
-
-        // 2. Guest character — network input (like a bot, but from network)
-        if (this.guestPlayer?.active && !this.guestPlayer.getData('isDying')) {
-            const guestInput = this.network?.getRemoteInput() || { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
-            guestInput.hookTarget = this.findHookTarget(this.guestPlayer);
-            this.updateCharacter(this.guestPlayer, guestInput, delta);
-            if (guestInput.fire) {
-                this.shootSnowball(this.guestPlayer, guestInput.fireAngle);
-                // Reset fire so we don't shoot every frame
-                if (this.network) {
-                    const remoteInput = this.network.remoteInputs.get('guest');
-                    if (remoteInput) remoteInput.fire = false;
-                }
-            }
-            // Reset hook pulse so we don't launch/release every frame
-            if (guestInput.hookJustPressed && this.network) {
+        if (guestInput?.fire) {
+            this.shootSnowball(this.guestPlayer, guestInput.fireAngle);
+            if (this.network) {
                 const remoteInput = this.network.remoteInputs.get('guest');
-                if (remoteInput) remoteInput.hookJustPressed = false;
+                if (remoteInput) remoteInput.fire = false;
             }
         }
+        if (guestInput?.hookJustPressed && this.network) {
+            const remoteInput = this.network.remoteInputs.get('guest');
+            if (remoteInput) remoteInput.hookJustPressed = false;
+        }
 
-        // 3. Bots (solo mode only)
-        this.bots.forEach(bot => {
-            if (bot.active && bot.getData('health') > 0) {
-                const botInput = bot.brain.update(bot, this, delta);
-                this.updateCharacter(bot, botInput, delta);
-                if (botInput.fire) {
-                    this.shootSnowball(bot, botInput.fireAngle);
-                }
+        // 3. Fixed timestep physics loop (deterministic)
+        this._physicsAccumulator = (this._physicsAccumulator || 0) + (delta / 1000) * (this._physicsTimeScale || 1);
+        this._physicsAccumulator = Math.min(this._physicsAccumulator, FIXED_DT_S * 4); // prevent spiral of death
+
+        let firstTick = true;
+        while (this._physicsAccumulator >= FIXED_DT_S) {
+            // Teeworlds v13: increment serverTick INSIDE loop
+            if (this.network) {
+                this.network.serverTick++;
+                // Track accumulator for precise INPUTTIMING calculation
+                this.network._tickAccumulator = this._physicsAccumulator - FIXED_DT_S;
             }
-        });
 
-        // 4. Snowballs, pickups, powerups
+            // v17 simplified: just use latest guest input (no tick buffers)
+            let tickGuestInput = guestInput;
+            if (tickGuestInput && !tickGuestInput.hookTarget) {
+                tickGuestInput.hookTarget = this.findHookTarget(this.guestPlayer);
+            }
+
+            // Clear one-shot inputs on subsequent sub-ticks
+            if (!firstTick) {
+                playerInput.hookJustPressed = false;
+                if (tickGuestInput) tickGuestInput = { ...tickGuestInput, hookJustPressed: false };
+            }
+
+            this.updateCharacter(this.player, playerInput, FIXED_DT_MS);
+            if (tickGuestInput) this.updateCharacter(this.guestPlayer, tickGuestInput, FIXED_DT_MS);
+
+            // Bots
+            this.bots.forEach(bot => {
+                if (bot.active && bot.getData('health') > 0) {
+                    const botInput = bot.brain.update(bot, this, FIXED_DT_MS);
+                    this.updateCharacter(bot, botInput, FIXED_DT_MS);
+                    if (firstTick && botInput.fire) {
+                        this.shootSnowball(bot, botInput.fireAngle);
+                    }
+                }
+            });
+
+            this.rapierWorld.step(FIXED_DT_S);
+
+            // Teeworlds v15: Quantize all characters for network determinism
+            if (this.player.core) this.player.core.quantize();
+            if (this.guestPlayer?.core) this.guestPlayer.core.quantize();
+            this.bots.forEach(bot => { if (bot.core) bot.core.quantize(); });
+
+            this._physicsAccumulator -= FIXED_DT_S;
+            firstTick = false;
+        }
+
+        // 5. Sync sprite positions from Rapier bodies
+        this.syncSpriteFromBody(this.player);
+        if (this.guestPlayer?.rapierBody) this.syncSpriteFromBody(this.guestPlayer);
+        this.bots.forEach(bot => this.syncSpriteFromBody(bot));
+        this.syncSnowballBodies();
+
+        // 6. Process Rapier collision events
+        this.processRapierCollisions();
+
+        // 7. Snowballs, pickups, powerups
         this.updateSnowballs();
         this.updatePowerups(delta);
 
-        // 5. Draw hooks
+        // 8. Draw hooks
         this.drawHooks();
         if (this.navDebugMode === 1) this.drawNavGraph();
         else if (this.navDebugMode === 2) this.drawTriNavDebug();
 
-        // 6. UI
+        // 9. UI
         this.updateHUD();
         this.updateNameLabels();
 
-        // 7. Network — send snapshot
+        // 10. Network — send snapshot (INPUTTIMING теперь отправляется сразу в receiveData)
         if (this.network) {
             this.network.update(delta);
         }
 
-        // 8. Bounds check
+        // 11. Bounds check
         this.checkBounds();
     }
 
-    // === GUEST UPDATE (pure render from server snapshots, no local physics) ===
+    /**
+     * Sync a sprite's position from its Rapier body
+     */
+    syncSpriteFromBody(character) {
+        if (!character?.rapierBody || !character.active) return;
+        const pos = character.rapierBody.translation();
+        character.setPosition(pos.x, pos.y);
+    }
+
+    /**
+     * Sync all snowball sprite positions from their Rapier bodies
+     */
+    syncSnowballBodies() {
+        for (const sb of this.snowballs) {
+            if (sb.rapierBody && sb.active) {
+                const pos = sb.rapierBody.translation();
+                sb.setPosition(pos.x, pos.y);
+            }
+        }
+    }
+
+    // === GUEST UPDATE (v19: fixed reconciliation) ===
 
     updateAsGuest(delta) {
-        // 1. Send input to host (hookTarget not needed — host computes it)
+        const network = this.network;
+        const FIXED_DT_S = 1 / 60;
+        const FIXED_DT_MS = FIXED_DT_S * 1000;
+
+        // 1. Gather input
         const playerInput = this.humanInput.getInput();
-        if (this.network) {
-            this.network.sendInput(playerInput);
+        playerInput.hookTarget = this.findHookTarget(this.player);
+
+        // 2. Send input to host
+        network?.sendInput(playerInput);
+
+        // 3. OWN character: FIXED TIMESTEP physics
+        // v19: Run physics at fixed rate, store prediction for sent input
+        this._guestPhysicsAccum = (this._guestPhysicsAccum || 0) + (delta / 1000);
+        this._guestPhysicsAccum = Math.min(this._guestPhysicsAccum, FIXED_DT_S * 4); // Cap at 4 frames
+
+        while (this._guestPhysicsAccum >= FIXED_DT_S) {
+            this._updateLocalPlayer(playerInput, FIXED_DT_MS);
+            this._guestPhysicsAccum -= FIXED_DT_S;
         }
 
-        // 2. Get snapshot
-        const snapshot = this.network?.lastSnapshot;
-        if (!snapshot) {
-            this.updateHUD();
-            this.updateNameLabels();
-            if (this.network) this.network.update(delta);
-            return;
+        // v21: Bending approach - no need to store predicted states
+        // The client smoothly interpolates toward server position instead of replay
+
+        // 3. OTHER players: interpolation from snapshots
+        const interp = network?.getInterpolatedSnapshot();
+        if (interp) {
+            this._interpolateOtherPlayers(interp);
         }
+
+        // 4. Server position correction for own character
+        const snapshot = network?.lastSnapshot;
+        if (snapshot) {
+            this._correctOwnPosition(snapshot);
+            this._processSnapshotNonPhysics(snapshot);
+        }
+
+        // 5. Hook visuals (from snapshot — server is authoritative)
+        this.hookGraphics.clear();
+        this._drawHookVisuals(snapshot);
+
+        // 6. Animations
+        this._updateGuestAnimations(playerInput, snapshot);
+
+        // 7. UI
+        this.updateHUD();
+        this.updateNameLabels();
+        network?.update(delta);
+    }
+
+    // === v18: LOCAL PHYSICS FOR OWN CHARACTER (Rapier-based) ===
+
+    _updateLocalPlayer(input, delta) {
+        if (!this.player?.active || this.player.getData('isDying')) return;
+        if (!this.player.core || !this.predictionWorld) return;  // v18: Require Rapier
+
+        // v18: Use CharacterCore.tick() — same physics as host
+        const result = this.player.core.tick(input, delta);
+        this._localGrounded = result.grounded;
+        this._localCoyoteTime = this.player.core.coyoteTime || 0;
+
+        // Update facing direction
+        if (input.direction !== 0) {
+            this.player.setData('facingRight', input.direction > 0);
+            this.player.setFlipX(input.direction < 0);
+        }
+
+        // v18: Step prediction Rapier world
+        this.predictionWorld.step(delta / 1000);
+
+        // v18: Quantize for determinism (same as host)
+        this.player.core.quantize();
+
+        // Sync sprite position from Rapier body
+        const pos = this.player.rapierBody.translation();
+        this.player.setPosition(pos.x, pos.y);
+
+        // Cache velocity for reconciliation
+        const vel = this.player.rapierBody.linvel();
+        this._localVel = { x: vel.x, y: vel.y };
+    }
+
+    // === v17: LOCAL GROUND DETECTION (tilemap collision) ===
+
+    _checkLocalGround() {
+        if (!this.player || !this.platformLayer) return false;
+
+        // Check tiles under feet (slightly below sprite center)
+        const footY = this.player.y + 35;
+        const leftX = this.player.x - 20;
+        const rightX = this.player.x + 20;
+
+        // Check 3 points under feet (center, left, right)
+        const tileCenter = this.platformLayer.getTileAtWorldXY(this.player.x, footY);
+        const tileLeft = this.platformLayer.getTileAtWorldXY(leftX, footY);
+        const tileRight = this.platformLayer.getTileAtWorldXY(rightX, footY);
+
+        // Return true if any tile has collision
+        return (tileCenter?.collides) || (tileLeft?.collides) || (tileRight?.collides);
+    }
+
+    // === v17: INTERPOLATION FOR OTHER PLAYERS ===
+
+    _interpolateOtherPlayers(interp) {
+        const { t, prev, curr } = interp;
+
+        // Host character
+        const prevHost = prev.players?.find(p => p.id === 'host');
+        const currHost = curr.players?.find(p => p.id === 'host');
+
+        if (prevHost && currHost && this.hostSprite) {
+            // Linear interpolation of position
+            const x = prevHost.x + (currHost.x - prevHost.x) * t;
+            const y = prevHost.y + (currHost.y - prevHost.y) * t;
+            this.hostSprite.setPosition(x, y);
+
+            // Direction from current snapshot
+            if (currHost.facingRight !== undefined) {
+                this.hostSprite.setData('facingRight', currHost.facingRight);
+                this.hostSprite.setFlipX(!currHost.facingRight);
+            }
+        }
+    }
+
+    // === v19: SERVER RECONCILIATION (fixed comparison) ===
+
+    /**
+     * v21 BENDING: Smooth interpolation toward server state instead of instant reset.
+     * Industry-standard approach used by Teeworlds, Source Engine, etc.
+     *
+     * Key insight: Don't try to match prediction exactly - just gently guide
+     * the client toward the server's authoritative position over time.
+     */
+    _correctOwnPosition(snapshot) {
+        const myData = snapshot.players?.find(p => p.id === 'guest');
+        if (!myData || this.player.getData('isDying')) return;
+        if (!this.predictionWorld) return;
+
+        // Calculate difference between current client position and server position
+        const dx = myData.x - this.player.x;
+        const dy = myData.y - this.player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        // TELEPORT threshold - for large discrepancies (spawn, major desync)
+        const TELEPORT_THRESHOLD = 150;
+
+        // BEND_FACTOR: How much to correct per frame (0.15 = 15%)
+        // Higher = snappier but more visible; Lower = smoother but laggy
+        const BEND_FACTOR = 0.15;
+
+        // SNAP_THRESHOLD: Below this, just snap to exact position
+        const SNAP_THRESHOLD = 0.5;
+
+        if (dist > TELEPORT_THRESHOLD) {
+            // Large discrepancy - instant teleport (spawn, major lag spike)
+            this._applyServerState(myData);
+            console.log(`[Bending] Teleport: ${dist.toFixed(1)}px`);
+        } else if (dist > SNAP_THRESHOLD) {
+            // Normal case: smoothly blend toward server position
+            const newX = this.player.x + dx * BEND_FACTOR;
+            const newY = this.player.y + dy * BEND_FACTOR;
+
+            // Update sprite position
+            this.player.setPosition(newX, newY);
+
+            // Update Rapier body to match
+            if (this.player.rapierBody) {
+                this.player.rapierBody.setTranslation({ x: newX, y: newY }, true);
+                // Don't change velocity - let prediction continue naturally
+            }
+
+            // Debug (uncomment for testing)
+            // console.log(`[Bending] Correcting: ${dist.toFixed(1)}px`);
+        }
+        // If dist <= SNAP_THRESHOLD: position is close enough, no correction needed
+
+        // Sync grounded state from server (visual polish)
+        this._localGrounded = myData.grounded || false;
+        if (this.player.core) {
+            this.player.core.grounded = this._localGrounded;
+        }
+    }
+
+    /**
+     * v18: Apply server authoritative state to local player
+     */
+    _applyServerState(myData) {
+        const serverVx = (myData.vx || 0) / 256;
+        const serverVy = (myData.vy || 0) / 256;
+
+        // Update sprite position
+        this.player.setPosition(myData.x, myData.y);
+
+        // Update Rapier body
+        if (this.player.rapierBody) {
+            this.player.rapierBody.setTranslation({ x: myData.x, y: myData.y }, true);
+            this.player.rapierBody.setLinvel({ x: serverVx, y: serverVy }, true);
+            // v18 FIX: Explicitly wake the body after teleport
+            this.player.rapierBody.wakeUp();
+        }
+
+        // Update local state
+        this._localVel = { x: serverVx, y: serverVy };
+        this._localGrounded = myData.grounded || false;
+
+        // Update CharacterCore state
+        if (this.player.core) {
+            this.player.core.grounded = this._localGrounded;
+        }
+    }
+
+    // === v17: HOOK VISUALS FROM SNAPSHOT ===
+
+    _drawHookVisuals(snapshot) {
+        if (!snapshot) return;
+
+        // Own hook from snapshot
+        const myData = snapshot.players?.find(p => p.id === 'guest');
+        if (myData?.hookState !== 'IDLE' && myData?.hookPos) {
+            this._drawHookLine(this.player.x, this.player.y, myData.hookPos.x, myData.hookPos.y);
+        }
+
+        // Host hook from snapshot
+        const hostData = snapshot.players?.find(p => p.id === 'host');
+        if (hostData?.hookState !== 'IDLE' && hostData?.hookPos && this.hostSprite) {
+            this._drawHookLine(this.hostSprite.x, this.hostSprite.y, hostData.hookPos.x, hostData.hookPos.y);
+        }
+    }
+
+    _drawHookLine(fromX, fromY, toX, toY) {
+        this.hookGraphics.lineStyle(3, 0x888888, 1);
+        this.hookGraphics.beginPath();
+        this.hookGraphics.moveTo(fromX, fromY);
+        this.hookGraphics.lineTo(toX, toY);
+        this.hookGraphics.strokePath();
+
+        // Hook head
+        this.hookGraphics.fillStyle(0xaaaaaa, 1);
+        this.hookGraphics.fillCircle(toX, toY, 6);
+    }
+
+    // === v17: GUEST ANIMATIONS ===
+
+    _updateGuestAnimations(input, snapshot) {
+        // Own character animation (from local state)
+        const prefix = this.player.animPrefix;
+        if (prefix) {
+            if (!this._localGrounded) {
+                this.player.anims.play(`${prefix}-jump`, true);
+            } else if (input.direction !== 0) {
+                this.player.anims.play(`${prefix}-walk`, true);
+            } else {
+                this.player.anims.play(`${prefix}-idle`, true);
+            }
+        }
+
+        // Host character animation (from snapshot)
+        if (this.hostSprite && snapshot) {
+            const hostData = snapshot.players?.find(p => p.id === 'host');
+            if (hostData) {
+                const hPrefix = this.hostSprite.animPrefix;
+                if (hPrefix && hostData.animation) {
+                    this.hostSprite.anims.play(hostData.animation, true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Process non-physics data from snapshot: health, death, powerups, snowballs, pickups, score, events
+     */
+    _processSnapshotNonPhysics(snapshot) {
         const interp = this.network?.getInterpolatedSnapshot();
 
-        // 4. Render own player from snapshot (interpolated)
+        // Own player non-physics
         const myData = snapshot.players?.find(p => p.id === 'guest');
         if (myData) {
-            this.applySnapshotToOwnPlayer(myData, interp);
+            // Death/respawn
+            if (myData.isDying && !this.player.getData('isDying')) {
+                this.onCharacterDeath(this.player, null);
+            }
+            if (!myData.isDying && this.player.getData('isDying')) {
+                this.player.setData('isDying', false);
+                this.player.setData('health', myData.health);
+                this.player.setAlpha(1);
+                this.player.setActive(true);
+                this.player.setVisible(true);
+                this.player.setAngle(0);
+                if (this.player.nameLabel) this.player.nameLabel.setVisible(true);
+                // v17: Direct position set (no Rapier on guest)
+                this.player.setPosition(myData.x, myData.y);
+                this._localVel = { x: 0, y: 0 };
+            }
+
+            // Health
+            const prevHealth = this.player.getData('health');
+            this.player.setData('health', myData.health);
+            if (myData.health < prevHealth && myData.health > 0) {
+                this.player.setTint(0xffffff);
+                this.time.delayedCall(100, () => this.player.clearTint());
+            }
+
+            // Powerup tint
+            if (myData.powerup) {
+                const tints = { fire: 0xff8800, speed: 0xffff00, shield: 0x6666ff, doublejump: 0x66ff66 };
+                this.player.setTint(tints[myData.powerup] || 0xffffff);
+            } else if (!myData.isDying) {
+                this.player.clearTint();
+            }
+            this.player.setVisible(myData.isActive !== false);
         }
 
-        // 5. Render opponent from snapshot
+        // Host player non-physics
         const hostData = snapshot.players?.find(p => p.id === 'host');
         if (hostData && this.hostSprite) {
-            this.applySnapshotToHostSprite(hostData, interp);
+            // Death/respawn
+            if (hostData.isDying && !this.hostSprite.getData('isDying')) {
+                this.hostSprite.setData('isDying', true);
+            }
+            if (!hostData.isDying && this.hostSprite.getData('isDying')) {
+                this.hostSprite.setData('isDying', false);
+                this.hostSprite.setData('health', hostData.health);
+                this.hostSprite.setAlpha(1);
+                this.hostSprite.setVisible(true);
+                // v17: Direct position set (no Rapier on guest)
+                this.hostSprite.setPosition(hostData.x, hostData.y);
+            }
+            this.hostSprite.setData('health', hostData.health);
+            // Powerup tint
+            if (hostData.powerup) {
+                const tints = { fire: 0xff8800, speed: 0xffff00, shield: 0x6666ff, doublejump: 0x66ff66 };
+                this.hostSprite.setTint(tints[hostData.powerup] || 0xffffff);
+            } else if (!hostData.isDying) {
+                this.hostSprite.clearTint();
+            }
+            this.hostSprite.setVisible(hostData.isActive !== false);
         }
 
-        // 6. Draw hooks from snapshot (both players)
-        this.drawHooksFromSnapshot(snapshot);
-
-        // 7. Sync snowballs (interpolated)
+        // Snowballs (interpolated visuals)
         this.syncSnowballVisuals(snapshot.snowballs || [], interp);
 
-        // 8. Pickups, score
+        // Pickups, score
         this.syncPickupVisuals(snapshot.pickups || []);
         if (snapshot.score) {
             this.matchData.playerWins = snapshot.score.guestWins || 0;
             this.matchData.opponentWins = snapshot.score.hostWins || 0;
         }
 
-        // 9. Events (sounds, effects — process once, then clear)
+        // Events (sounds, effects)
         if (snapshot.events?.length > 0) {
             for (const evt of snapshot.events) {
                 if (evt.type === 'sound') {
                     this.playSpatialSound?.(evt.name, evt.x, evt.y, evt.vol || 0.5);
                 }
                 if (evt.type === 'hitEffect') this.showHitEffect(evt.x, evt.y, evt.hasFire);
+                if (evt.type === 'splatEffect') this.showSplatEffect(evt.x, evt.y);
                 if (evt.type === 'deathEffect') {
                     this.showDeathEffect(evt.x, evt.y);
-                    // Guest slow-mo on death event
                     if (!this._slowmoActive) {
                         this._slowmoActive = true;
                         this.time.timeScale = 0.3;
@@ -1729,124 +2137,6 @@ export class GameScene extends Phaser.Scene {
             }
             snapshot.events = [];
         }
-
-        // 10. UI
-        this.updateHUD();
-        this.updateNameLabels();
-
-        if (this.network) this.network.update(delta);
-    }
-
-    // === GUEST: RENDER OWN PLAYER FROM SNAPSHOT (no local physics) ===
-
-    applySnapshotToOwnPlayer(data, interp) {
-        const player = this.player;
-
-        // Interpolated position
-        if (interp) {
-            const prev = interp.prev.players?.find(p => p.id === 'guest');
-            const curr = interp.curr.players?.find(p => p.id === 'guest');
-            if (prev && curr) {
-                const t = interp.t;
-                player.setPosition(
-                    prev.x + (curr.x - prev.x) * t,
-                    prev.y + (curr.y - prev.y) * t
-                );
-            } else {
-                player.setPosition(data.x, data.y);
-            }
-        } else {
-            player.setPosition(data.x, data.y);
-        }
-
-        // Facing + animation
-        player.setFlipX(!data.facingRight);
-        player.setData('facingRight', data.facingRight);
-        if (data.animation) {
-            const currentAnim = player.anims?.currentAnim?.key;
-            if (currentAnim !== data.animation) {
-                player.play(data.animation, true);
-            }
-        }
-
-        // Death from server
-        if (data.isDying && !player.getData('isDying')) {
-            this.onCharacterDeath(player, null);
-        }
-
-        // Respawn from server
-        if (!data.isDying && player.getData('isDying')) {
-            player.setData('isDying', false);
-            player.setData('health', data.health);
-            player.setAlpha(1);
-            player.setActive(true);
-            player.setVisible(true);
-            player.setAngle(0);
-            if (player.nameLabel) player.nameLabel.setVisible(true);
-        }
-
-        // Health
-        const prevHealth = player.getData('health');
-        player.setData('health', data.health);
-        if (data.health < prevHealth && data.health > 0) {
-            player.setTint(0xffffff);
-            this.time.delayedCall(100, () => player.clearTint());
-        }
-
-        // Powerup tint
-        if (data.powerup) {
-            const tints = { fire: 0xff8800, speed: 0xffff00, shield: 0x6666ff, doublejump: 0x66ff66 };
-            player.setTint(tints[data.powerup] || 0xffffff);
-        } else if (!data.isDying) {
-            player.clearTint();
-        }
-
-        player.setVisible(data.isActive !== false);
-    }
-
-    // === GUEST: APPLY SNAPSHOT TO HOST (OPPONENT) SPRITE ===
-
-    applySnapshotToHostSprite(data, interp) {
-        const sprite = this.hostSprite;
-
-        // Two-snapshot linear interpolation
-        if (interp) {
-            const prev = interp.prev.players?.find(p => p.id === 'host');
-            const curr = interp.curr.players?.find(p => p.id === 'host');
-            if (prev && curr) {
-                const t = interp.t;
-                sprite.setPosition(
-                    prev.x + (curr.x - prev.x) * t,
-                    prev.y + (curr.y - prev.y) * t
-                );
-            } else {
-                sprite.setPosition(data.x, data.y);
-            }
-        } else {
-            sprite.setPosition(data.x, data.y);
-        }
-        sprite.setFlipX(!data.facingRight);
-        sprite.setData('health', data.health);
-        sprite.setData('facingRight', data.facingRight);
-        sprite.setData('isDying', data.isDying);
-
-        // Animation
-        if (data.animation) {
-            const currentAnim = sprite.anims?.currentAnim?.key;
-            if (currentAnim !== data.animation) {
-                sprite.play(data.animation, true);
-            }
-        }
-
-        // Powerup tint
-        if (data.powerup) {
-            const tints = { fire: 0xff8800, speed: 0xffff00, shield: 0x6666ff, doublejump: 0x66ff66 };
-            sprite.setTint(tints[data.powerup] || 0xffffff);
-        } else {
-            sprite.clearTint();
-        }
-
-        sprite.setVisible(data.isActive !== false);
     }
 
     // === GUEST: SYNC SNOWBALL VISUALS ===
@@ -1952,43 +2242,6 @@ export class GameScene extends Phaser.Scene {
         this.playSpatialSound('sfx-snowball-shot', this.player.x, this.player.y, 0.4);
     }
 
-    // === GUEST: DRAW HOOKS (own hook from local physics, opponent from snapshot) ===
-
-    drawHooksFromSnapshot(snapshot) {
-        this.hookGraphics.clear();
-
-        // Draw aim line for own player (local-only, computed from tilemap)
-        const myData = snapshot.players?.find(p => p.id === 'guest');
-        if (myData && (!myData.hookState || myData.hookState === 'IDLE')) {
-            const target = this.findHookTarget(this.player);
-            if (target) {
-                this.hookGraphics.lineStyle(2, 0xffffff, 0.3);
-                this.hookGraphics.lineBetween(this.player.x, this.player.y, target.x, target.y);
-                this.hookGraphics.strokeCircle(target.x, target.y, 10);
-            }
-        }
-
-        const drawHook = (sprite, data) => {
-            if (!data?.hookState || data.hookState === 'IDLE' || !data.hookPos) return;
-            const color = 0x654321;
-            this.hookGraphics.lineStyle(4, color, 1);
-            this.hookGraphics.lineBetween(sprite.x, sprite.y, data.hookPos.x, data.hookPos.y);
-            if (data.hookState === 'FLYING') {
-                this.hookGraphics.fillStyle(0x444444, 1);
-                this.hookGraphics.fillCircle(data.hookPos.x, data.hookPos.y, 6);
-            } else if (data.hookState === 'ATTACHED') {
-                this.hookGraphics.fillStyle(0xffcc00, 1);
-                this.hookGraphics.fillCircle(data.hookPos.x, data.hookPos.y, 8);
-            }
-        };
-
-        // Own hook from snapshot
-        if (myData) drawHook(this.player, myData);
-
-        // Opponent hook from snapshot
-        const hostData = snapshot.players?.find(p => p.id === 'host');
-        if (hostData && this.hostSprite) drawHook(this.hostSprite, hostData);
-    }
 
     // === CHARACTER UPDATE ===
 
@@ -2222,6 +2475,9 @@ export class GameScene extends Phaser.Scene {
         this.hookGraphics.lineStyle(4, color, 1);
 
         if (core.hookState === 'FLYING') {
+            // Don't draw if hookPos is at origin (state transition artifact)
+            if (core.hookPos.x === 0 && core.hookPos.y === 0) return;
+
             this.hookGraphics.lineBetween(character.x, character.y, core.hookPos.x, core.hookPos.y);
 
             // Hook head
@@ -2257,8 +2513,9 @@ export class GameScene extends Phaser.Scene {
         const hasFire = this.hasPowerup(shooter, 'fire');
         const speed = PHYS.SNOWBALL_SPEED;
         // Add shooter's velocity for momentum transfer
-        const shooterVx = shooter.body?.velocity?.x || 0;
-        const shooterVy = shooter.body?.velocity?.y || 0;
+        const shooterVel = shooter.rapierBody?.linvel();
+        const shooterVx = shooterVel?.x || 0;
+        const shooterVy = shooterVel?.y || 0;
         const vx = Math.cos(angle) * speed + shooterVx * 0.5;
         const vy = Math.sin(angle) * speed + shooterVy * 0.3;
 
@@ -2267,27 +2524,17 @@ export class GameScene extends Phaser.Scene {
         const spawnX = shooter.x + Math.cos(angle) * spawnDist;
         const spawnY = shooter.y - 10 + Math.sin(angle) * spawnDist;
 
-        const snowball = this.matter.add.sprite(
-            spawnX,
-            spawnY,
-            'snowball',
-            0,
-            {
-                shape: { type: 'circle', radius: 10 },
-                friction: 0,
-                frictionAir: 0.01,
-                restitution: 0,
-                isSensor: false,
-                label: 'snowball'
-            }
-        );
+        // Create Rapier body for snowball
+        const rapierBody = this.rapierWorld.createSnowball(spawnX, spawnY, vx, vy, 10, 'snowball');
+
+        // Create visual sprite
+        const snowball = this.add.sprite(spawnX, spawnY, 'snowball');
 
         // Fire visual effects
         if (hasFire) {
-            snowball.setTint(0xff4400);  // Orange-red
-            snowball.setScale(0.7);       // Larger
+            snowball.setTint(0xff4400);
+            snowball.setScale(0.7);
 
-            // Fire trail particles
             const particles = this.add.particles(0, 0, 'snowball', {
                 follow: snowball,
                 scale: { start: 0.3, end: 0 },
@@ -2304,10 +2551,9 @@ export class GameScene extends Phaser.Scene {
         }
 
         snowball.setDepth(10);
-        snowball.setVelocity(vx, vy);
-        snowball.setIgnoreGravity(true);
-        // Reduced gravity for snowballs (lighter arc)
-        snowball.setData('gravityScale', PHYS.SNOWBALL_GRAVITY_SCALE);
+        snowball.rapierBody = rapierBody;
+        rapierBody.userData = snowball;
+        this.rapierWorld.setBodySprite(rapierBody, snowball);
 
         snowball.setData('shooter', shooter);
         snowball.setData('damage', PHYS.SNOWBALL_DAMAGE);
@@ -2376,15 +2622,7 @@ export class GameScene extends Phaser.Scene {
                 sb.setData('ignoreShooterFrames', frames - 1);
             }
 
-            // Apply reduced gravity manually (snowball ignores world gravity)
-            const gScale = sb.getData('gravityScale');
-            if (gScale !== undefined && sb.body) {
-                const gravityAccel = PHYS.GRAVITY * gScale * 0.15;
-                this.matter.body.setVelocity(sb.body, {
-                    x: sb.body.velocity.x,
-                    y: sb.body.velocity.y + gravityAccel
-                });
-            }
+            // Rapier handles snowball gravity via gravity scale on the body
 
             return true;
         });
@@ -2403,6 +2641,13 @@ export class GameScene extends Phaser.Scene {
             if (particles) {
                 particles.destroy();
             }
+
+            // Remove Rapier body
+            if (snowball.rapierBody && this.rapierWorld) {
+                this.rapierWorld.removeBody(snowball.rapierBody);
+                snowball.rapierBody = null;
+            }
+
             snowball.destroy();
         }
     }
@@ -2469,14 +2714,18 @@ export class GameScene extends Phaser.Scene {
         const mapWidth = this.map ? this.map.widthInPixels : GAME.WIDTH;
 
         const clamp = (character) => {
-            if (!character?.active || !character.body || character.body.isStatic) return;
-            if (character.x < 10) {
-                character.setX(10);
-                this.matter.body.setVelocity(character.body, { x: 0, y: character.body.velocity.y });
+            if (!character?.active || !character.rapierBody) return;
+            const pos = character.rapierBody.translation();
+            const vel = character.rapierBody.linvel();
+            if (pos.x < 10) {
+                this.rapierWorld.safeTeleport(character.rapierBody, 10, pos.y, 25, 35);
+                character.rapierBody.setLinvel({ x: 0, y: vel.y }, true);
+                character.setX(character.rapierBody.translation().x);
             }
-            if (character.x > mapWidth - 10) {
-                character.setX(mapWidth - 10);
-                this.matter.body.setVelocity(character.body, { x: 0, y: character.body.velocity.y });
+            if (pos.x > mapWidth - 10) {
+                this.rapierWorld.safeTeleport(character.rapierBody, mapWidth - 10, pos.y, 25, 35);
+                character.rapierBody.setLinvel({ x: 0, y: vel.y }, true);
+                character.setX(character.rapierBody.translation().x);
             }
         };
 

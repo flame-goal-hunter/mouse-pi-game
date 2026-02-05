@@ -2,20 +2,21 @@
 // GAME CONFIGURATION
 // ============================================
 
-// Physics constants for Matter.js (Teeworlds-inspired)
+// Physics constants for Rapier2D (px/s units)
 export const PHYS = {
     // World
-    GRAVITY: 1.0,           // Matter.js gravity (lower than arcade)
+    GRAVITY: 1200,          // px/s² (Rapier gravity)
 
-    // Movement (normalized for Matter.js)
-    MOVE_FORCE: 0.005,      // Force applied for horizontal movement
-    AIR_CONTROL: 0.002,     // Force in air (reduced control when airborne)
-    JUMP_FORCE: -15,        // Jump velocity (negative = up)
-    MAX_SPEED_X: 8,         // Max horizontal velocity
-    MAX_SPEED_Y: 15,        // Max fall velocity
+    // Movement (velocity-based, lerp rates per frame)
+    GROUND_ACCEL: 0.25,     // Lerp rate toward target speed (grounded)
+    AIR_ACCEL: 0.12,        // Lerp rate toward target speed (air)
+    GROUND_FRICTION: 0.96,  // Velocity multiplier when no input (grounded, <1 = decelerate)
+    JUMP_FORCE: -710,       // px/s (negative = up, h = 710²/2400 ≈ 210 px ≈ 3 тайла)
+    MAX_SPEED_X: 480,       // px/s (max horizontal velocity)
+    MAX_SPEED_Y: 900,       // px/s (max fall velocity)
 
     // Hook / Grapple - Teeworlds style
-    HOOK_SPEED: 25,         // Hook projectile speed
+    HOOK_SPEED: 25,         // Hook projectile speed (px/frame at 60fps)
     HOOK_RANGE: 500,        // Max hook distance in pixels
     HOOK_STIFFNESS: 0.9,    // Rope stiffness (0-1, higher = more rigid)
     HOOK_DAMPING: 0.1,      // Rope damping (oscillation reduction)
@@ -24,9 +25,9 @@ export const PHYS = {
     HOOK_COOLDOWN: 300,     // Cooldown between hooks (ms)
 
     // Combat
-    SNOWBALL_SPEED: 12,     // Snowball velocity (slightly slower for arc compensation)
+    SNOWBALL_SPEED: 720,    // px/s (Rapier linvel)
     SNOWBALL_DAMAGE: 10,    // Damage per hit (half heart = 10 HP)
-    KNOCKBACK_FORCE: 0.02,  // Knockback strength
+    KNOCKBACK_FORCE: 1.2,   // Rapier impulse strength
     SNOWBALL_GRAVITY_SCALE: 0.5,  // Gravity multiplier for snowballs (lighter than characters)
     SNOWBALL_BOUNCE: 0.3,         // Bounce off walls/platforms
     SNOWBALL_LIFETIME: 3000,      // ms before auto-destroy

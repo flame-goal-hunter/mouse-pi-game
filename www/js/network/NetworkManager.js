@@ -1,7 +1,7 @@
 // ============================================
-// NETWORK MANAGER - Host-Authoritative Client-Server
-// Host = authoritative server (runs all physics)
-// Guest = client (sends inputs, receives snapshots + smooth correction)
+// NETWORK MANAGER - Host-Authoritative Client-Server (v17 Hybrid)
+// Host = authoritative server (runs all physics with Rapier)
+// Guest = client with simple local physics + snapshot interpolation
 // Uses postMessage bridge when running in iframe
 // ============================================
 
@@ -34,6 +34,13 @@ export class NetworkManager {
         this._pendingFire = false;
         this._pendingFireAngle = null;
         this._pendingHookJust = false;
+        this._pendingHookTarget = null;
+
+        // Host input buffering (pulse-safe, like guest's _pendingFire)
+        this._hostInputCurrent = null;      // Current continuous state
+        this._hostPendingHookJust = false;  // Buffered one-shot: hook just pressed
+        this._hostPendingHookTarget = null; // Buffered hookTarget for hook press
+        this._hostPrevJump = false;         // Previous jump state (for edge detection)
 
         // === HOST (server) state ===
         this.remoteInputs = new Map();      // peerId → latest input from client
@@ -41,13 +48,30 @@ export class NetworkManager {
         this.nextSnowballId = 0;            // Unique snowball IDs for sync
         this._pendingEvents = [];            // Events for next snapshot (sounds, effects)
 
+        // v18: Input buffer for consistent timing (host)
+        this.inputQueue = [];               // Queue of { seq, input, receivedTick }
+        this.INPUT_DELAY_TICKS = 0;         // v20: Removed delay for sync with guest (was 2)
+        this.appliedInputSeq = 0;           // v20: Actually applied input seq (for reconciliation)
+
+        // Tick counter (host increments each update)
+        this.serverTick = 0;
+
+        // Delta compression state (host)
+        this._lastSentSnapshot = null;      // Last full snapshot sent (for computing delta)
+        this._keyframeInterval = 60;        // Full snapshot every 60 ticks (~1s at 60Hz)
+
         // === GUEST (client) state ===
         this._snapBuffer = [];              // Array of { time, data } for render-behind interpolation
-        this.RENDER_DELAY = 20;             // ms — render one interval behind (~16ms + jitter margin)
+        this.RENDER_DELAY = 50;             // v18: Start with 50ms (3 frames), adapt based on ping
         this.playerId = 'guest';            // Our player ID (guest in 1v1)
+        this._lastFullSnapshot = null;      // Last reconstructed full snapshot (for delta merging)
 
         this.inputSeq = 0;                  // Sequence number for inputs
         this.lastInputTime = 0;            // Throttle input sending to SYNC_INTERVAL
+
+        // === v18: INPUT HISTORY FOR SERVER RECONCILIATION ===
+        this.inputHistory = [];             // Array of { seq, input, predictedPos, predictedVel }
+        this.MAX_INPUT_HISTORY = 64;        // ~1 second at 60Hz
 
         // Ping measurement (guest only)
         this._pingTimer = 0;
@@ -261,9 +285,25 @@ export class NetworkManager {
         this.lastSyncTime = 0;
 
         if (this.isHost) {
-            // Server: send snapshot to clients
-            const snapshot = this.buildSnapshot();
-            this.broadcast({ type: 'snapshot', data: snapshot });
+            // Note: serverTick is now incremented in GameScene.updateAsHost() inside physics loop
+
+            // Send host input as separate packet (with pulse buffering)
+            // Build and send snapshot (delta or keyframe)
+            // Note: hostInput is now included IN the snapshot (Teeworlds-style)
+            const isKeyframe = !this._lastSentSnapshot ||
+                               (this.serverTick % this._keyframeInterval === 0);
+
+            if (isKeyframe) {
+                const snapshot = this.buildSnapshot();
+                snapshot.type = 'full';
+                this._lastSentSnapshot = snapshot;
+                this.broadcast({ type: 'snapshot', data: snapshot });
+            } else {
+                const full = this.buildSnapshot();
+                const delta = this._computeDelta(this._lastSentSnapshot, full);
+                this._lastSentSnapshot = full;
+                this.broadcast({ type: 'snapshot', data: delta });
+            }
         } else {
             // Guest: send ping periodically
             this._pingTimer += this.SYNC_INTERVAL;
@@ -297,9 +337,27 @@ export class NetworkManager {
             hasFire: !!s.getData('particles')
         }));
 
+        // Teeworlds: include host input with tick it was applied at
+        const hostInput = this._hostInputCurrent ? {
+            direction: this._hostInputCurrent.direction || 0,
+            jump: !!this._hostInputCurrent.jump,
+            hook: !!this._hostInputCurrent.hook,
+            hookJustPressed: this._hostPendingHookJust,
+            hookTarget: this._hostPendingHookJust
+                ? this._hostPendingHookTarget
+                : (this._hostInputCurrent.hookTarget || null),
+            appliedAtTick: this.serverTick
+        } : null;
+
+        // Reset host one-shot buffers after including in snapshot
+        this._hostPendingHookJust = false;
+        this._hostPendingHookTarget = null;
+
         return {
-            tick: Date.now(),
-            lastInputSeq: this.lastProcessedSeq.get('guest') || 0,
+            tick: this.serverTick,
+            time: Date.now(),
+            lastInputSeq: this.appliedInputSeq || 0,  // v20: Use actually applied seq, not received
+            hostInput,  // Teeworlds: host input for guest simulation
             players,
             snowballs,
             pickups: (scene.pickups || []).filter(p => p.isActive()).map(p => ({
@@ -317,17 +375,22 @@ export class NetworkManager {
     }
 
     _playerToSnap(p, id) {
+        // Teeworlds v15: velocity as fixed-point integer (scale 256)
+        const vel = p.rapierBody?.linvel();
         return {
             id,
             x: p.x,
             y: p.y,
-            vx: p.body?.velocity?.x || 0,
-            vy: p.body?.velocity?.y || 0,
+            vx: vel ? Math.round(vel.x * 256) : 0,  // Fixed-point 256
+            vy: vel ? Math.round(vel.y * 256) : 0,  // Fixed-point 256
             facingRight: p.getData('facingRight'),
             health: p.getData('health'),
             animation: p.anims?.currentAnim?.key || 'idle',
             hookState: p.core?.hookState || 'IDLE',
             hookPos: p.core?.hookPos ? { x: p.core.hookPos.x, y: p.core.hookPos.y } : null,
+            hookAnchorPos: p.core?.hookAnchorPos ? { x: p.core.hookAnchorPos.x, y: p.core.hookAnchorPos.y } : null,
+            ropeLength: p.core?.ropeLength || 0,
+            grounded: p.core?.grounded || false,
             powerup: this.scene.getActivePowerupType?.(p) || null,
             isDying: p.getData('isDying') || false,
             isActive: p.active
@@ -337,7 +400,7 @@ export class NetworkManager {
     // === GUEST: SEND INPUT ===
 
     sendInput(input) {
-        if (!this.connected) return;
+        if (!this.connected) return null;  // v19: return null when not connected
 
         // Accumulate one-frame pulses between sends (they reset after one read)
         if (input.fire) {
@@ -346,31 +409,53 @@ export class NetworkManager {
         }
         if (input.hookJustPressed) {
             this._pendingHookJust = true;
+            this._pendingHookTarget = input.hookTarget || null;
         }
 
-        // Throttle to ~30Hz (match snapshot rate) to avoid flooding host
+        // Throttle to ~60Hz (match physics rate) to avoid flooding host
         const now = Date.now();
-        if (now - this.lastInputTime < this.SYNC_INTERVAL) return;
+        if (now - this.lastInputTime < this.SYNC_INTERVAL) return null;  // v19: return null when throttled
         this.lastInputTime = now;
 
         const seq = this.inputSeq++;
+
+        // v17: simplified input packet (no Teeworlds tick sync)
         const data = {
             seq,
             direction: input.direction || 0,
             jump: !!input.jump,
             hook: !!input.hook,
             hookJustPressed: this._pendingHookJust || !!input.hookJustPressed,
+            // v17.1 FIX: Always prefer input.hookTarget if available
+            hookTarget: input.hookTarget || this._pendingHookTarget || null,
             fire: this._pendingFire || !!input.fire,
             fireAngle: this._pendingFire ? this._pendingFireAngle : (input.fireAngle ?? null),
             strength: input.strength || 1
         };
 
+        // v18: Store input for server reconciliation (predicted state filled by GameScene)
+        this.inputHistory.push({
+            seq,
+            input: { ...data },
+            predictedPos: null,   // Filled after local physics tick
+            predictedVel: null,   // Filled after local physics tick
+            predictedGrounded: null
+        });
+
+        // Trim old inputs to prevent memory growth
+        while (this.inputHistory.length > this.MAX_INPUT_HISTORY) {
+            this.inputHistory.shift();
+        }
+
         // Reset pending pulses after sending
         this._pendingFire = false;
         this._pendingFireAngle = null;
         this._pendingHookJust = false;
+        this._pendingHookTarget = null;
 
         this.broadcast({ type: 'input', data });
+
+        return seq;  // v19: Return seq for storePredictedState
     }
 
     // === HOST: GET REMOTE INPUT ===
@@ -382,6 +467,48 @@ export class NetworkManager {
             return { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
         }
         return { ...input };
+    }
+
+    /**
+     * v18: Get buffered input for a specific tick (host only).
+     * Applies input delay for consistent timing and jitter absorption.
+     * @param {string} playerId - Player ID (e.g., 'guest')
+     * @param {number} targetTick - Current server tick
+     * @returns {object} Input to apply
+     */
+    getInputForTick(playerId, targetTick) {
+        // Apply inputs from INPUT_DELAY_TICKS ago
+        const desiredTick = targetTick - this.INPUT_DELAY_TICKS;
+
+        // Find best matching input (latest input received at or before desiredTick)
+        let bestInput = null;
+        let bestSeq = -1;
+
+        for (const queuedInput of this.inputQueue) {
+            if (queuedInput.receivedTick <= desiredTick && queuedInput.seq > bestSeq) {
+                bestInput = queuedInput.input;
+                bestSeq = queuedInput.seq;
+            }
+        }
+
+        // v18 FIX: Clean up by seq, not receivedTick (jitter-safe)
+        // Only remove inputs we've definitely processed (seq <= bestSeq - buffer)
+        if (bestSeq > 0) {
+            this.inputQueue = this.inputQueue.filter(i => i.seq > bestSeq - 5);
+            // v20: Track which input seq is actually being applied (for reconciliation)
+            this.appliedInputSeq = bestSeq;
+        }
+
+        // Fallback to last known input or idle state
+        if (!bestInput) {
+            const fallback = this.remoteInputs.get(playerId);
+            if (fallback) {
+                return { ...fallback, hookJustPressed: false, fire: false };  // Don't repeat one-shots
+            }
+            return { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
+        }
+
+        return { ...bestInput };
     }
 
     // === GUEST: RENDER-BEHIND INTERPOLATION ===
@@ -416,10 +543,178 @@ export class NetworkManager {
         return { t, prev: prev.data, curr: curr.data };
     }
 
+    // === HOST: save host input with pulse buffering ===
+
+    setHostInput(input) {
+        this._hostInputCurrent = input;
+        // Buffer one-shot pulses (might get called multiple times before send)
+        if (input.hookJustPressed) {
+            this._hostPendingHookJust = true;
+            this._hostPendingHookTarget = input.hookTarget || null;
+        }
+        if (input.jump && !this._hostPrevJump) {
+            // Jump edge detected — will be sent with next packet
+        }
+        this._hostPrevJump = !!input.jump;
+    }
+
     // === HOST: queue event for next snapshot ===
 
     queueEvent(evt) {
         this._pendingEvents.push(evt);
+    }
+
+    // === v18: SERVER RECONCILIATION HELPERS ===
+
+    /**
+     * Get all inputs that haven't been acknowledged by the server yet.
+     * @param {number} lastAckedSeq - The last input sequence number the server processed
+     * @returns {Array} Array of unacknowledged inputs
+     */
+    getUnackedInputs(lastAckedSeq) {
+        return this.inputHistory.filter(i => i.seq > lastAckedSeq);
+    }
+
+    /**
+     * Remove inputs that have been acknowledged by the server.
+     * v18 FIX: Simplified - just remove all acked inputs (no longer need for comparison)
+     * @param {number} lastAckedSeq - The last input sequence number the server processed
+     */
+    clearAckedInputs(lastAckedSeq) {
+        // v18 FIX: Simple filter - remove all acked, keep only unacked
+        // Old logic had off-by-one bug when all inputs were acked (idx === -1)
+        this.inputHistory = this.inputHistory.filter(i => i.seq > lastAckedSeq);
+    }
+
+    /**
+     * v19: Store predicted state for a specific input sequence.
+     * Called by GameScene after physics tick to record what we predicted.
+     * @param {number} seq - Input sequence number
+     * @param {number} x - Predicted X position
+     * @param {number} y - Predicted Y position
+     * @param {object} vel - Predicted velocity { x, y }
+     * @param {boolean} grounded - Predicted grounded state
+     */
+    storePredictedState(seq, x, y, vel, grounded) {
+        const entry = this.inputHistory.find(i => i.seq === seq);
+        if (entry) {
+            entry.predictedPos = { x, y };
+            entry.predictedVel = { x: vel.x, y: vel.y };
+            entry.predictedGrounded = grounded;
+        }
+    }
+
+    /**
+     * Find the predicted state for a specific acknowledged sequence.
+     * Used for comparing server state with our prediction at that point.
+     * @param {number} seq - Input sequence number
+     * @returns {object|null} { pos, vel, grounded } or null if not found
+     */
+    getPredictedStateForSeq(seq) {
+        const entry = this.inputHistory.find(i => i.seq === seq);
+        if (entry && entry.predictedPos) {
+            return {
+                pos: entry.predictedPos,
+                vel: entry.predictedVel,
+                grounded: entry.predictedGrounded
+            };
+        }
+        return null;
+    }
+
+    // === DELTA COMPRESSION (host) ===
+
+    /**
+     * Compute delta between previous and current full snapshots.
+     * Always includes: tick, time, lastInputSeq, player positions, events.
+     * Conditionally includes: player non-position fields, snowballs, pickups, score.
+     */
+    _computeDelta(prev, curr) {
+        const delta = {
+            type: 'delta',
+            tick: curr.tick,
+            time: curr.time,
+            lastInputSeq: curr.lastInputSeq,
+            hostInput: curr.hostInput,  // Teeworlds: always include host input
+            events: curr.events  // Always include (one-shot)
+        };
+
+        // Players: always send x, y, vx, vy. Only send other fields if changed.
+        delta.players = curr.players.map(cp => {
+            const pp = prev.players?.find(p => p.id === cp.id);
+            const slim = { id: cp.id, x: cp.x, y: cp.y, vx: cp.vx, vy: cp.vy };
+
+            // Include changed fields
+            if (!pp || pp.facingRight !== cp.facingRight) slim.facingRight = cp.facingRight;
+            if (!pp || pp.health !== cp.health) slim.health = cp.health;
+            if (!pp || pp.animation !== cp.animation) slim.animation = cp.animation;
+            if (!pp || pp.hookState !== cp.hookState) slim.hookState = cp.hookState;
+            if (!pp || pp.hookState !== 'IDLE' || cp.hookState !== 'IDLE') {
+                slim.hookPos = cp.hookPos;
+                slim.hookAnchorPos = cp.hookAnchorPos;
+                slim.ropeLength = cp.ropeLength;
+            }
+            if (!pp || pp.grounded !== cp.grounded) slim.grounded = cp.grounded;
+            if (!pp || pp.powerup !== cp.powerup) slim.powerup = cp.powerup;
+            if (!pp || pp.isDying !== cp.isDying) slim.isDying = cp.isDying;
+            if (!pp || pp.isActive !== cp.isActive) slim.isActive = cp.isActive;
+
+            return slim;
+        });
+
+        // Snowballs: include only if count or IDs changed
+        const prevIds = (prev.snowballs || []).map(s => s.id).join(',');
+        const currIds = (curr.snowballs || []).map(s => s.id).join(',');
+        if (prevIds !== currIds || curr.snowballs.length > 0) {
+            delta.snowballs = curr.snowballs;
+        }
+
+        // Pickups: include only if changed
+        const prevPickupIds = (prev.pickups || []).map(p => p.id).join(',');
+        const currPickupIds = (curr.pickups || []).map(p => p.id).join(',');
+        if (prevPickupIds !== currPickupIds) {
+            delta.pickups = curr.pickups;
+        }
+
+        // Score: include only if changed
+        if (prev.score?.hostWins !== curr.score?.hostWins ||
+            prev.score?.guestWins !== curr.score?.guestWins) {
+            delta.score = curr.score;
+        }
+
+        return delta;
+    }
+
+    /**
+     * Guest: merge a delta snapshot into the last known full state.
+     */
+    _mergeDelta(base, delta) {
+        const merged = { ...base, tick: delta.tick, time: delta.time, lastInputSeq: delta.lastInputSeq, hostInput: delta.hostInput || null };
+
+        // Merge players
+        if (delta.players) {
+            merged.players = (base.players || []).map(bp => {
+                const dp = delta.players.find(p => p.id === bp.id);
+                if (!dp) return bp;
+                return { ...bp, ...dp };
+            });
+            // Add any new players from delta
+            for (const dp of delta.players) {
+                if (!merged.players.find(p => p.id === dp.id)) {
+                    merged.players.push(dp);
+                }
+            }
+        }
+
+        // Merge optional fields (only overwrite if present in delta)
+        if (delta.snowballs !== undefined) merged.snowballs = delta.snowballs;
+        if (delta.pickups !== undefined) merged.pickups = delta.pickups;
+        if (delta.score !== undefined) merged.score = delta.score;
+
+        // Events: always from delta
+        merged.events = delta.events || [];
+
+        return merged;
     }
 
     // === DATA RECEIVING ===
@@ -429,30 +724,46 @@ export class NetworkManager {
 
         switch (message.type) {
             case 'input':
-                // Host: store client input
+                // v18: Host queues inputs for consistent timing
                 if (this.isHost && message.data) {
-                    // Preserve fire pulse: if previous input had fire=true and host
-                    // hasn't processed it yet, don't let new input overwrite it
-                    const existing = this.remoteInputs.get('guest');
-                    // Preserve fire pulse until host processes it
-                    if (existing?.fire && !message.data.fire) {
-                        message.data.fire = true;
-                        message.data.fireAngle = existing.fireAngle;
+                    // Add to queue with current server tick
+                    this.inputQueue.push({
+                        seq: message.data.seq,
+                        input: message.data,
+                        receivedTick: this.serverTick
+                    });
+
+                    // Sort by sequence (in case of packet reordering)
+                    this.inputQueue.sort((a, b) => a.seq - b.seq);
+
+                    // Limit queue size to prevent memory growth
+                    while (this.inputQueue.length > 30) {
+                        this.inputQueue.shift();
                     }
-                    // Preserve hook pulse until host processes it
-                    if (existing?.hookJustPressed && !message.data.hookJustPressed) {
-                        message.data.hookJustPressed = true;
-                    }
-                    this.remoteInputs.set('guest', message.data);
+
+                    // Also update lastProcessedSeq for snapshot
                     this.lastProcessedSeq.set('guest', message.data.seq);
+                    // Keep latest for fallback
+                    this.remoteInputs.set('guest', message.data);
                 }
                 break;
 
             case 'snapshot':
-                // Guest: add to render-behind buffer
+                // v17: Guest stores snapshots for interpolation (no time sync complexity)
                 if (!this.isHost && message.data) {
-                    this._snapBuffer.push({ time: Date.now(), data: message.data });
-                    // Keep max 10 snapshots (~330ms buffer)
+                    let fullSnap;
+                    if (message.data.type === 'full') {
+                        fullSnap = message.data;
+                        this._lastFullSnapshot = fullSnap;
+                    } else if (message.data.type === 'delta' && this._lastFullSnapshot) {
+                        fullSnap = this._mergeDelta(this._lastFullSnapshot, message.data);
+                        this._lastFullSnapshot = fullSnap;
+                    } else {
+                        // No base snapshot to merge with — skip delta
+                        break;
+                    }
+
+                    this._snapBuffer.push({ time: Date.now(), data: fullSnap });
                     if (this._snapBuffer.length > 10) {
                         this._snapBuffer.shift();
                     }
@@ -467,16 +778,26 @@ export class NetworkManager {
                 break;
 
             case 'pong':
-                // Guest: calculate RTT
+                // Guest: calculate RTT with jitter measurement
                 if (!this.isHost) {
                     const rtt = Date.now() - message.t;
                     this._recentPings.push(rtt);
-                    if (this._recentPings.length > 5) this._recentPings.shift();
-                    this.ping = Math.round(
-                        this._recentPings.reduce((a, b) => a + b, 0) / this._recentPings.length
+                    if (this._recentPings.length > 10) this._recentPings.shift();  // v18: Keep more samples
+
+                    // Calculate average ping
+                    const avg = this._recentPings.reduce((a, b) => a + b, 0) / this._recentPings.length;
+                    this.ping = Math.round(avg);
+
+                    // v18: Calculate jitter (standard deviation)
+                    const jitter = Math.sqrt(
+                        this._recentPings.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / this._recentPings.length
                     );
-                    // Adaptive render delay: half ping + jitter margin
-                    this.RENDER_DELAY = Math.max(16, Math.min(100, Math.round(this.ping * 0.5) + 8));
+
+                    // v18: Adaptive render delay = half ping + 2x jitter + base margin
+                    // Min 32ms (2 frames), max 150ms
+                    this.RENDER_DELAY = Math.max(32, Math.min(150,
+                        Math.round(avg * 0.5 + jitter * 2 + 16)
+                    ));
                 }
                 break;
 

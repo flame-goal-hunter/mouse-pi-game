@@ -32,7 +32,7 @@ const scenes = (mode === 'solo' || mode === 'host' || mode === 'join')
     ? [BootScene, GameScene]    // Skip menu, go directly to game
     : [BootScene, MenuScene, GameScene];  // Normal flow with menu
 
-// Phaser configuration with Matter.js physics
+// Phaser configuration (physics handled by Rapier2D, not Phaser)
 const config = {
     type: Phaser.AUTO,
     width: GAME.WIDTH,
@@ -41,14 +41,6 @@ const config = {
     backgroundColor: '#87CEEB',
     input: {
         activePointers: 5  // Поддержка до 5 одновременных касаний для мультитач
-    },
-    physics: {
-        default: 'matter',
-        matter: {
-            gravity: { y: PHYS.GRAVITY },
-            debug: false,
-            enableSleeping: false
-        }
     },
     scale: {
         mode: Phaser.Scale.RESIZE,  // Заполняет весь экран
@@ -65,21 +57,20 @@ const config = {
     scene: scenes
 };
 
-// Wait for DOM to load
-window.addEventListener('load', () => {
-    const game = new Phaser.Game(config);
+// Create Phaser game immediately (DOM and scripts are already loaded
+// by the time this module is imported after Rapier WASM init)
+const game = new Phaser.Game(config);
 
-    // Handle window resize
-    window.addEventListener('resize', () => {
-        game.scale.refresh();
-    });
+// Handle window resize
+window.addEventListener('resize', () => {
+    game.scale.refresh();
+});
 
-    // Pause/resume Phaser sounds when app goes to background
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            game.sound.pauseAll();
-        } else {
-            game.sound.resumeAll();
-        }
-    });
+// Pause/resume Phaser sounds when app goes to background
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        game.sound.pauseAll();
+    } else {
+        game.sound.resumeAll();
+    }
 });

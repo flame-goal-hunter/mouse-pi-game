@@ -244,7 +244,7 @@
     <div id="btn-hook" class="mobile-controls game-btn">🪝</div>
     <div id="btn-fire" class="mobile-controls game-btn">❄️</div>
 
-    <!-- Phaser 3 with Matter.js physics -->
+    <!-- Phaser 3 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 
     <!-- PeerJS for multiplayer -->
@@ -255,7 +255,19 @@
 
     <!-- Behavior3.js for AI behavior trees -->
     <script src="https://cdn.jsdelivr.net/npm/behavior3js@0.2.2/libs/behavior3-0.2.2.js"></script>
-    <!-- Game modules (ES6) -->
-    <script type="module" src="js/main.js"></script>
+
+    <!-- Rapier2D WASM physics (must init before game) -->
+    <script type="module">
+        import RAPIER from 'https://esm.sh/@dimforge/rapier2d-compat@0.14.0';
+        await RAPIER.init();
+        window.RAPIER = RAPIER;
+        console.log('Rapier2D initialized');
+        // Now load game modules
+        try {
+            await import('./js/main.js');
+        } catch (e) {
+            console.error('Failed to load game:', e);
+        }
+    </script>
 </body>
 </html>

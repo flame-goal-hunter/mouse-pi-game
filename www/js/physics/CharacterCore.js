@@ -1,19 +1,21 @@
 // ============================================
-// CHARACTER CORE - Matter.js Physics Controller
+// CHARACTER CORE - Rapier2D Physics Controller
 // ============================================
-// Teeworlds-style movement with Matter.js rope physics
+// Teeworlds-style movement with Rapier2D physics.
+// Hook uses manual distance constraint (Rapier rope joint
+// doesn't support dynamic length changes).
 
 import { PHYS } from '../config.js';
 
 export class CharacterCore {
     constructor() {
-        // References (set by GameScene)
+        // References (set via init)
         this.scene = null;
-        this.body = null;  // Matter.js body
+        this.rapierBody = null;    // Rapier2D rigid body
+        this.rapierWorld = null;   // RapierWorld wrapper (for ground detection)
 
         // State
         this.grounded = false;
-        this.groundContacts = 0;  // Counter for ground contacts (fixes flickering on slopes)
         this.facingRight = true;
 
         // Jump mechanics
@@ -21,27 +23,27 @@ export class CharacterCore {
         this.coyoteTime = 0;
         this.jumpHeld = false;
         this.canJump = true;
-        this.airJumpUsed = false;  // For double jump powerup
+        this.airJumpUsed = false;
 
         // Hook state
         this.hookState = 'IDLE';  // IDLE, FLYING, ATTACHED
         this.hookPos = { x: 0, y: 0 };
         this.hookVel = { x: 0, y: 0 };
-        this.hookAnchor = null;       // Matter.js static body for anchor
-        this.ropeConstraint = null;   // Matter.js distance constraint
+        this.hookAnchorPos = null;  // { x, y } — anchor coordinates
         this.ropeLength = 0;
         this.hookCooldown = 0;
 
-        // Collision sensors
-        this.groundSensor = null;
+        // Sound suppression (true for guest prediction — sounds come from host events)
+        this.suppressSounds = false;
     }
 
     /**
-     * Initialize with scene and Matter body
+     * Initialize with Rapier body and scene
      */
-    init(scene, matterBody) {
+    init(rapierBody, rapierWorld, scene) {
+        this.rapierBody = rapierBody;
+        this.rapierWorld = rapierWorld;
         this.scene = scene;
-        this.body = matterBody;
     }
 
     /**
@@ -50,21 +52,21 @@ export class CharacterCore {
      * @param {number} delta - Frame time in ms
      */
     tick(input, delta) {
-        if (!this.body || !this.scene) return { grounded: false, onRope: false };
+        if (!this.rapierBody || !this.scene) return { grounded: false, onRope: false };
 
         // Update timers
         this.hookCooldown = Math.max(0, this.hookCooldown - delta);
         this.jumpBuffer = Math.max(0, this.jumpBuffer - delta);
         this.coyoteTime = Math.max(0, this.coyoteTime - delta);
 
-        // Check if grounded
-        this.updateGrounded();
+        // Check if grounded (ray cast)
+        this.grounded = this.rapierWorld.isGrounded(this.rapierBody, 30); // halfH = 30
 
         // Update coyote time
         if (this.grounded) {
             this.coyoteTime = PHYS.COYOTE_TIME;
             this.canJump = true;
-            this.airJumpUsed = false;  // Reset double jump when landing
+            this.airJumpUsed = false;
         }
 
         // Buffer jump input
@@ -92,23 +94,13 @@ export class CharacterCore {
     }
 
     /**
-     * Check if character is on ground
-     * Note: Grounded state is managed by collision events in GameScene
-     */
-    updateGrounded() {
-        // Grounded state set by collision detection in GameScene.handleCollisionStart()
-        // No backup check needed - let Matter.js collision system handle it
-    }
-
-    /**
      * Process jump input
      */
     processJump(input) {
-        // Check for double jump powerup
+        const sprite = this.rapierBody.userData;
         const hasDoubleJump = this.scene.canDoubleJump &&
-                              this.scene.canDoubleJump(this.body.gameObject);
+                              this.scene.canDoubleJump(sprite);
 
-        // Can do air jump if: has powerup, in air, hasn't used air jump yet, and pressed jump
         const canAirJump = hasDoubleJump &&
                            !this.grounded &&
                            !this.airJumpUsed &&
@@ -119,25 +111,22 @@ export class CharacterCore {
                            this.canJump;
 
         if (canJumpNow || canAirJump) {
-            // Apply jump velocity directly
-            this.scene.matter.body.setVelocity(this.body, {
-                x: this.body.velocity.x,
-                y: PHYS.JUMP_FORCE
-            });
+            const vel = this.rapierBody.linvel();
+            this.rapierBody.setLinvel({ x: vel.x, y: PHYS.JUMP_FORCE }, true);
 
             this.jumpBuffer = 0;
             this.coyoteTime = 0;
             this.canJump = false;
             this.grounded = false;
 
-            // Mark air jump as used if this was an air jump
             if (canAirJump) {
                 this.airJumpUsed = true;
             }
 
-            // Sound effect with spatial audio
-            if (this.scene.playSpatialSound) {
-                this.scene.playSpatialSound('sfx-jump', this.body.position.x, this.body.position.y, 0.3);
+            // Sound
+            if (!this.suppressSounds && this.scene.playSpatialSound) {
+                const pos = this.rapierBody.translation();
+                this.scene.playSpatialSound('sfx-jump', pos.x, pos.y, 0.3);
             }
 
             return true;
@@ -146,73 +135,71 @@ export class CharacterCore {
     }
 
     /**
-     * Process horizontal movement
+     * Process horizontal movement (velocity-based for responsive platformer feel)
      */
     processMovement(input, delta, onRope) {
-        const body = this.body;
-        const velocity = body.velocity;
+        const vel = this.rapierBody.linvel();
+        const sprite = this.rapierBody.userData;
 
-        // Get speed multiplier from powerup (if available)
+        // Get speed multiplier from powerup
         const speedMult = this.scene.getSpeedMultiplier ?
-            this.scene.getSpeedMultiplier(body.gameObject) : 1;
+            this.scene.getSpeedMultiplier(sprite) : 1;
 
-        // Use different force based on state: ground, air, or rope
-        let force;
-        if (onRope) {
-            force = PHYS.AIR_CONTROL * 1.5 * speedMult;  // На веревке (раскачивание)
-        } else if (this.grounded) {
-            force = PHYS.MOVE_FORCE * speedMult;          // На земле (полная сила)
-        } else {
-            force = PHYS.AIR_CONTROL * speedMult;         // В воздухе (уменьшенная)
-        }
+        const maxSpeed = PHYS.MAX_SPEED_X * speedMult;
 
         if (input.direction !== 0) {
-            // Apply force for movement
-            this.scene.matter.body.applyForce(body, body.position, {
-                x: input.direction * force,
-                y: 0
-            });
+            // Target velocity based on input
+            const targetVx = onRope
+                ? input.direction * maxSpeed * 0.9
+                : input.direction * maxSpeed;
 
+            // Acceleration rate: faster on ground, slower in air
+            const accelRate = this.grounded ? PHYS.GROUND_ACCEL : PHYS.AIR_ACCEL;
+
+            // Lerp toward target velocity
+            const newVx = vel.x + (targetVx - vel.x) * accelRate;
+            this.rapierBody.setLinvel({ x: newVx, y: vel.y }, true);
             this.facingRight = input.direction > 0;
+        } else if (this.grounded) {
+            // No input + grounded → apply friction
+            const newVx = vel.x * PHYS.GROUND_FRICTION;
+            if (Math.abs(newVx) < 1) {
+                this.rapierBody.setLinvel({ x: 0, y: vel.y }, true);
+            } else {
+                this.rapierBody.setLinvel({ x: newVx, y: vel.y }, true);
+            }
         }
-        // Natural friction handles deceleration (small sliding is intentional)
+        // In air with no input → keep momentum (no air friction)
     }
 
     /**
      * Limit velocity to prevent infinite acceleration
      */
     limitVelocity() {
-        const vx = this.body.velocity.x;
-        const vy = this.body.velocity.y;
+        const vel = this.rapierBody.linvel();
+        const sprite = this.rapierBody.userData;
 
-        // Get speed multiplier from powerup (if available)
         const speedMult = this.scene.getSpeedMultiplier ?
-            this.scene.getSpeedMultiplier(this.body.gameObject) : 1;
+            this.scene.getSpeedMultiplier(sprite) : 1;
 
         const maxSpeedX = PHYS.MAX_SPEED_X * speedMult;
 
-        let clampedVx = vx;
-        let clampedVy = vy;
+        let clampedVx = vel.x;
+        let clampedVy = vel.y;
 
-        // Clamp horizontal speed (with powerup multiplier)
-        if (Math.abs(vx) > maxSpeedX) {
-            clampedVx = Math.sign(vx) * maxSpeedX;
+        if (Math.abs(vel.x) > maxSpeedX) {
+            clampedVx = Math.sign(vel.x) * maxSpeedX;
         }
-
-        // Clamp fall speed
-        if (vy > PHYS.MAX_SPEED_Y) {
+        if (vel.y > PHYS.MAX_SPEED_Y) {
             clampedVy = PHYS.MAX_SPEED_Y;
         }
 
-        if (clampedVx !== vx || clampedVy !== vy) {
-            this.scene.matter.body.setVelocity(this.body, {
-                x: clampedVx,
-                y: clampedVy
-            });
+        if (clampedVx !== vel.x || clampedVy !== vel.y) {
+            this.rapierBody.setLinvel({ x: clampedVx, y: clampedVy }, true);
         }
     }
 
-    // === HOOK / GRAPPLE (Matter.js constraints) ===
+    // === HOOK / GRAPPLE (manual distance constraint) ===
 
     /**
      * Launch hook toward target
@@ -221,28 +208,26 @@ export class CharacterCore {
         if (this.hookState !== 'IDLE' || this.hookCooldown > 0) return false;
         if (!this.scene) return false;
 
-        const dx = targetX - this.body.position.x;
-        const dy = targetY - this.body.position.y;
+        const pos = this.rapierBody.translation();
+        const dx = targetX - pos.x;
+        const dy = targetY - pos.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < 10) return false;
         if (dist > PHYS.HOOK_RANGE) return false;
 
-        // Normalize direction
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // Start hook flying
-        this.hookPos.x = this.body.position.x;
-        this.hookPos.y = this.body.position.y;
+        this.hookPos.x = pos.x;
+        this.hookPos.y = pos.y;
         this.hookVel.x = nx * PHYS.HOOK_SPEED;
         this.hookVel.y = ny * PHYS.HOOK_SPEED;
         this.hookState = 'FLYING';
         this.hookCooldown = PHYS.HOOK_COOLDOWN;
 
-        // Sound effect with spatial audio
-        if (this.scene.playSpatialSound) {
-            this.scene.playSpatialSound('sfx-hook-fired', this.body.position.x, this.body.position.y, 0.2);
+        if (!this.suppressSounds && this.scene.playSpatialSound) {
+            this.scene.playSpatialSound('sfx-hook-fired', pos.x, pos.y, 0.2);
         }
 
         return true;
@@ -252,7 +237,6 @@ export class CharacterCore {
      * Process hook logic each frame
      */
     processHook(input, delta) {
-        // Toggle: press to launch or release
         if (input.hookJustPressed) {
             if (this.hookState === 'IDLE' && input.hookTarget) {
                 this.launchHook(input.hookTarget.x, input.hookTarget.y);
@@ -281,31 +265,26 @@ export class CharacterCore {
     updateFlyingHook(delta) {
         const frames = delta / 16.67;
 
-        // Save position before moving (last known air position = surface point)
-        const prevX = this.hookPos.x;
-        const prevY = this.hookPos.y;
-
-        // Move hook
         this.hookPos.x += this.hookVel.x * frames;
         this.hookPos.y += this.hookVel.y * frames;
 
-        // Apply gravity to hook
+        // Gravity on hook projectile
         this.hookVel.y += 0.3 * frames;
 
         // Check collision with tilemap
         if (this.scene.platformLayer) {
             const tile = this.scene.platformLayer.getTileAtWorldXY(this.hookPos.x, this.hookPos.y);
             if (tile && tile.index > 0) {
-                // Attach at tile center (visually inside the tile texture)
                 this.attachHook(tile.getCenterX(), tile.getCenterY());
                 return true;
             }
         }
 
         // Check range
+        const pos = this.rapierBody.translation();
         const dist = Math.hypot(
-            this.hookPos.x - this.body.position.x,
-            this.hookPos.y - this.body.position.y
+            this.hookPos.x - pos.x,
+            this.hookPos.y - pos.y
         );
 
         if (dist > PHYS.HOOK_RANGE) {
@@ -316,140 +295,155 @@ export class CharacterCore {
     }
 
     /**
-     * Attach hook and create constraint
+     * Attach hook — store anchor position and calculate rope length
      */
     attachHook(anchorX, anchorY) {
         if (!this.scene) return;
 
-        // Create static anchor body
-        this.hookAnchor = this.scene.matter.add.circle(anchorX, anchorY, 5, {
-            isStatic: true,
-            isSensor: true,
-            label: 'hookAnchor'
-        });
-
-        // Calculate initial rope length
-        this.ropeLength = Math.hypot(
-            anchorX - this.body.position.x,
-            anchorY - this.body.position.y
-        );
-
-        // Create distance constraint (the rope!)
-        this.ropeConstraint = this.scene.matter.add.constraint(
-            this.body,
-            this.hookAnchor,
-            this.ropeLength,
-            PHYS.HOOK_STIFFNESS,
-            {
-                damping: PHYS.HOOK_DAMPING,
-                label: 'ropeConstraint'
-            }
-        );
-
+        this.hookAnchorPos = { x: anchorX, y: anchorY };
+        const pos = this.rapierBody.translation();
+        this.ropeLength = Math.hypot(anchorX - pos.x, anchorY - pos.y);
         this.hookState = 'ATTACHED';
-
-        // Sound effect with spatial audio
-        if (this.scene.playSpatialSound) {
-            this.scene.playSpatialSound('sfx-hook-attached', anchorX, anchorY, 0.3);
-        }
-
-        // Store anchor position for drawing
         this.hookPos.x = anchorX;
         this.hookPos.y = anchorY;
+        this._hookStuckTimer = 0;
+
+        if (!this.suppressSounds && this.scene.playSpatialSound) {
+            this.scene.playSpatialSound('sfx-hook-attached', anchorX, anchorY, 0.3);
+        }
     }
 
     /**
-     * Update while attached to rope
+     * Update while attached — distance constraint (replicates original Matter.js rope).
+     * Rope has stiffness, damping, auto-reel, and supplemental pull.
      */
     updateAttachedHook(input, delta) {
-        if (!this.ropeConstraint) {
+        if (!this.hookAnchorPos) {
             this.releaseHook();
             return false;
         }
 
-        // Jump pressed → release with velocity boost
+        const pos = this.rapierBody.translation();
+        const vel = this.rapierBody.linvel();
+
+        // Vector to anchor
+        const dx = this.hookAnchorPos.x - pos.x;
+        const dy = this.hookAnchorPos.y - pos.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Jump → release with swing momentum (original behavior)
         if (this.jumpBuffer > 0) {
-            const currentVel = this.body.velocity;
-            let vx = currentVel.x * 1.1;
-            let vy = Math.min(currentVel.y, PHYS.JUMP_FORCE * 0.95);
+            let swingVx = vel.x * 1.1;
+            let swingVy = Math.min(vel.y, PHYS.JUMP_FORCE * 0.95);
 
-            // Prevent tunneling: check tiles in velocity direction
+            // Anti-tunneling: check tiles ahead (from original)
+            // Convert px/s to per-frame distance for tile check (matching Matter.js original)
             if (this.scene.platformLayer) {
-                const bx = this.body.position.x;
-                const by = this.body.position.y;
-                const halfW = 25;  // half body width
-                const halfH = 30;  // half body height
+                const halfW = 25, halfH = 30;
+                const dt = 1 / 60;
+                const frameVx = swingVx * dt;
+                const frameVy = swingVy * dt;
 
-                // Check horizontal: tile ahead at body edge + 2 frames of travel
-                const checkX = bx + Math.sign(vx) * (halfW + Math.abs(vx) * 2);
-                const tileH = this.scene.platformLayer.getTileAtWorldXY(checkX, by);
-                if (tileH && tileH.index > 0) {
-                    vx = 0;
-                }
+                const checkX = pos.x + Math.sign(swingVx) * (halfW + Math.abs(frameVx) * 2);
+                const tileH = this.scene.platformLayer.getTileAtWorldXY(checkX, pos.y);
+                if (tileH && tileH.index > 0) swingVx = 0;
 
-                // Check vertical: tile above/below at body edge + 2 frames of travel
-                const checkY = by + Math.sign(vy) * (halfH + Math.abs(vy) * 2);
-                const tileV = this.scene.platformLayer.getTileAtWorldXY(bx, checkY);
+                const checkY = pos.y + Math.sign(swingVy) * (halfH + Math.abs(frameVy) * 2);
+                const tileV = this.scene.platformLayer.getTileAtWorldXY(pos.x, checkY);
                 if (tileV && tileV.index > 0) {
-                    // Don't block jump if the tile is the hook anchor tile
-                    // (we NEED to jump past it to climb up)
-                    const anchorTile = this.hookAnchor ?
-                        this.scene.platformLayer.getTileAtWorldXY(
-                            this.hookAnchor.position.x, this.hookAnchor.position.y
-                        ) : null;
+                    const anchorTile = this.scene.platformLayer.getTileAtWorldXY(
+                        this.hookAnchorPos.x, this.hookAnchorPos.y
+                    );
                     if (!anchorTile || tileV !== anchorTile) {
-                        vy = Math.max(vy, -3);
+                        swingVy = Math.max(swingVy, -180);
                     }
                 }
             }
 
-            this.scene.matter.body.setVelocity(this.body, { x: vx, y: vy });
-
+            this.rapierBody.setLinvel({ x: swingVx, y: swingVy }, true);
             this.jumpBuffer = 0;
             this.coyoteTime = 0;
             this.canJump = false;
+            this._hookStuckTimer = 0;
             this.releaseHook();
             this.hookCooldown = PHYS.HOOK_COOLDOWN * 0.5;
             return false;
         }
 
-        // Auto-reel: shorten rope when attached (Teeworlds-style)
-        // Bots can disable reel via hookNoReel flag to enable pendulum swing
-        const noReel = this.body.gameObject?.getData?.('hookNoReel');
+        // Auto-release: stuck near anchor with low speed for 500ms
+        if (!this._hookStuckTimer) this._hookStuckTimer = 0;
+        const speed = Math.hypot(vel.x, vel.y);
+        if (speed < 80 && dist < 80) {
+            this._hookStuckTimer += delta;
+            if (this._hookStuckTimer > 500) {
+                this._hookStuckTimer = 0;
+                this.releaseHook();
+                return false;
+            }
+        } else {
+            this._hookStuckTimer = 0;
+        }
+
+        // Auto-reel: shorten rope (bots can disable via hookNoReel)
+        const sprite = this.rapierBody.userData;
+        const noReel = sprite?.getData?.('hookNoReel');
         if (!noReel && this.ropeLength > PHYS.HOOK_MIN_LENGTH) {
             this.ropeLength -= PHYS.HOOK_REEL_SPEED;
-            this.ropeConstraint.length = this.ropeLength;
         }
 
-        // Supplemental pull toward anchor
-        const anchorPos = this.hookAnchor.position;
-        const dx = anchorPos.x - this.body.position.x;
-        const dy = anchorPos.y - this.body.position.y;
-        const dist = Math.hypot(dx, dy);
+        // Distance constraint: enforce rope length
+        if (dist > this.ropeLength && dist > 0) {
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            // Radial velocity (positive = toward anchor)
+            const radialVel = vel.x * nx + vel.y * ny;
+
+            // If moving away from anchor, remove outward velocity (stiffness)
+            if (radialVel < 0) {
+                const correction = -radialVel * PHYS.HOOK_STIFFNESS;
+                this.rapierBody.setLinvel({
+                    x: vel.x + nx * correction,
+                    y: vel.y + ny * correction
+                }, true);
+            }
+
+            // Apply damping to radial velocity
+            const currentVel = this.rapierBody.linvel();
+            const currentRadial = currentVel.x * nx + currentVel.y * ny;
+            if (Math.abs(currentRadial) > 0) {
+                const dampForce = -currentRadial * PHYS.HOOK_DAMPING;
+                this.rapierBody.setLinvel({
+                    x: currentVel.x + nx * dampForce,
+                    y: currentVel.y + ny * dampForce
+                }, true);
+            }
+
+            // Pull back to rope length (spring correction)
+            const overshoot = dist - this.ropeLength;
+            const pullVel = this.rapierBody.linvel();
+            this.rapierBody.setLinvel({
+                x: pullVel.x + nx * overshoot * 3,
+                y: pullVel.y + ny * overshoot * 3
+            }, true);
+        }
+
+        // Supplemental pull toward anchor (original: applyForce 0.008, scaled ×60 for px/s)
         if (dist > 0) {
-            this.scene.matter.body.applyForce(this.body, this.body.position, {
-                x: (dx / dist) * 0.008,
-                y: (dy / dist) * 0.008
-            });
+            this.rapierBody.applyImpulse({
+                x: (dx / dist) * 0.48,
+                y: (dy / dist) * 0.48
+            }, true);
         }
 
-        return true;  // On rope
+        return true; // On rope
     }
 
     /**
-     * Release hook and destroy constraint
+     * Release hook — just clear anchor
      */
     releaseHook() {
-        if (this.ropeConstraint && this.scene) {
-            this.scene.matter.world.removeConstraint(this.ropeConstraint);
-            this.ropeConstraint = null;
-        }
-
-        if (this.hookAnchor && this.scene) {
-            this.scene.matter.world.remove(this.hookAnchor);
-            this.hookAnchor = null;
-        }
-
+        this.hookAnchorPos = null;
         this.hookState = 'IDLE';
         this.hookPos.x = 0;
         this.hookPos.y = 0;
@@ -461,35 +455,18 @@ export class CharacterCore {
      * Apply knockback force
      */
     applyKnockback(fromX, fromY, force = PHYS.KNOCKBACK_FORCE) {
-        if (!this.body || !this.scene) return;
+        if (!this.rapierBody) return;
 
-        const dx = this.body.position.x - fromX;
-        const dy = this.body.position.y - fromY;
+        const pos = this.rapierBody.translation();
+        const dx = pos.x - fromX;
+        const dy = pos.y - fromY;
         const dist = Math.hypot(dx, dy);
 
         if (dist > 0) {
-            this.scene.matter.body.applyForce(this.body, this.body.position, {
+            this.rapierBody.applyImpulse({
                 x: (dx / dist) * force,
                 y: (dy / dist) * force * 0.5
-            });
-        }
-    }
-
-    /**
-     * Add ground contact (called on collision start)
-     */
-    addGroundContact() {
-        this.groundContacts++;
-        this.grounded = true;
-    }
-
-    /**
-     * Remove ground contact (called on collision end)
-     */
-    removeGroundContact() {
-        this.groundContacts = Math.max(0, this.groundContacts - 1);
-        if (this.groundContacts === 0) {
-            this.grounded = false;
+            }, true);
         }
     }
 
@@ -497,12 +474,52 @@ export class CharacterCore {
      * Get current hook attachment point for drawing
      */
     getHookAttachPoint() {
-        if (this.hookState === 'ATTACHED' && this.hookAnchor) {
-            return {
-                x: this.hookAnchor.position.x,
-                y: this.hookAnchor.position.y
-            };
+        if (this.hookState === 'ATTACHED' && this.hookAnchorPos) {
+            return { x: this.hookAnchorPos.x, y: this.hookAnchorPos.y };
         }
         return null;
+    }
+
+    // === TEEWORLDS v15: QUANTIZE FOR NETWORK DETERMINISM ===
+
+    /**
+     * Teeworlds round_to_int: banker's rounding
+     */
+    static roundToInt(f) {
+        return f > 0 ? Math.floor(f + 0.5) : Math.ceil(f - 0.5);
+    }
+
+    /**
+     * Quantize velocity for network determinism (Teeworlds-style)
+     * Called after each physics step to ensure client/server agreement
+     *
+     * NOTE: Position quantization removed — pixel coordinates don't work with
+     * integer rounding (small movements get lost, causing jitter/stuck).
+     * Velocity quantization (256 fixed-point) is sufficient for determinism.
+     */
+    quantize() {
+        const body = this.rapierBody;
+        if (!body) return;
+
+        const vel = body.linvel();
+
+        // Quantize velocity only (fixed-point 256 — 1/256 unit precision)
+        const qvx = CharacterCore.roundToInt(vel.x * 256) / 256;
+        const qvy = CharacterCore.roundToInt(vel.y * 256) / 256;
+
+        body.setLinvel({ x: qvx, y: qvy }, true);
+
+        // v18 FIX: Quantize hook position for ALL active states (not just FLYING)
+        // ATTACHED anchor position may have floating-point drift
+        if (this.hookState === 'FLYING') {
+            this.hookPos.x = CharacterCore.roundToInt(this.hookPos.x);
+            this.hookPos.y = CharacterCore.roundToInt(this.hookPos.y);
+        } else if (this.hookState === 'ATTACHED' && this.hookAnchorPos) {
+            // Quantize anchor position to prevent drift
+            this.hookAnchorPos.x = CharacterCore.roundToInt(this.hookAnchorPos.x);
+            this.hookAnchorPos.y = CharacterCore.roundToInt(this.hookAnchorPos.y);
+            // Quantize rope length to 1/16 precision
+            this.ropeLength = CharacterCore.roundToInt(this.ropeLength * 16) / 16;
+        }
     }
 }

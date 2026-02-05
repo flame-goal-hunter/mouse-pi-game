@@ -17,19 +17,18 @@ export class Pickup {
         this.emoji = scene.add.text(x, y, this.config.emoji, {
             fontSize: '28px'
         }).setOrigin(0.5);
-        this.emoji.setDepth(5);
+        this.emoji.setDepth(15);
 
-        // Create invisible Matter.js sensor for collision
-        this.sensor = scene.matter.add.circle(x, y, 18, {
-            isSensor: true,
-            isStatic: true,
-            label: `pickup-${type}`
-        });
+        // Create Rapier2D sensor for collision detection
+        if (scene.rapierWorld) {
+            this.rapierBody = scene.rapierWorld.createPickupSensor(x, y, 18, `pickup-${type}`);
+            // Link sprite data so collision handler can find this pickup
+            const sensorSprite = { pickupRef: this };
+            scene.rapierWorld.setBodySprite(this.rapierBody, sensorSprite);
+        }
 
-        // Link sensor to this pickup for collision detection
-        this.sensor.gameObject = this.emoji;
+        // Link pickup reference on emoji (for legacy compatibility)
         this.emoji.pickup = this;
-        this.sensor.pickup = this;
 
         // Floating animation
         scene.tweens.add({
@@ -123,9 +122,9 @@ export class Pickup {
             this.emoji.destroy();
             this.emoji = null;
         }
-        if (this.sensor && this.scene) {
-            this.scene.matter.world.remove(this.sensor);
-            this.sensor = null;
+        if (this.rapierBody && this.scene?.rapierWorld) {
+            this.scene.rapierWorld.removeBody(this.rapierBody);
+            this.rapierBody = null;
         }
     }
 }
