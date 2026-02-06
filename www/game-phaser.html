@@ -28,6 +28,7 @@
             height: 100%;
             overflow: hidden;
             background: #1a1a2e;
+            touch-action: none;
         }
 
         #game-container {
@@ -136,7 +137,8 @@
             body.game-active .mobile-controls {
                 display: flex !important;
             }
-            body.game-active #joystick-zone {
+            body.game-active #joystick-zone,
+            body.game-active #right-joystick-zone {
                 display: block !important;
             }
         }
@@ -173,56 +175,82 @@
             transform: scale(0.88);
         }
 
-        /* ========== Jump button — green, bottom-right ========== */
-        #btn-jump {
-            right: 2vw;
-            bottom: 2vh;
-            width: min(24vw, 100px);
-            height: min(24vw, 100px);
-            font-size: min(10vw, 42px);
-            color: rgba(255,255,255,0.85);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            background: radial-gradient(circle at 35% 35%, rgba(102,187,106,0.75), rgba(46,125,50,0.75));
-            border: 3px solid rgba(255,255,255,0.5);
-            box-shadow: 0 4px 15px rgba(46,125,50,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+        /* ========== Right joystick zone (mirror of left) ========== */
+        #right-joystick-zone {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            width: 45vw;
+            height: 45vh;
+            z-index: 10;
         }
 
-        #btn-jump .jump-arrow {
-            display: block;
-            width: 0;
-            height: 0;
-            border-left: min(4vw, 16px) solid transparent;
-            border-right: min(4vw, 16px) solid transparent;
-            border-bottom: min(5.5vw, 22px) solid #a5d6a7;
-            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+        /* Blue/ice style for right joystick */
+        #right-joystick-zone .back {
+            background: radial-gradient(circle, rgba(30,80,180,0.75) 0%, rgba(20,50,130,0.85) 100%) !important;
+            border: 2px solid rgba(100,160,255,0.6) !important;
+            box-shadow: 0 4px 20px rgba(41,98,255,0.5), inset 0 0 20px rgba(0,0,0,0.3) !important;
         }
 
-        /* ========== Hook button — centered above Jump ========== */
+        #right-joystick-zone .front {
+            background: radial-gradient(circle at 35% 35%, #90caf9, #42a5f5) !important;
+            border: 2px solid rgba(255,255,255,0.7) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.5) !important;
+        }
+
+        /* Hint icons on right joystick */
+        #right-joystick-zone .back::after {
+            content: '❄️';
+            position: absolute;
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        #right-joystick-zone .front::after {
+            content: '⬆';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 22px;
+            font-weight: bold;
+            color: rgba(255,255,255,0.6);
+            pointer-events: none;
+        }
+
+        /* ========== Hook button ========== */
         #btn-hook {
-            right: calc(2vw + (min(24vw, 100px) - min(20vw, 88px)) / 2);
-            bottom: calc(2vh + min(24vw, 100px) + 12px);
-            width: min(20vw, 88px);
-            height: min(20vw, 88px);
-            font-size: min(7vw, 32px);
-            color: rgba(255,255,255,0.85);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            background: radial-gradient(circle at 35% 35%, rgba(253,203,110,0.75), rgba(225,112,85,0.75));
-            border: 3px solid rgba(255,255,255,0.45);
-            box-shadow: 0 4px 15px rgba(225,112,85,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+            position: fixed;
+            right: 8px;
+            bottom: calc(45vh - 55px);
+            width: 72px;
+            height: 72px;
+            background: radial-gradient(circle at 35% 35%, #ffd54f, #ff8f00);
+            border: 2px solid rgba(255,255,255,0.5);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            font-size: 28px;
+            z-index: 10;
         }
 
-        /* ========== Fire button — circular aim pad, centered vertically with Jump ========== */
-        #btn-fire {
-            right: calc(2vw + min(24vw, 100px) + 12px);
-            bottom: 2vh;
-            width: min(24vw, 100px);
-            height: min(24vw, 100px);
-            font-size: min(8vw, 34px);
-            color: rgba(255,255,255,0.85);
-            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            background: radial-gradient(circle at 35% 35%, rgba(255,107,107,0.75), rgba(200,50,50,0.75));
-            border: 3px solid rgba(255,255,255,0.4);
-            box-shadow: 0 4px 15px rgba(200,50,50,0.5), inset 0 1px 2px rgba(255,255,255,0.3);
+        /* ========== Reload indicator ========== */
+        #hud-player-reload {
+            width: 80px;
+            height: 4px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 2px;
+            margin-top: 3px;
+            overflow: hidden;
+        }
+
+        #hud-player-reload .reload-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #90caf9, #42a5f5);
+            border-radius: 2px;
         }
     </style>
 </head>
@@ -234,6 +262,7 @@
         <div id="hud-player">
             <div class="hud-name" id="hud-player-name"></div>
             <div class="hud-hearts" id="hud-player-hearts"></div>
+            <div id="hud-player-reload"><div class="reload-fill"></div></div>
         </div>
         <div id="hud-center">
             <div class="hud-score" id="hud-score">0 : 0</div>
@@ -246,9 +275,8 @@
 
     <!-- Mobile controls (hidden until body.game-active + mobile) -->
     <div id="joystick-zone" class="mobile-controls"></div>
-    <div id="btn-jump" class="mobile-controls game-btn"><span class="jump-arrow"></span></div>
-    <div id="btn-hook" class="mobile-controls game-btn">🪝</div>
-    <div id="btn-fire" class="mobile-controls game-btn">❄️</div>
+    <div id="right-joystick-zone" class="mobile-controls"></div>
+    <button id="btn-hook" class="mobile-controls game-btn">🪝</button>
 
     <!-- Phaser 3 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>

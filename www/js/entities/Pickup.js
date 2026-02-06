@@ -16,7 +16,8 @@ export class Pickup {
 
         // Create emoji text
         this.emoji = scene.add.text(x, y, this.config.emoji, {
-            fontSize: '28px'
+            fontSize: '28px',
+            padding: { top: 4 }
         }).setOrigin(0.5);
         this.emoji.setDepth(15);
 

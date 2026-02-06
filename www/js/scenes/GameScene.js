@@ -100,7 +100,7 @@ export class GameScene extends Phaser.Scene {
         // === CAMERA (ДО Input и UI, чтобы zoom был доступен!) ===
         this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-        this.cameras.main.setZoom(0.7);
+        this.cameras.main.setZoom(0.6);
 
         // === SNOWFALL (world-space via custom emitZone) ===
         const cam = this.cameras.main;
@@ -497,6 +497,8 @@ export class GameScene extends Phaser.Scene {
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('score', 0);
         character.setData('facingRight', true);
+        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
+        character.setData('reloading', false);
         character.animPrefix = `p${charNum}`;
 
         return character;
@@ -880,6 +882,7 @@ export class GameScene extends Phaser.Scene {
         this.hudScore = document.getElementById('hud-score');
         this.hudPause = document.getElementById('hud-pause');
         this.hudOpponents = document.getElementById('hud-opponents');
+        this.hudReloadFill = document.querySelector('#hud-player-reload .reload-fill');
 
         // Player name
         if (this.hudPlayerName) this.hudPlayerName.textContent = '🐭 ' + (window.gameConfig?.nickname || GAME.PLAYER_NAME);
@@ -1054,6 +1057,11 @@ export class GameScene extends Phaser.Scene {
         if (victim.getData('isDying')) return;
         victim.setData('isDying', true);
 
+        // Release hook immediately on death
+        if (victim.core) {
+            victim.core.releaseHook();
+        }
+
         // Guest: visual ragdoll effect, state management via snapshot
         if (this.gameMode === 'join') {
             this.showDeathEffect(victim.x, victim.y);
@@ -1082,9 +1090,16 @@ export class GameScene extends Phaser.Scene {
 
         // === RAGDOLL EFFECT (host + solo) ===
 
-        // 1. Knockback from killer (using Rapier impulse)
-        if (killer && victim.core) {
-            victim.core.applyKnockback(killer.x, killer.y, PHYS.KNOCKBACK_FORCE * RAGDOLL.KNOCKBACK_BOOST * 2);
+        // 1. Strong knockback + upward launch for dramatic ragdoll
+        if (killer && victim.core && victim.core.body) {
+            const body = victim.core.body;
+            const dx = body.x - killer.x;
+            const dy = body.y - killer.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            // Horizontal: fly away from killer at ~400 px/s
+            body.vx = (dx / dist) * 400;
+            // Upward launch: ~600 px/s (close to jump force)
+            body.vy = -600;
         }
 
         // 2. Visual tumbling via tween (Rapier body stays locked rotation)
@@ -1105,7 +1120,22 @@ export class GameScene extends Phaser.Scene {
         // 5. Hide name label
         if (victim.nameLabel) victim.nameLabel.setVisible(false);
 
-        // 6. Slow-mo effect (local visual only, not affecting network tick rate)
+        // 6. Camera: zoom out to show ragdoll flight
+        const cam = this.cameras.main;
+        const normalZoom = 0.6;
+        const deathZoom = 0.45;
+        // Temporarily follow victim if it's not the player
+        if (victim !== this.player) {
+            cam.startFollow(victim, true, 0.1, 0.1);
+        }
+        this.tweens.add({
+            targets: cam,
+            zoom: deathZoom,
+            duration: 400,
+            ease: 'Sine.easeOut'
+        });
+
+        // 7. Slow-mo effect (local visual only, not affecting network tick rate)
         const isRelevant = (victim === this.player) || (killer === this.player);
         if (isRelevant && !this._slowmoActive) {
             this._slowmoActive = true;
@@ -1131,8 +1161,17 @@ export class GameScene extends Phaser.Scene {
             this._slowmoTimer = restoreTimer;
         }
 
-        // 7. After DURATION - fade out and handle round logic
+        // 8. After DURATION - fade out, restore camera, handle round logic
         this.time.delayedCall(RAGDOLL.DURATION, () => {
+            // Restore camera: follow player, zoom back
+            cam.startFollow(this.player, true, 0.1, 0.1);
+            this.tweens.add({
+                targets: cam,
+                zoom: normalZoom,
+                duration: 400,
+                ease: 'Sine.easeIn'
+            });
+
             this.tweens.add({
                 targets: victim,
                 alpha: 0,
@@ -1343,10 +1382,13 @@ export class GameScene extends Phaser.Scene {
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
+        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
+        character.setData('reloading', false);
         character.setAngle(0);
         character.setActive(true);
         character.setVisible(true);
         if (character.nameLabel) character.nameLabel.setVisible(true);
+        if (character === this.player) this.updateReloadBar();
     }
 
     respawnCharacter(character) {
@@ -1385,10 +1427,13 @@ export class GameScene extends Phaser.Scene {
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
+        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
+        character.setData('reloading', false);
         character.setAngle(0);
         character.setActive(true);
         character.setVisible(true);
         if (character.nameLabel) character.nameLabel.setVisible(true);
+        if (character === this.player) this.updateReloadBar();
 
         this.updateHUD();
     }
@@ -1778,7 +1823,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         // 2. Handle one-shot actions BEFORE physics loop (once per frame)
-        if (playerInput.fire) {
+        if (playerInput.fire && !this.player.getData('isDying')) {
             this.shootSnowball(this.player, playerInput.fireAngle);
         }
         if (guestInput?.fire) {
@@ -1851,6 +1896,7 @@ export class GameScene extends Phaser.Scene {
         // 7. Snowballs, pickups, powerups
         this.updateSnowballs();
         this.updatePowerups(delta);
+        this.updateAmmoRegen();
 
         // 8. Draw hooks
         this.drawHooks();
@@ -2587,10 +2633,16 @@ export class GameScene extends Phaser.Scene {
     updateCharacter(character, input, delta) {
         if (!character.active) return;
 
-        // Force upright position while alive (prevents tipping on corners)
-        if (!character.getData('isDying')) {
-            character.setAngle(0);
+        // During ragdoll: physics runs (for knockback flight) but with no input
+        if (character.getData('isDying')) {
+            if (character.core) {
+                const noInput = { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
+                character.core.tick(noInput, delta);
+            }
+            return;
         }
+
+        character.setAngle(0);
 
         const core = character.core;
 
@@ -2837,11 +2889,34 @@ export class GameScene extends Phaser.Scene {
     // === SNOWBALLS ===
 
     shootSnowball(shooter, angle = null) {
-        // Cooldown check
         const now = Date.now();
+
+        // Reloading — can't fire
+        if (shooter.getData('reloading')) return;
+
+        // Fire rate (between individual shots)
         const lastFireTime = shooter.getData('lastFireTime') || 0;
-        if (now - lastFireTime < PHYS.SNOWBALL_COOLDOWN) return;
+        if (now - lastFireTime < PHYS.SNOWBALL_FIRE_RATE) return;
+
+        // Ammo check
+        let ammo = shooter.getData('ammo');
+        if (ammo === undefined || ammo === null) ammo = PHYS.SNOWBALL_MAGAZINE;
+        if (ammo <= 0) return;
+
+        // Fire!
+        ammo--;
+        shooter.setData('ammo', ammo);
         shooter.setData('lastFireTime', now);
+
+        // Update reload bar (local player only)
+        if (shooter === this.player) {
+            this.updateReloadBar();
+        }
+
+        // Magazine empty — start reload
+        if (ammo <= 0) {
+            this.startReload(shooter);
+        }
 
         // Determine angle: use provided angle, or default to facing direction (horizontal)
         if (angle === null || angle === undefined) {
@@ -2905,6 +2980,61 @@ export class GameScene extends Phaser.Scene {
             this.destroySnowball(snowball);
         });
         snowball.setData('destroyTimer', destroyTimer);
+    }
+
+    startReload(character) {
+        character.setData('reloading', true);
+
+        // Reload bar animation (local player only)
+        if (character === this.player && this.hudReloadFill) {
+            this.hudReloadFill.style.transition = 'none';
+            this.hudReloadFill.style.width = '0%';
+            this.hudReloadFill.offsetWidth; // force reflow
+            this.hudReloadFill.style.transition = `width ${PHYS.SNOWBALL_RELOAD_TIME}ms linear`;
+            this.hudReloadFill.style.width = '100%';
+        }
+
+        this.time.delayedCall(PHYS.SNOWBALL_RELOAD_TIME, () => {
+            if (character.active) {
+                character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
+                character.setData('reloading', false);
+            }
+        });
+    }
+
+    updateReloadBar() {
+        if (!this.hudReloadFill) return;
+        const ammo = this.player.getData('ammo') ?? PHYS.SNOWBALL_MAGAZINE;
+        const pct = (ammo / PHYS.SNOWBALL_MAGAZINE) * 100;
+        this.hudReloadFill.style.transition = 'none';
+        this.hudReloadFill.style.width = pct + '%';
+    }
+
+    _regenAmmoFor(character) {
+        if (!character || !character.active) return;
+        if (character.getData('reloading')) return;
+        const ammo = character.getData('ammo') ?? PHYS.SNOWBALL_MAGAZINE;
+        if (ammo >= PHYS.SNOWBALL_MAGAZINE) return;
+
+        const now = Date.now();
+        const lastFire = character.getData('lastFireTime') || 0;
+        if (now - lastFire < PHYS.SNOWBALL_REGEN_DELAY) return;
+
+        const lastRegen = character.getData('lastRegenTime') || 0;
+        if (now - lastRegen < PHYS.SNOWBALL_REGEN_RATE) return;
+
+        character.setData('ammo', ammo + 1);
+        character.setData('lastRegenTime', now);
+
+        if (character === this.player) this.updateReloadBar();
+    }
+
+    updateAmmoRegen() {
+        this._regenAmmoFor(this.player);
+        if (this.guestPlayer) this._regenAmmoFor(this.guestPlayer);
+        if (this.bots) {
+            this.bots.forEach(bot => this._regenAmmoFor(bot));
+        }
     }
 
     updateSnowballs() {

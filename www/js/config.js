@@ -31,7 +31,11 @@ export const PHYS = {
     SNOWBALL_GRAVITY_SCALE: 0.5,  // Gravity multiplier for snowballs (lighter than characters)
     SNOWBALL_BOUNCE: 0.3,         // Bounce off walls/platforms
     SNOWBALL_LIFETIME: 3000,      // ms before auto-destroy
-    SNOWBALL_COOLDOWN: 400,       // ms between shots
+    SNOWBALL_FIRE_RATE: 250,      // ms between shots
+    SNOWBALL_MAGAZINE: 15,         // snowballs per magazine
+    SNOWBALL_RELOAD_TIME: 2000,    // ms to reload when magazine empty
+    SNOWBALL_REGEN_DELAY: 1000,    // ms after last shot before passive regen starts
+    SNOWBALL_REGEN_RATE: 100,      // ms per ammo regen (1 snowball every 100ms)
 
     // Coyote time & jump buffer
     COYOTE_TIME: 100,       // ms to jump after leaving ground
@@ -108,7 +112,7 @@ export const PICKUPS = {
 
 // Ragdoll settings (death animation)
 export const RAGDOLL = {
-    DURATION: 1500,         // ms before fade out
+    DURATION: 2200,         // ms before fade out
     FADE_TIME: 400,         // ms for fade out animation
     TUMBLE_SPEED: 0.15,     // angular velocity on death
     KNOCKBACK_BOOST: 1.5,   // multiply knockback on death
