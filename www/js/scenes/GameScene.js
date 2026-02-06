@@ -1925,21 +1925,28 @@ export class GameScene extends Phaser.Scene {
         // 3. Send input to host
         network?.sendInput(playerInput);
 
-        // 3.5. Instant snowball visual feedback (server creates real snowball)
+        // v28: Local snowball visual removed — server snowball arrives via syncSnowballVisuals()
+        // within 1-2 frames, no need for duplicate local preview.
+        // Play shot sound locally (server event filtered by dist<50)
         if (playerInput.fire) {
-            const dirX = playerInput.fireAngle != null
-                ? Math.sign(Math.cos(playerInput.fireAngle))
-                : (this.player.getData('facingRight') ? 1 : -1);
-            this.createLocalSnowballVisual(dirX || 1);
+            const now = Date.now();
+            if (now - (this._lastLocalSnowballTime || 0) >= 100) {
+                this._lastLocalSnowballTime = now;
+                this.playSpatialSound('sfx-snowball-shot', this.player.x, this.player.y, 0.4);
+            }
         }
 
         // 4. OWN character: FIXED TIMESTEP physics (local prediction)
         this._guestPhysicsAccum = (this._guestPhysicsAccum || 0) + (delta / 1000);
         this._guestPhysicsAccum = Math.min(this._guestPhysicsAccum, FIXED_DT_S * 4); // Cap at 4 frames
 
+        let guestFirstTick = true;
         while (this._guestPhysicsAccum >= FIXED_DT_S) {
-            this._updateLocalPlayer(playerInput, FIXED_DT_MS);
+            // v28 FIX: Clear one-shot flags on subsequent sub-ticks (same as host, line 1817)
+            const tickInput = guestFirstTick ? playerInput : { ...playerInput, hookJustPressed: false };
+            this._updateLocalPlayer(tickInput, FIXED_DT_MS);
             this._guestPhysicsAccum -= FIXED_DT_S;
+            guestFirstTick = false;
         }
 
         // 5. OTHER players: interpolation from snapshots
@@ -2140,7 +2147,7 @@ export class GameScene extends Phaser.Scene {
         this.network.clearAckedInputs(lastAckedSeq);
 
         // Always sync hook state from server
-        this._syncHookStateFromServer(myData);
+        this._syncHookStateFromServer(myData, lastAckedSeq);
 
         // v28: Calculate error from SimpleBody
         const body = this.player.simpleBody;
@@ -2181,6 +2188,10 @@ export class GameScene extends Phaser.Scene {
         body.vx = newVx;
         body.vy = newVy;
 
+        // v28 FIX: NaN guard — reset to server values if physics corrupted
+        if (!isFinite(body.vx) || !isFinite(body.vy)) { body.vx = serverVx; body.vy = serverVy; }
+        if (!isFinite(body.x) || !isFinite(body.y)) { body.x = myData.x; body.y = myData.y; this.player.setPosition(body.x, body.y); }
+
         // v28 FIX: Re-resolve collisions after position change to update grounded state
         this.predictionWorld._resolveCollisions(body);
 
@@ -2190,13 +2201,18 @@ export class GameScene extends Phaser.Scene {
     }
 
     /**
-     * v24: Always sync hook state from server
+     * v28: Sync hook state from server, respecting input acknowledgement
      */
-    _syncHookStateFromServer(serverData) {
+    _syncHookStateFromServer(serverData, lastAckedSeq) {
         const core = this.player.core;
         const serverState = serverData.hookState || 'IDLE';
 
-        // Always trust server for hook state
+        // v28 FIX: Don't kill local hook prediction if server hasn't processed our hook input yet
+        if (serverState === 'IDLE' && core.hookState !== 'IDLE') {
+            const hookSeq = this.network?.lastHookInputSeq || 0;
+            if (hookSeq > 0 && lastAckedSeq < hookSeq) return;
+        }
+
         core.hookState = serverState;
 
         if (serverState === 'ATTACHED' && serverData.hookAnchorPos) {
@@ -2409,6 +2425,14 @@ export class GameScene extends Phaser.Scene {
                         const dy = evt.y - this.player.y;
                         const dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist < 50) continue;  // Skip - this is our own sound
+
+                        // v28 FIX: Hook sounds emit from anchor, not player — also check anchor distance
+                        const core = this.player.core;
+                        if (core?.hookAnchorPos) {
+                            const hdx = evt.x - core.hookAnchorPos.x;
+                            const hdy = evt.y - core.hookAnchorPos.y;
+                            if (Math.sqrt(hdx * hdx + hdy * hdy) < 50) continue;
+                        }
                     }
                     this.playSpatialSound?.(evt.name, evt.x, evt.y, evt.vol || 0.5);
                 }
@@ -2453,6 +2477,11 @@ export class GameScene extends Phaser.Scene {
         for (const ss of serverSnowballs) {
             let sb = this.snowballs.find(s => s.getData('netId') === ss.id);
             if (!sb) {
+                // v28 FIX: Destroy local visual when server snowball arrives (prevents duplication)
+                if (this._localSnowballVisual?.active) {
+                    this._localSnowballVisual.destroy();
+                    this._localSnowballVisual = null;
+                }
                 // Create visual-only snowball (no physics body needed on guest)
                 sb = this.add.sprite(ss.x, ss.y, 'snowball');
                 sb.setScale(ss.hasFire ? 0.7 : 0.5);
@@ -2525,6 +2554,11 @@ export class GameScene extends Phaser.Scene {
         if (now - (this._lastLocalSnowballTime || 0) < 100) return;
         this._lastLocalSnowballTime = now;
 
+        // v28 FIX: Destroy previous local visual if still alive
+        if (this._localSnowballVisual?.active) {
+            this._localSnowballVisual.destroy();
+        }
+
         const dirX = fireDirection || (this.player.getData('facingRight') ? 1 : -1);
         const sb = this.add.sprite(
             this.player.x + dirX * 60,
@@ -2532,13 +2566,17 @@ export class GameScene extends Phaser.Scene {
             'snowball'
         );
         sb.setScale(0.5).setDepth(10);
+        this._localSnowballVisual = sb;
         // Animate flight and fade
         this.tweens.add({
             targets: sb,
             x: sb.x + dirX * 300,
             alpha: 0,
             duration: 400,
-            onComplete: () => sb.destroy()
+            onComplete: () => {
+                sb.destroy();
+                if (this._localSnowballVisual === sb) this._localSnowballVisual = null;
+            }
         });
         this.playSpatialSound('sfx-snowball-shot', this.player.x, this.player.y, 0.4);
     }

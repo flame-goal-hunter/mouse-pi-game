@@ -448,6 +448,11 @@ export class NetworkManager {
             this.inputHistory.shift();
         }
 
+        // v28 FIX: Track specific seq of hook input for targeted prediction protection
+        if (data.hookJustPressed) {
+            this.lastHookInputSeq = seq;
+        }
+
         // Reset pending pulses after sending
         this._pendingFire = false;
         this._pendingFireAngle = null;
@@ -509,7 +514,11 @@ export class NetworkManager {
             return { direction: 0, jump: false, hook: false, hookJustPressed: false, fire: false, fireAngle: null, strength: 1 };
         }
 
-        return { ...bestInput };
+        const result = { ...bestInput };
+        // v28 FIX: Consume one-shot flags from queue to prevent re-application on next tick
+        bestInput.hookJustPressed = false;
+        bestInput.fire = false;
+        return result;
     }
 
     // === GUEST: RENDER-BEHIND INTERPOLATION ===
