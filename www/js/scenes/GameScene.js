@@ -2207,9 +2207,15 @@ export class GameScene extends Phaser.Scene {
             if (hookSeq > 0 && lastAckedSeq < hookSeq) return;
         }
 
+        // Play attach sound only on FLYING→ATTACHED transition (natural hook hit)
+        // Not IDLE→ATTACHED (stale server snapshot after local release)
+        const wasFlying = core.hookState === 'FLYING';
         core.hookState = serverState;
 
         if (serverState === 'ATTACHED' && serverData.hookAnchorPos) {
+            if (wasFlying && core._canPlaySound('hookAttached') && this.playSpatialSound) {
+                this.playSpatialSound('sfx-hook-attached', serverData.hookAnchorPos.x, serverData.hookAnchorPos.y, 0.3);
+            }
             core.hookAnchorPos = { ...serverData.hookAnchorPos };
             core.ropeLength = serverData.ropeLength || 0;
             core.hookPos = serverData.hookPos ? { ...serverData.hookPos } : { x: 0, y: 0 };
