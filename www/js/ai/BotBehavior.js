@@ -220,14 +220,14 @@ function reactiveHookTick(bot, targetX, targetY, input, tick) {
         if (release === 'JUMP') {
             if (bot.setData) bot.setData('hookNoReel', false);
             input.jump = true;
-            input.hookJustPressed = true;
+            input.hook = true;
             tick.blackboard.set('reactiveHookTimer', 0);
             tick.blackboard.set('reactiveHookCooldown', 500);
             return 'RELEASED';
         }
         if (release === 'RELEASE') {
             if (bot.setData) bot.setData('hookNoReel', false);
-            input.hookJustPressed = true;
+            input.hook = true;
             tick.blackboard.set('reactiveHookTimer', 0);
             tick.blackboard.set('reactiveHookCooldown', 800);
             return 'RELEASED';
@@ -519,7 +519,7 @@ class SwingOnHook extends b3.Action {
 
         // 1. Landed — release hook
         if (core.grounded && hookTime > 600) {
-            input.hookJustPressed = true;
+            input.hook = true;
             tick.blackboard.set('hookTime', 0);
             return b3.SUCCESS;
         }
@@ -931,7 +931,7 @@ class PatrolPlatforms extends b3.Action {
                 const randomTargetY = bot.y - 300;
                 const hookDir = findBestHookDirection(bot, randomTargetX, randomTargetY, scene.platformLayer);
                 if (hookDir) {
-                    input.hookJustPressed = true;
+                    input.hook = true;
                     input.hookTarget = hookDir;
                 }
             }
@@ -1045,7 +1045,7 @@ function reactiveMove(bot, targetX, targetY, input, tick) {
                 const hookDir = findBestHookDirection(
                     bot, targetX, targetY, scene.platformLayer, overHole);
                 if (hookDir) {
-                    input.hookJustPressed = true;
+                    input.hook = true;
                     input.hookTarget = hookDir;
                     tick.blackboard.set('reactiveHookTimer', 0);
                 }
@@ -1061,7 +1061,7 @@ function reactiveMove(bot, targetX, targetY, input, tick) {
             const hookDir = findBestHookDirection(
                 bot, bot.x, bot.y - 300, scene.platformLayer, true);
             if (hookDir) {
-                input.hookJustPressed = true;
+                input.hook = true;
                 input.hookTarget = hookDir;
             }
         }
@@ -1376,7 +1376,7 @@ class TriNavPatrol extends b3.Action {
                 const randomTargetY = bot.y - 300;
                 const hookDir = findBestHookDirection(bot, randomTargetX, randomTargetY, scene.platformLayer);
                 if (hookDir) {
-                    input.hookJustPressed = true;
+                    input.hook = true;
                     input.hookTarget = hookDir;
                 }
             }
@@ -1443,7 +1443,7 @@ function fallbackWalk(tick, bot, targetX, input) {
                         bot.x + (Math.random() > 0.5 ? 500 : -500),
                         bot.y - 300, scene.platformLayer);
                     if (hookDir) {
-                        input.hookJustPressed = true;
+                        input.hook = true;
                         input.hookTarget = hookDir;
                     }
                 }
@@ -1532,7 +1532,7 @@ function executeSegment(tick, bot, segment, input) {
                             bot.x + (Math.random() > 0.5 ? 500 : -500),
                             bot.y - 300, scene.platformLayer);
                         if (hookDir) {
-                            input.hookJustPressed = true;
+                            input.hook = true;
                             input.hookTarget = hookDir;
                         }
                     }
@@ -1884,7 +1884,7 @@ export class BotBehavior {
         const input = {
             direction: 0,
             jump: false,
-            hookJustPressed: false,
+            hook: false,
             hookTarget: null,
             fire: false,
             fireAngle: null

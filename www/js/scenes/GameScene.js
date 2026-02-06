@@ -1760,7 +1760,6 @@ export class GameScene extends Phaser.Scene {
                 direction: playerInput.direction || 0,
                 jump: !!playerInput.jump,
                 hook: !!playerInput.hook,
-                hookJustPressed: !!playerInput.hookJustPressed,
                 hookTarget: playerInput.hookTarget,
                 fire: false  // fire handled by events
             });
@@ -1789,11 +1788,6 @@ export class GameScene extends Phaser.Scene {
                 if (remoteInput) remoteInput.fire = false;
             }
         }
-        if (guestInput?.hookJustPressed && this.network) {
-            const remoteInput = this.network.remoteInputs.get('guest');
-            if (remoteInput) remoteInput.hookJustPressed = false;
-        }
-
         // 3. Fixed timestep physics loop (deterministic)
         this._physicsAccumulator = (this._physicsAccumulator || 0) + (delta / 1000) * (this._physicsTimeScale || 1);
         this._physicsAccumulator = Math.min(this._physicsAccumulator, FIXED_DT_S * 4); // prevent spiral of death
@@ -1813,10 +1807,10 @@ export class GameScene extends Phaser.Scene {
                 tickGuestInput.hookTarget = this.findHookTarget(this.guestPlayer);
             }
 
-            // Clear one-shot inputs on subsequent sub-ticks
+            // Clear fire one-shot on subsequent sub-ticks (hook uses edge detection in CharacterCore)
             if (!firstTick) {
-                playerInput.hookJustPressed = false;
-                if (tickGuestInput) tickGuestInput = { ...tickGuestInput, hookJustPressed: false };
+                playerInput.fire = false;
+                if (tickGuestInput) tickGuestInput = { ...tickGuestInput, fire: false };
             }
 
             this.updateCharacter(this.player, playerInput, FIXED_DT_MS);
@@ -1942,8 +1936,8 @@ export class GameScene extends Phaser.Scene {
 
         let guestFirstTick = true;
         while (this._guestPhysicsAccum >= FIXED_DT_S) {
-            // v28 FIX: Clear one-shot flags on subsequent sub-ticks (same as host, line 1817)
-            const tickInput = guestFirstTick ? playerInput : { ...playerInput, hookJustPressed: false };
+            // Clear fire one-shot on subsequent sub-ticks (hook uses edge detection in CharacterCore)
+            const tickInput = guestFirstTick ? playerInput : { ...playerInput, fire: false };
             this._updateLocalPlayer(tickInput, FIXED_DT_MS);
             this._guestPhysicsAccum -= FIXED_DT_S;
             guestFirstTick = false;

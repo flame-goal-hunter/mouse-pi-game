@@ -32,6 +32,7 @@ export class CharacterCore {
         this.hookAnchorPos = null;  // { x, y } — anchor coordinates
         this.ropeLength = 0;
         this.hookCooldown = 0;
+        this._prevHookInput = false;  // Teeworlds-style edge detection (replaces hookJustPressed)
 
         // Sound suppression (true for guest prediction — sounds come from host events)
         this.suppressSounds = false;
@@ -72,7 +73,7 @@ export class CharacterCore {
 
     /**
      * Main physics tick - called each frame
-     * @param {Object} input - { direction, jump, hookJustPressed, hookTarget, fire }
+     * @param {Object} input - { direction, jump, hook, hookTarget, fire }
      * @param {number} delta - Frame time in ms
      */
     tick(input, delta) {
@@ -243,7 +244,13 @@ export class CharacterCore {
      * Process hook logic each frame
      */
     processHook(input, delta) {
-        if (input.hookJustPressed) {
+        // Teeworlds-style: edge detection inside CharacterCore
+        // Detects false→true transition of input.hook (continuous state)
+        // Idempotent: same input passed multiple times won't re-trigger
+        const hookEdge = !!input.hook && !this._prevHookInput;
+        this._prevHookInput = !!input.hook;
+
+        if (hookEdge) {
             if (this.hookState === 'IDLE' && input.hookTarget) {
                 this.launchHook(input.hookTarget.x, input.hookTarget.y);
             } else if (this.hookState === 'ATTACHED') {

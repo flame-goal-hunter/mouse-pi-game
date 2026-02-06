@@ -30,17 +30,15 @@ export class NetworkManager {
         this._bridgeHandler = null;
         this._remoteHelloReceived = false;
 
-        // Pulse buffering (fire/hookJustPressed are one-frame, throttle can miss them)
+        // Pulse buffering (fire is one-frame, throttle can miss it)
         this._pendingFire = false;
         this._pendingFireAngle = null;
-        this._pendingHookJust = false;
-        this._pendingHookTarget = null;
 
-        // Host input buffering (pulse-safe, like guest's _pendingFire)
-        this._hostInputCurrent = null;      // Current continuous state
-        this._hostPendingHookJust = false;  // Buffered one-shot: hook just pressed
-        this._hostPendingHookTarget = null; // Buffered hookTarget for hook press
-        this._hostPrevJump = false;         // Previous jump state (for edge detection)
+        // Hook edge tracking for seq-based prediction protection
+        this._prevHookSent = false;
+
+        // Host input buffering
+        this._hostInputCurrent = null;
 
         // === HOST (server) state ===
         this.remoteInputs = new Map();      // peerId → latest input from client
@@ -338,20 +336,14 @@ export class NetworkManager {
         }));
 
         // Teeworlds: include host input with tick it was applied at
+        // hook is continuous state — CharacterCore does edge detection internally
         const hostInput = this._hostInputCurrent ? {
             direction: this._hostInputCurrent.direction || 0,
             jump: !!this._hostInputCurrent.jump,
             hook: !!this._hostInputCurrent.hook,
-            hookJustPressed: this._hostPendingHookJust,
-            hookTarget: this._hostPendingHookJust
-                ? this._hostPendingHookTarget
-                : (this._hostInputCurrent.hookTarget || null),
+            hookTarget: this._hostInputCurrent.hookTarget || null,
             appliedAtTick: this.serverTick
         } : null;
-
-        // Reset host one-shot buffers after including in snapshot
-        this._hostPendingHookJust = false;
-        this._hostPendingHookTarget = null;
 
         return {
             tick: this.serverTick,
@@ -403,14 +395,10 @@ export class NetworkManager {
     sendInput(input) {
         if (!this.connected) return null;  // v19: return null when not connected
 
-        // Accumulate one-frame pulses between sends (they reset after one read)
+        // Accumulate fire one-shot between sends (hook uses edge detection in CharacterCore)
         if (input.fire) {
             this._pendingFire = true;
             this._pendingFireAngle = input.fireAngle;
-        }
-        if (input.hookJustPressed) {
-            this._pendingHookJust = true;
-            this._pendingHookTarget = input.hookTarget || null;
         }
 
         // Throttle to ~60Hz (match physics rate) to avoid flooding host
@@ -426,9 +414,7 @@ export class NetworkManager {
             direction: input.direction || 0,
             jump: !!input.jump,
             hook: !!input.hook,
-            hookJustPressed: this._pendingHookJust || !!input.hookJustPressed,
-            // v17.1 FIX: Always prefer input.hookTarget if available
-            hookTarget: input.hookTarget || this._pendingHookTarget || null,
+            hookTarget: input.hookTarget || null,
             fire: this._pendingFire || !!input.fire,
             fireAngle: this._pendingFire ? this._pendingFireAngle : (input.fireAngle ?? null),
             strength: input.strength || 1
@@ -448,16 +434,15 @@ export class NetworkManager {
             this.inputHistory.shift();
         }
 
-        // v28 FIX: Track specific seq of hook input for targeted prediction protection
-        if (data.hookJustPressed) {
+        // v28: Track hook edge (false→true) seq for guest prediction protection
+        if (data.hook && !this._prevHookSent) {
             this.lastHookInputSeq = seq;
         }
+        this._prevHookSent = !!data.hook;
 
         // Reset pending pulses after sending
         this._pendingFire = false;
         this._pendingFireAngle = null;
-        this._pendingHookJust = false;
-        this._pendingHookTarget = null;
 
         this.broadcast({ type: 'input', data });
 
@@ -515,8 +500,7 @@ export class NetworkManager {
         }
 
         const result = { ...bestInput };
-        // v28 FIX: Consume one-shot flags from queue to prevent re-application on next tick
-        bestInput.hookJustPressed = false;
+        // v28: Only consume fire one-shot (hook uses edge detection in CharacterCore)
         bestInput.fire = false;
         return result;
     }
@@ -557,15 +541,6 @@ export class NetworkManager {
 
     setHostInput(input) {
         this._hostInputCurrent = input;
-        // Buffer one-shot pulses (might get called multiple times before send)
-        if (input.hookJustPressed) {
-            this._hostPendingHookJust = true;
-            this._hostPendingHookTarget = input.hookTarget || null;
-        }
-        if (input.jump && !this._hostPrevJump) {
-            // Jump edge detected — will be sent with next packet
-        }
-        this._hostPrevJump = !!input.jump;
     }
 
     // === HOST: queue event for next snapshot ===
