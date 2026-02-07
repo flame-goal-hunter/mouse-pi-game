@@ -225,6 +225,7 @@ export class GameScene extends Phaser.Scene {
     createMap() {
         this.map = this.make.tilemap({ key: 'ice-map' });
         const tileset = this.map.addTilesetImage('ice', 'ice-tiles');
+        this._tileset = tileset; // Store for prediction world
 
         // Background layer (decorations - no collision)
         this.bgLayer = this.map.createLayer('background', tileset, 0, 0);
@@ -239,10 +240,10 @@ export class GameScene extends Phaser.Scene {
             this.platformLayer.setDepth(0);
         }
 
-        // v28: Create SimplePhysicsWorld and initialize from tilemap
+        // v29: Create SimplePhysicsWorld and initialize from tilemap (with slope support)
         this.physicsWorld = new SimplePhysicsWorld(TILE_SIZE);
         if (this.platformLayer) {
-            this.physicsWorld.initFromTilemap(this.platformLayer);
+            this.physicsWorld.initFromTilemap(this.platformLayer, tileset);
         }
 
         // Physics time scale for slow-motion effects
@@ -384,7 +385,7 @@ export class GameScene extends Phaser.Scene {
      * Find nearest position with solid ground below
      */
     _findNearestGroundedSpawn(x, y) {
-        if (!this.physicsWorld?.solidGrid) return null;
+        if (!this.physicsWorld?.tileGrid) return null;
 
         const tileX = Math.floor(x / TILE_SIZE);
         const startTileY = Math.floor(y / TILE_SIZE);
@@ -545,12 +546,12 @@ export class GameScene extends Phaser.Scene {
         const spawnY = spawn.y - 35;
         const spriteKey = `p${charNum}-stand`;
 
-        // v28: Create separate SimplePhysicsWorld for prediction (same as host)
+        // v29: Create separate SimplePhysicsWorld for prediction (same as host, with slopes)
         this.predictionWorld = new SimplePhysicsWorld(TILE_SIZE);
         if (this.platformLayer) {
-            this.predictionWorld.initFromTilemap(this.platformLayer);
-            const solidCount = this.predictionWorld.solidGrid.flat().filter(Boolean).length;
-            console.log('[Guest] predictionWorld solidGrid:', this.predictionWorld.gridWidth, 'x', this.predictionWorld.gridHeight,
+            this.predictionWorld.initFromTilemap(this.platformLayer, this._tileset);
+            const solidCount = this.predictionWorld.tileGrid.flat().filter(v => v !== 0).length;
+            console.log('[Guest] predictionWorld tileGrid:', this.predictionWorld.gridWidth, 'x', this.predictionWorld.gridHeight,
                 'solidCount:', solidCount);
 
             // Debug: check if there's ground at spawn position
@@ -2132,8 +2133,8 @@ export class GameScene extends Phaser.Scene {
             this.player.simpleBody.vx = serverVx;
             this.player.simpleBody.vy = serverVy;
 
-            // v28 FIX: Re-resolve collisions after teleport to update grounded state
-            this.predictionWorld._resolveCollisions(this.player.simpleBody);
+            // v30: Update grounded state after teleport
+            this.player.simpleBody.grounded = this.predictionWorld.isGrounded(this.player.simpleBody);
         }
 
         // Update local state
@@ -2232,8 +2233,8 @@ export class GameScene extends Phaser.Scene {
         if (!isFinite(body.vx) || !isFinite(body.vy)) { body.vx = serverVx; body.vy = serverVy; }
         if (!isFinite(body.x) || !isFinite(body.y)) { body.x = myData.x; body.y = myData.y; this.player.setPosition(body.x, body.y); }
 
-        // v28 FIX: Re-resolve collisions after position change to update grounded state
-        this.predictionWorld._resolveCollisions(body);
+        // v30: Update grounded state after position bend
+        body.grounded = this.predictionWorld.isGrounded(body);
 
         if (window.DebugLog) {
             window.DebugLog.log(`BEND err=${errorDist.toFixed(1)}px f=${(BEND_FACTOR * 100).toFixed(0)}%`);
