@@ -180,33 +180,16 @@ export class SimplePhysicsWorld {
      * Handles cases from network bending, teleport, respawn.
      */
     _resolveOverlap(body) {
-        // Center in solid: always resolve immediately
-        if (this._testPoint(body.x, body.y)) {
-            const footY = body.y + body.halfH;
-            const ground = this._findGroundAt(body.x, footY, this.tileSize);
-            if (ground !== null) {
-                body.y = ground - body.halfH;
-                body.vy = 0;
-            }
-            return;
-        }
-
-        // Feet check: only resolve if significantly embedded (>2px below surface)
-        const footY = body.y + body.halfH;
-        const ground = this._findGroundAt(body.x, footY, this.tileSize);
-        if (ground !== null && footY - ground > 2) {
-            body.y = ground - body.halfH;
-            body.vy = 0;
-        }
+        // Delegate to hardDepenetrate — single source of truth
+        this._hardDepenetrate(body);
     }
 
     step(dt) {
         if (!this._loggedStep && this.bodies.size > 0) {
-            console.log('[SimplePhysicsWorld] v34.4 First step with', this.bodies.size, 'bodies, tileGrid:', !!this.tileGrid);
+            console.log('[SimplePhysicsWorld] v34.5 Hard depenetration. Bodies:', this.bodies.size, 'tileGrid:', !!this.tileGrid);
             this._loggedStep = true;
         }
         for (const body of this.bodies.values()) {
-            this._resolveOverlap(body);
             body.wasGrounded = body.grounded;
 
             // 1. Gravity
@@ -238,7 +221,57 @@ export class SimplePhysicsWorld {
             // 6. Quantize for determinism
             body.vx = Math.round(body.vx * 100) / 100;
             body.vy = Math.round(body.vy * 100) / 100;
+
+            // 7. HARD DEPENETRATION — last resort, runs AFTER everything
+            // If body is inside solid after all movement, force it out.
+            // This catches hook pull, knockback, spawn, or any other source.
+            this._hardDepenetrate(body);
         }
+    }
+
+    /**
+     * Hard depenetration: if ANY part of body overlaps solid, push out.
+     * Uses spiral search from body center to find nearest free position.
+     * This is the final safety net — nothing can bypass it.
+     */
+    _hardDepenetrate(body) {
+        if (!this._bodyOverlapsSolid(body)) return;
+
+        // Try pushing up first (most common case: fell into floor)
+        for (let dy = 1; dy <= this.tileSize * 2; dy++) {
+            body.y -= 1;
+            if (!this._bodyOverlapsSolid(body)) { body.vy = 0; return; }
+        }
+        body.y += this.tileSize * 2; // restore
+
+        // Spiral search: find nearest free position
+        const ox = body.x, oy = body.y;
+        for (let radius = 1; radius <= this.tileSize * 3; radius++) {
+            // Try 8 directions at this radius
+            for (let a = 0; a < 8; a++) {
+                const angle = a * Math.PI / 4;
+                body.x = ox + Math.cos(angle) * radius;
+                body.y = oy + Math.sin(angle) * radius;
+                if (!this._bodyOverlapsSolid(body)) {
+                    body.vx = 0; body.vy = 0;
+                    return;
+                }
+            }
+        }
+        // Absolute fallback: restore position (shouldn't happen)
+        body.x = ox; body.y = oy;
+    }
+
+    /**
+     * Check if any of body's 4 corners or center overlap solid geometry.
+     */
+    _bodyOverlapsSolid(body) {
+        const hw = body.halfW - 1, hh = body.halfH - 1; // 1px inset to avoid edge touching
+        return this._testPoint(body.x, body.y) ||                  // center
+               this._testPoint(body.x - hw, body.y - hh) ||        // top-left
+               this._testPoint(body.x + hw, body.y - hh) ||        // top-right
+               this._testPoint(body.x - hw, body.y + hh) ||        // bottom-left
+               this._testPoint(body.x + hw, body.y + hh);          // bottom-right
     }
 
     // ==========================================

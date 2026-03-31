@@ -129,7 +129,7 @@ export class BootScene extends Phaser.Scene {
         });
 
         // === TILEMAP ===
-        this.load.image('ice-tiles', 'assets/ice/sheet.png');
+        this.load.image('ice-tiles', 'assets/snow/sheet.png');
         this.load.tilemapTiledJSON('ice-map', 'assets/maps/ice-arena.json');
 
         // === BUNNY PLAYER SPRITES (individual images) ===

@@ -5,7 +5,7 @@
 import { PHYS, TILE_SIZE, GAME, PLAYER_COLORS, PICKUPS, RAGDOLL, getRandomBotName } from '../config.js';
 import { CharacterCore } from '../physics/CharacterCore.js';
 import { SimplePhysicsWorld } from '../physics/SimplePhysicsWorld.js';
-import { BotBehavior } from '../ai/BotBehavior.js';
+import { BotBrain } from '../ai/BotBrain.js';
 import { PlatformNav, EdgeType } from '../ai/PlatformNav.js';
 import { ObstacleSolver } from '../ai/ObstacleSolver.js';
 import { TriNav } from '../ai/TriNav.js';
@@ -224,7 +224,7 @@ export class GameScene extends Phaser.Scene {
 
     createMap() {
         this.map = this.make.tilemap({ key: 'ice-map' });
-        const tileset = this.map.addTilesetImage('ice', 'ice-tiles');
+        const tileset = this.map.addTilesetImage('snow', 'ice-tiles');
         this._tileset = tileset; // Store for prediction world
 
         // Background layer (decorations - no collision)
@@ -638,11 +638,7 @@ export class GameScene extends Phaser.Scene {
             }
 
             // AI brain
-            bot.brain = new BotBehavior(
-                this.platformNav,
-                this.map ? this.map.width : 100,
-                this.map ? this.map.height : 75
-            );
+            bot.brain = new BotBrain(this);
 
             // Assign random unique name
             const botName = getRandomBotName(usedNames);

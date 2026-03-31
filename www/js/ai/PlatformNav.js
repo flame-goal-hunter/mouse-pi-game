@@ -56,8 +56,8 @@ export class PlatformNav {
         this.tileSize = tileSize;
         this.waterY = waterY;
         this.platforms = this._buildPlatforms(platformLayer, mapWidth, mapHeight, tileSize);
-        // Only auto-generate WALK edges; JUMP/FALL/HOOK loaded from Tiled via loadManualEdges()
-        this.edges = this._buildWalkEdges(this.platforms, tileSize);
+        // Auto-generate ALL edge types: WALK, JUMP, FALL, HOOK
+        this.edges = this._buildNavGraph(this.platforms, tileSize, platformLayer);
 
         // Build adjacency list
         this.adjacency.clear();

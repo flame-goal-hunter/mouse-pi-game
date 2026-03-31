@@ -159,9 +159,10 @@ export class TriNav {
     }
 
     /**
-     * Minkowski expansion: shrink walkable space by checking cardinal neighbors.
-     * A tile is nav-walkable only if it and its 4 cardinal neighbors are all empty.
-     * This ensures the character (~50px wide in a 70px tile) fits through any path.
+     * Minkowski expansion: shrink walkable space by checking horizontal neighbors.
+     * Only check left+right (character is ~50px wide in 70px tile).
+     * Vertical space is handled by jump/fall physics, so don't require up+down.
+     * This preserves narrow horizontal corridors (2-3 tiles wide).
      */
     _buildNavGrid() {
         const w = this.mapWidth;
@@ -175,13 +176,14 @@ export class TriNav {
                     this.navGrid[y][x] = false;
                     continue;
                 }
-                // Check cardinal neighbors (not diagonals — less aggressive)
-                const up    = y > 0     ? this.grid[y - 1][x] : false;
-                const down  = y < h - 1 ? this.grid[y + 1][x] : false;
+                // Only check horizontal neighbors — character needs horizontal clearance
+                // Vertical clearance handled by jump physics
                 const left  = x > 0     ? this.grid[y][x - 1] : false;
                 const right = x < w - 1 ? this.grid[y][x + 1] : false;
 
-                this.navGrid[y][x] = up && down && left && right;
+                // Need at least one horizontal neighbor open, or both open
+                // This allows 2-tile-wide corridors
+                this.navGrid[y][x] = left || right;
             }
         }
     }

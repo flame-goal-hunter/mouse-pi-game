@@ -10,34 +10,42 @@ import { executeStrategy } from './ObstacleSolver.js';
 // BALLISTIC AIM — gravity-compensated aiming
 // ============================================
 
-function aimAtTarget(botX, botY, targetX, targetY, botVx, botVy) {
-    const dx = targetX - botX;
-    const dy = targetY - botY;
-    const dist = Math.hypot(dx, dy);
-    if (dist < 1) return Math.atan2(dy, dx);
+function aimAtTarget(botX, botY, targetX, targetY, botVx, botVy, targetVx, targetVy, scatter) {
+    const rawDx = targetX - botX;
+    const rawDy = targetY - botY;
+    const rawDist = Math.hypot(rawDx, rawDy);
+    if (rawDist < 1) return Math.atan2(rawDy, rawDx);
 
-    const baseAngle = Math.atan2(dy, dx);
+    const aimScatter = scatter !== undefined ? scatter : 0.05;
+
+    // Close range (< 120px): simple aim with light target leading
+    if (rawDist < 120) {
+        const tvx = targetVx || 0;
+        const tvy = targetVy || 0;
+        const angle = Math.atan2(rawDy + tvy * 3, rawDx + tvx * 3);
+        return angle + (Math.random() - 0.5) * aimScatter;
+    }
+
     const speed = PHYS.SNOWBALL_SPEED;
     const gravityPerFrame = PHYS.GRAVITY * PHYS.SNOWBALL_GRAVITY_SCALE * 0.15;
 
-    // Effective snowball velocity (includes shooter momentum transfer)
-    const effectiveVx = speed * Math.cos(baseAngle) + botVx * 0.5;
-    const effectiveVy = speed * Math.sin(baseAngle) + botVy * 0.3;
-    const effectiveSpeed = Math.hypot(effectiveVx, effectiveVy);
+    // Flight time estimate
+    const effectiveDist = Math.max(rawDist - 50, 1);
+    const flightFrames = effectiveDist / speed;
 
-    // Flight time estimate (frames), accounting for 50px spawn offset
-    const effectiveDist = Math.max(dist - 50, 1);
-    const flightFrames = effectiveDist / effectiveSpeed;
+    // Target leading: predict where target will be when snowball arrives
+    const tvx = targetVx || 0;
+    const tvy = targetVy || 0;
+    const predictedX = targetX + tvx * flightFrames;
+    const predictedY = targetY + tvy * flightFrames;
 
-    // Gravity drop: 0.5 * g * t^2
+    // Aim at predicted position with gravity compensation
+    const dx = predictedX - botX;
+    const dy = predictedY - botY;
     const gravityDrop = 0.5 * gravityPerFrame * flightFrames * flightFrames;
-
-    // Aim higher by gravity drop amount
     const compensatedAngle = Math.atan2(dy - gravityDrop, dx);
 
-    // Slight random scatter for natural feel (±0.05 rad ≈ ±2.9°)
-    const scatter = (Math.random() - 0.5) * 0.10;
-    return compensatedAngle + scatter;
+    return compensatedAngle + (Math.random() - 0.5) * aimScatter * 2;
 }
 
 // ============================================
@@ -53,7 +61,7 @@ function findBestHookDirection(bot, targetX, targetY, platformLayer, overHole = 
     const NUM_DIRS = 16;
     const hookRange = PHYS.HOOK_RANGE;
     let bestDir = null;
-    let bestScore = overHole ? -10000 : 0; // bMod: accept any direction over holes
+    let bestScore = overHole ? -2 : 0; // Over holes: accept most hooks, but not terrible ones
 
     const toTargetX = targetX - bot.x;
     const toTargetY = targetY - bot.y;
@@ -82,7 +90,9 @@ function findBestHookDirection(bot, targetX, targetY, platformLayer, overHole = 
             }
         }
         if (!hitX) continue;
-        if (hitY >= bot.y) continue; // Don't hook below self — just fall down
+        // Skip hooks pointing mostly downward (> 72° below horizontal)
+        const hookAngle = Math.atan2(hitY - bot.y, hitX - bot.x);
+        if (hookAngle > Math.PI * 0.4 && hookAngle < Math.PI * 0.6) continue;
 
         const pullX = hitX - bot.x;
         const pullY = hitY - bot.y;
@@ -94,7 +104,7 @@ function findBestHookDirection(bot, targetX, targetY, platformLayer, overHole = 
         const pny = pullY / pullDist;
         let hookVelX = pnx * 5;
         let hookVelY = pny * 5;
-        if (hookVelY > 0) hookVelY *= 0.3;
+        if (hookVelY > 0) hookVelY *= 0.6;
         if ((hookVelX < 0 && inputDir < 0) || (hookVelX > 0 && inputDir > 0))
             hookVelX *= 0.95;
         else
@@ -133,7 +143,7 @@ function shouldReleaseHook(bot, targetX, targetY, core, hookTimer) {
     if (hookTimer > 4000) return 'RELEASE';
 
     // Grounded after swinging → done
-    if (core.grounded && hookTimer > 300) return 'RELEASE';
+    if (core.grounded && hookTimer > 800) return 'RELEASE';
 
     // bMod: compute hook drag velocity and dot with target
     const toTargetX = targetX - bot.x;
@@ -144,7 +154,7 @@ function shouldReleaseHook(bot, targetX, targetY, core, hookTimer) {
     if (anchorDist > 1) {
         let hookVelX = (ax / anchorDist) * 5;
         let hookVelY = (ay / anchorDist) * 5;
-        if (hookVelY > 0) hookVelY *= 0.3;
+        if (hookVelY > 0) hookVelY *= 0.6;
 
         const inputDir = toTargetX > 0 ? 1 : -1;
         if ((hookVelX < 0 && inputDir < 0) || (hookVelX > 0 && inputDir > 0))
@@ -355,6 +365,8 @@ class SnowballIncoming extends b3.Condition {
     tick(tick) {
         const { bot, scene } = tick.blackboard.get('context');
         if (!scene.snowballs || scene.snowballs.length === 0) return b3.FAILURE;
+        const personality = tick.blackboard.get('personality');
+        const dodgeSkill = personality?.dodgeSkill || 0.6;
 
         for (const sb of scene.snowballs) {
             if (!sb.active) continue;
@@ -363,14 +375,27 @@ class SnowballIncoming extends b3.Condition {
             const dx = sb.x - bot.x;
             const dy = sb.y - bot.y;
             const dist = Math.hypot(dx, dy);
-            if (dist > 250) continue;
+            if (dist > 350) continue;
 
             const vx = sb.vx || 0;
-            const heading = vx > 0 ? 1 : -1;
+            const vy = sb.vy || 0;
+            const speed = Math.hypot(vx, vy);
+            if (speed < 1) continue;
 
-            if ((heading > 0 && dx < 0) || (heading < 0 && dx > 0)) {
-                if (Math.random() < 0.6) {
+            // Predict if snowball will hit near bot (within ~40px)
+            const timeToReach = dist / speed;
+            const impactX = sb.x + vx * timeToReach;
+            const sbGrav = PHYS.GRAVITY * (PHYS.SNOWBALL_GRAVITY_SCALE || 1);
+            const impactY = sb.y + vy * timeToReach + 0.5 * sbGrav * timeToReach * timeToReach;
+            const impactDist = Math.hypot(impactX - bot.x, impactY - bot.y);
+
+            if (impactDist < 80 && timeToReach < 30) {
+                // Closer snowball = harder to dodge
+                const dodgeChance = dodgeSkill * Math.min(1, Math.max(0.1, timeToReach / 20));
+                if (Math.random() < dodgeChance) {
+                    // Dodge perpendicular to snowball trajectory
                     tick.blackboard.set('dodgeDir', dx > 0 ? -1 : 1);
+                    tick.blackboard.set('dodgeJump', timeToReach < 10);
                     return b3.SUCCESS;
                 }
             }
@@ -425,8 +450,9 @@ class DodgeSnowball extends b3.Action {
     tick(tick) {
         const input = tick.blackboard.get('input');
         const dodgeDir = tick.blackboard.get('dodgeDir') || 1;
-        input.jump = true;
+        const dodgeJump = tick.blackboard.get('dodgeJump');
         input.direction = dodgeDir;
+        if (dodgeJump) input.jump = true;
         return b3.SUCCESS;
     }
 }
@@ -436,6 +462,7 @@ class Shoot extends b3.Action {
         const { bot } = tick.blackboard.get('context');
         const target = tick.blackboard.get('target');
         const input = tick.blackboard.get('input');
+        const personality = tick.blackboard.get('personality');
 
         const reactionTimer = tick.blackboard.get('shootReaction') || 0;
         if (reactionTimer > 0) return b3.FAILURE;
@@ -445,13 +472,30 @@ class Shoot extends b3.Action {
             bot.setData('facingRight', dx > 0);
             const botVx = bot.simpleBody?.vx || 0;
             const botVy = bot.simpleBody?.vy || 0;
-            input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y, botVx, botVy);
+            const tvx = target.simpleBody?.vx || 0;
+            const tvy = target.simpleBody?.vy || 0;
+            input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y,
+                botVx, botVy, tvx, tvy, personality?.aimScatter);
         } else {
             input.fireAngle = bot.getData('facingRight') ? 0 : Math.PI;
         }
 
+        // Strafe while shooting — but NOT at close range (causes oscillation)
+        if (target) {
+            const sDist = Math.hypot(target.x - bot.x, target.y - bot.y);
+            if (sDist > 150) {
+                const strafeDir = tick.blackboard.get('strafeDir') || 0;
+                if (strafeDir !== 0) input.direction = strafeDir;
+                if (Math.random() < 0.02) input.jump = true;
+            }
+            // Close range: face target, stop moving
+        }
+
         input.fire = true;
-        tick.blackboard.set('shootCooldown', AI.SHOOT_COOLDOWN_MIN + Math.random() * (AI.SHOOT_COOLDOWN_MAX - AI.SHOOT_COOLDOWN_MIN));
+        const cdMin = personality?.shootCooldownMin || AI.SHOOT_COOLDOWN_MIN;
+        const cdMax = personality?.shootCooldownMax || AI.SHOOT_COOLDOWN_MAX;
+        tick.blackboard.set('shootCooldown', cdMin + Math.random() * (cdMax - cdMin));
+        tick.blackboard.set('shootReaction', 50); // micro-delay before next shot
         return b3.SUCCESS;
     }
 }
@@ -473,6 +517,97 @@ class GoToPickup extends b3.Action {
         const speedMult = tick.blackboard.get('speedMultiplier') || 1;
         input.direction = dx > 0 ? 1 * speedMult : -1 * speedMult;
         return b3.RUNNING;
+    }
+}
+
+class ChaseTarget extends b3.Action {
+    tick(tick) {
+        const { bot, scene } = tick.blackboard.get('context');
+        const target = tick.blackboard.get('target');
+        const input = tick.blackboard.get('input');
+        const personality = tick.blackboard.get('personality');
+
+        if (!target || !target.active) return b3.FAILURE;
+
+        const dx = target.x - bot.x;
+        const dy = target.y - bot.y;
+        const dist = Math.hypot(dx, dy);
+        const aggressiveness = personality?.aggressiveness || 0.6;
+
+        // Only chase if within chase range (scaled by aggressiveness)
+        const chaseRange = 300 + aggressiveness * 400; // 300-700px
+        if (dist > chaseRange) return b3.FAILURE;
+
+        // Check line of sight
+        if (scene.platformLayer) {
+            const line = new Phaser.Geom.Line(bot.x, bot.y, target.x, target.y);
+            const tiles = scene.platformLayer.getTilesWithinShape(line);
+            for (const t of tiles) {
+                if (t && t.index > 0) return b3.FAILURE;
+            }
+        }
+
+        // Run toward target
+        const speedMult = tick.blackboard.get('speedMultiplier') || 1;
+        input.direction = dx > 0 ? speedMult : -speedMult;
+
+        // Jump if target is above
+        if (dy < -TILE_SIZE * 1.5) input.jump = true;
+
+        // Try to shoot while chasing
+        const shootCD = tick.blackboard.get('shootCooldown') || 0;
+        const shootReaction = tick.blackboard.get('shootReaction') || 0;
+        if (shootCD <= 0 && shootReaction <= 0 && dist < AI.ATTACK_RANGE_MAX) {
+            bot.setData('facingRight', dx > 0);
+            const botVx = bot.simpleBody?.vx || 0;
+            const botVy = bot.simpleBody?.vy || 0;
+            const tvx = target.simpleBody?.vx || 0;
+            const tvy = target.simpleBody?.vy || 0;
+            input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y,
+                botVx, botVy, tvx, tvy, personality?.aimScatter);
+            input.fire = true;
+            const cdMin = personality?.shootCooldownMin || AI.SHOOT_COOLDOWN_MIN;
+            const cdMax = personality?.shootCooldownMax || AI.SHOOT_COOLDOWN_MAX;
+            tick.blackboard.set('shootCooldown', cdMin + Math.random() * (cdMax - cdMin));
+        }
+
+        return b3.RUNNING;
+    }
+}
+
+class CombatHook extends b3.Action {
+    tick(tick) {
+        const { bot, scene } = tick.blackboard.get('context');
+        const target = tick.blackboard.get('target');
+        const input = tick.blackboard.get('input');
+        const personality = tick.blackboard.get('personality');
+
+        if (!target || !target.active) return b3.FAILURE;
+        const core = bot.core;
+        if (!core || core.hookState !== 'IDLE') return b3.FAILURE;
+
+        const hookCooldown = tick.blackboard.get('hookCooldown') || 0;
+        if (hookCooldown > 0) return b3.FAILURE;
+
+        // Probabilistic: aggressive bots hook more often
+        if (Math.random() > (personality?.hookCombat || 0.4) + 0.3) return b3.FAILURE;
+
+        const dx = target.x - bot.x;
+        const dy = target.y - bot.y;
+        const dist = Math.hypot(dx, dy);
+
+        // Hook toward walls/ceiling near target to get closer or gain height
+        if (dist < PHYS.HOOK_RANGE * 0.8 && dist > 150) {
+            const hookTarget = findBestHookDirection(bot, target.x, target.y,
+                scene.platformLayer, false);
+            if (hookTarget) {
+                input.hook = true;
+                input.hookTarget = hookTarget;
+                tick.blackboard.set('hookCooldown', AI.HOOK_COOLDOWN);
+                return b3.SUCCESS;
+            }
+        }
+        return b3.FAILURE;
     }
 }
 
@@ -992,15 +1127,25 @@ function reactiveMove(bot, targetX, targetY, input, tick) {
     if (core?.grounded && scene.platformLayer && input.direction !== 0) {
         const moveDir = input.direction;
 
-        // 3a. Wall ahead → jump (bMod: if position doesn't change, jump)
+        // 3a. Wall ahead → check height before jumping
         const vxAbs = Math.abs(core.body?.vx || 0);
         const lookAhead = 25 + Math.max(vxAbs, 4) * 4;
-        const wallTile = scene.platformLayer.getTileAtWorldXY(
-            bot.x + moveDir * lookAhead, bot.y);
+        const checkX = bot.x + moveDir * lookAhead;
+        const wallTile = scene.platformLayer.getTileAtWorldXY(checkX, bot.y);
         if (wallTile && wallTile.index > 0) {
-            // Don't jump if waypoint is far below (need to descend)
-            if (dy < TILE_SIZE * 2) {
+            // Measure wall height
+            let wallHeight = 0;
+            for (let wy = 0; wy < 6; wy++) {
+                const t = scene.platformLayer.getTileAtWorldXY(checkX, bot.y - wy * TILE_SIZE);
+                if (!t || t.index <= 0) break;
+                wallHeight = wy + 1;
+            }
+            if (wallHeight <= 2 && dy < TILE_SIZE * 2) {
+                // Short wall (1-2 tiles): jump over
                 input.jump = true;
+            } else if (wallHeight > 2) {
+                // Tall wall: reverse direction, let pathfinding reroute
+                input.direction = -moveDir;
             }
         }
 
@@ -1596,8 +1741,8 @@ function executeSegment(tick, bot, segment, input) {
             const dx = segment.targetX - bot.x;
             const moveDir = dx > 0 ? 1 : dx < 0 ? -1 : 0;
             if (moveDir !== 0) {
-                // Check 3 tiles ahead for ground
-                const checkX = bot.x + moveDir * TILE_SIZE * 3;
+                // Check 1.5 tiles ahead for ground
+                const checkX = bot.x + moveDir * TILE_SIZE * 1.5;
                 const checkY = bot.y + TILE_SIZE;
                 const tileAhead = scene.platformLayer?.getTileAtWorldXY(checkX, checkY);
                 const tileAhead2 = scene.platformLayer?.getTileAtWorldXY(checkX, checkY + TILE_SIZE);
@@ -1746,6 +1891,40 @@ function executeHookEdge(tick, bot, edge, segment, input, _phase, speedMult) {
 // BOT BEHAVIOR CLASS
 // ============================================
 
+// Bot personality presets
+const PERSONALITIES = [
+    { // Aggressive
+        name: 'aggressive',
+        aimScatter: 0.03,
+        shootCooldownMin: 600, shootCooldownMax: 1000,
+        reactionTimeMin: 150, reactionTimeMax: 350,
+        aggressiveness: 0.9,
+        dodgeSkill: 0.5,
+        hookCombat: 0.7,
+        strafeSpeed: 1.0,
+    },
+    { // Defensive
+        name: 'defensive',
+        aimScatter: 0.07,
+        shootCooldownMin: 1000, shootCooldownMax: 1800,
+        reactionTimeMin: 300, reactionTimeMax: 600,
+        aggressiveness: 0.3,
+        dodgeSkill: 0.8,
+        hookCombat: 0.2,
+        strafeSpeed: 0.8,
+    },
+    { // Balanced
+        name: 'balanced',
+        aimScatter: 0.05,
+        shootCooldownMin: 800, shootCooldownMax: 1500,
+        reactionTimeMin: 200, reactionTimeMax: 500,
+        aggressiveness: 0.6,
+        dodgeSkill: 0.65,
+        hookCombat: 0.4,
+        strafeSpeed: 0.9,
+    },
+];
+
 export class BotBehavior {
     constructor(platformNav, tileWidth, tileHeight) {
         this.platformNav = platformNav;
@@ -1754,9 +1933,20 @@ export class BotBehavior {
 
         this.blackboard = new b3.Blackboard();
 
+        // Assign random personality
+        const personality = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+        this.blackboard.set('personality', personality);
+
         this.blackboard.set('speedMultiplier',
             AI.CHASE_SPEED_MIN + Math.random() * (AI.CHASE_SPEED_MAX - AI.CHASE_SPEED_MIN)
         );
+
+        // Strafe state
+        this.blackboard.set('strafeDir', Math.random() < 0.5 ? -1 : 1);
+        this.blackboard.set('strafeTimer', 0);
+
+        // Reaction delay: not yet tracking any target
+        this.blackboard.set('lastKnownTargetId', null);
 
         this.tree = this.buildTree();
     }
@@ -1789,6 +1979,12 @@ export class BotBehavior {
                                 new Shoot()
                             ]
                         }),
+
+                        // 3b. Combat hook (close distance via hook)
+                        new CombatHook(),
+
+                        // 3c. Chase target aggressively (run + shoot)
+                        new ChaseTarget(),
 
                         // 4. Seek pickup: health if low, powerups if nearby
                         new b3.Sequence({
@@ -1864,6 +2060,28 @@ export class BotBehavior {
         this.blackboard.set('shootCooldown', shootCooldown);
         this.blackboard.set('hookTime', hookTime);
         this.blackboard.set('shootReaction', shootReaction);
+
+        // Strafe timer: change direction every 300-800ms during combat
+        let strafeTimer = this.blackboard.get('strafeTimer') || 0;
+        strafeTimer += delta;
+        if (strafeTimer > 300 + Math.random() * 500) {
+            this.blackboard.set('strafeDir', Math.random() < 0.5 ? -1 : 1);
+            strafeTimer = 0;
+        }
+        this.blackboard.set('strafeTimer', strafeTimer);
+
+        // Reaction delay: when target changes, add delay before first shot
+        const personality = this.blackboard.get('personality');
+        const curTarget = this.blackboard.get('target');
+        const prevTargetId = this.blackboard.get('lastKnownTargetId');
+        const currentTargetId = curTarget?.getData?.('id') || curTarget?.name || null;
+        if (currentTargetId && currentTargetId !== prevTargetId) {
+            // New target acquired — set reaction delay
+            const rtMin = personality?.reactionTimeMin || 200;
+            const rtMax = personality?.reactionTimeMax || 500;
+            this.blackboard.set('shootReaction', rtMin + Math.random() * (rtMax - rtMin));
+            this.blackboard.set('lastKnownTargetId', currentTargetId);
+        }
 
         // Compute vision range from camera viewport
         const cam = scene.cameras?.main;
@@ -1965,7 +2183,8 @@ export class BotBehavior {
         const target = this.blackboard.get('target');
         if (target && target.active && !input.fire) {
             const shootCD = this.blackboard.get('shootCooldown') || 0;
-            if (shootCD <= 0) {
+            const shootRT = this.blackboard.get('shootReaction') || 0;
+            if (shootCD <= 0 && shootRT <= 0) {
                 const sdx = target.x - bot.x;
                 const sdy = target.y - bot.y;
                 const sDist = Math.hypot(sdx, sdy);
@@ -1982,10 +2201,15 @@ export class BotBehavior {
                         bot.setData('facingRight', sdx > 0);
                         const botVx = bot.simpleBody?.vx || 0;
                         const botVy = bot.simpleBody?.vy || 0;
-                        input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y, botVx, botVy);
+                        const tvx = target.simpleBody?.vx || 0;
+                        const tvy = target.simpleBody?.vy || 0;
+                        const personality = this.blackboard.get('personality');
+                        input.fireAngle = aimAtTarget(bot.x, bot.y, target.x, target.y,
+                            botVx, botVy, tvx, tvy, personality?.aimScatter);
                         input.fire = true;
-                        this.blackboard.set('shootCooldown',
-                            AI.SHOOT_COOLDOWN_MIN + Math.random() * (AI.SHOOT_COOLDOWN_MAX - AI.SHOOT_COOLDOWN_MIN));
+                        const cdMin = personality?.shootCooldownMin || AI.SHOOT_COOLDOWN_MIN;
+                        const cdMax = personality?.shootCooldownMax || AI.SHOOT_COOLDOWN_MAX;
+                        this.blackboard.set('shootCooldown', cdMin + Math.random() * (cdMax - cdMin));
                     }
                 }
             }
