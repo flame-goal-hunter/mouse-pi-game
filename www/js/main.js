@@ -39,6 +39,9 @@ const config = {
     height: GAME.HEIGHT,
     parent: 'game-container',
     backgroundColor: '#87CEEB',
+    audio: {
+        disableWebAudio: true
+    },
     input: {
         activePointers: 5  // Поддержка до 5 одновременных касаний для мультитач
     },
@@ -54,6 +57,7 @@ const config = {
         pixelArt: false,
         roundPixels: false
     },
+    plugins: {},
     scene: scenes
 };
 

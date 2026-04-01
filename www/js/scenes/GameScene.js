@@ -6,9 +6,7 @@ import { PHYS, TILE_SIZE, GAME, PLAYER_COLORS, PICKUPS, RAGDOLL, getRandomBotNam
 import { CharacterCore } from '../physics/CharacterCore.js';
 import { SimplePhysicsWorld } from '../physics/SimplePhysicsWorld.js';
 import { BotBrain } from '../ai/BotBrain.js';
-import { PlatformNav, EdgeType } from '../ai/PlatformNav.js';
-import { ObstacleSolver } from '../ai/ObstacleSolver.js';
-import { TriNav } from '../ai/TriNav.js';
+import { BotNav } from '../ai/BotNav.js';
 import { HumanInput } from '../input/HumanInput.js';
 import { NetworkManager } from '../network/NetworkManager.js';
 import { Pickup } from '../entities/Pickup.js';
@@ -140,18 +138,6 @@ export class GameScene extends Phaser.Scene {
         this.hookGraphics = this.add.graphics();
         this.hookGraphics.setDepth(100);
 
-        // === NAV GRAPH DEBUG ===
-        this.navDebugMode = 0; // 0=off, 1=PlatformNav, 2=TriNav
-        this.navGraphics = null;
-        this.triNavGraphics = null;
-        this.input.keyboard.on('keydown-G', () => {
-            this.navDebugMode = (this.navDebugMode + 1) % 3;
-            if (this.navGraphics) this.navGraphics.clear();
-            if (this.triNavGraphics) this.triNavGraphics.clear();
-            const labels = ['OFF', 'PlatformNav', 'TriNav'];
-            console.log(`[Nav Debug] ${labels[this.navDebugMode]}`);
-        });
-
         // === UI (zoom уже 0.7 для Rex Anchor) ===
         this.createUI();
 
@@ -226,6 +212,12 @@ export class GameScene extends Phaser.Scene {
         this.map = this.make.tilemap({ key: 'ice-map' });
         const tileset = this.map.addTilesetImage('snow', 'ice-tiles');
         this._tileset = tileset; // Store for prediction world
+
+        // Tiled background image (covers whole map, scrolls with camera)
+        const mapPixelW = this.map.widthInPixels;
+        const mapPixelH = this.map.heightInPixels;
+        this.bgImage = this.add.tileSprite(0, 0, mapPixelW, mapPixelH, 'bg')
+            .setOrigin(0, 0).setDepth(-20).setScrollFactor(1, 1);
 
         // Background layer (decorations - no collision)
         this.bgLayer = this.map.createLayer('background', tileset, 0, 0);
@@ -442,34 +434,10 @@ export class GameScene extends Phaser.Scene {
     // === PATHFINDING ===
 
     setupPathfinding() {
-        this.platformNav = new PlatformNav();
+        // BotNav — bMod Delaunay + Floyd-Warshall navigation
+        this.botNav = new BotNav();
         if (this.platformLayer) {
-            this.platformNav.build(
-                this.platformLayer,
-                this.map.width,
-                this.map.height,
-                TILE_SIZE,
-                this.waterY || null
-            );
-            // Load manual nav edges from Tiled (JUMP, FALL, HOOK)
-            const navEdgesLayer = this.map.getObjectLayer('nav_edges');
-            if (navEdgesLayer) {
-                this.platformNav.loadManualEdges(navEdgesLayer.objects);
-            }
-            console.log(`[Nav] ${this.platformNav.platforms.length} platforms, ${this.platformNav.edges.length} edges`);
-        }
-        this.obstacleSolver = new ObstacleSolver(this.platformNav, this.platformLayer);
-
-        // TriNav — tile-grid free-space navigation (bMod-style)
-        this.triNav = new TriNav();
-        if (this.platformLayer) {
-            this.triNav.build(
-                this.platformLayer,
-                this.map.width,
-                this.map.height,
-                TILE_SIZE,
-                this.waterY || null
-            );
+            this.botNav.build(this.platformLayer, this.map.width, this.map.height, TILE_SIZE);
         }
     }
 
@@ -1897,8 +1865,6 @@ export class GameScene extends Phaser.Scene {
 
         // 8. Draw hooks
         this.drawHooks();
-        if (this.navDebugMode === 1) this.drawNavGraph();
-        else if (this.navDebugMode === 2) this.drawTriNavDebug();
 
         // 9. UI
         this.updateHUD();
@@ -2260,7 +2226,6 @@ export class GameScene extends Phaser.Scene {
                 this.playSpatialSound('sfx-hook-attached', serverData.hookAnchorPos.x, serverData.hookAnchorPos.y, 0.3);
             }
             core.hookAnchorPos = { ...serverData.hookAnchorPos };
-            core.ropeLength = serverData.ropeLength || 0;
             core.hookPos = serverData.hookPos ? { ...serverData.hookPos } : { x: 0, y: 0 };
         } else if (serverState === 'FLYING' && serverData.hookPos) {
             core.hookPos = { ...serverData.hookPos };
@@ -2268,7 +2233,6 @@ export class GameScene extends Phaser.Scene {
         } else {
             core.hookPos = { x: 0, y: 0 };
             core.hookAnchorPos = null;
-            core.ropeLength = 0;
         }
     }
 
@@ -2283,7 +2247,6 @@ export class GameScene extends Phaser.Scene {
 
         if (serverData.hookState === 'ATTACHED' && serverData.hookAnchorPos) {
             core.hookAnchorPos = { ...serverData.hookAnchorPos };
-            core.ropeLength = serverData.ropeLength || 0;
             core.hookPos = serverData.hookPos
                 ? { ...serverData.hookPos }
                 : { ...serverData.hookAnchorPos };
@@ -2293,7 +2256,6 @@ export class GameScene extends Phaser.Scene {
         } else {
             core.hookPos = { x: 0, y: 0 };
             core.hookAnchorPos = null;
-            core.ropeLength = 0;
         }
     }
 
@@ -2744,102 +2706,6 @@ export class GameScene extends Phaser.Scene {
                 this.drawHookForCharacter(bot);
             }
         });
-    }
-
-    drawNavGraph() {
-        const nav = this.platformNav;
-        if (!nav) return;
-        if (!this.navGraphics) {
-            this.navGraphics = this.add.graphics();
-            this.navGraphics.setDepth(150);
-        }
-        this.navGraphics.clear();
-
-        // Platforms — green bars
-        this.navGraphics.fillStyle(0x00ff00, 0.25);
-        for (const p of nav.platforms) {
-            this.navGraphics.fillRect(p.leftX, p.surfaceY - 4, p.width, 8);
-        }
-
-        // Edges — color by type
-        const colors = {
-            WALK: 0x00ff00,
-            JUMP_ACROSS: 0x3399ff,
-            JUMP_UP: 0x00ffff,
-            FALL: 0xffff00,
-            HOOK: 0xff3333,
-        };
-
-        for (const edge of nav.edges) {
-            const from = nav.platforms[edge.from];
-            const to = nav.platforms[edge.to];
-            const color = colors[edge.type] || 0xffffff;
-            const fromY = from.surfaceY - 10;
-            const toY = to.surfaceY - 10;
-
-            this.navGraphics.lineStyle(2, color, 0.6);
-            this.navGraphics.lineBetween(edge.entryX, fromY, edge.exitX, toY);
-
-            // Entry/exit dots
-            this.navGraphics.fillStyle(color, 0.8);
-            this.navGraphics.fillCircle(edge.entryX, fromY, 4);
-            this.navGraphics.fillCircle(edge.exitX, toY, 4);
-        }
-    }
-
-    drawTriNavDebug() {
-        const triNav = this.triNav;
-        if (!triNav || !triNav.navGrid) return;
-
-        if (!this.triNavGraphics) {
-            this.triNavGraphics = this.add.graphics();
-            this.triNavGraphics.setDepth(150);
-        }
-        this.triNavGraphics.clear();
-
-        const T = this.tileSize || TILE_SIZE;
-
-        // Walkable tiles — semi-transparent green
-        this.triNavGraphics.fillStyle(0x00ff00, 0.08);
-        for (let y = 0; y < triNav.mapHeight; y++) {
-            for (let x = 0; x < triNav.mapWidth; x++) {
-                if (triNav.navGrid[y][x]) {
-                    this.triNavGraphics.fillRect(x * T, y * T, T, T);
-                }
-            }
-        }
-
-        // Bot paths — magenta lines + waypoint dots
-        if (this.bots) {
-            for (const bot of this.bots) {
-                if (!bot.active || !bot.brain) continue;
-                const waypoints = bot.brain.blackboard.get('triWaypoints');
-                if (!waypoints || waypoints.length < 1) continue;
-
-                // Path lines
-                this.triNavGraphics.lineStyle(2, 0xff00ff, 0.7);
-                const startX = bot.x, startY = bot.y;
-                this.triNavGraphics.lineBetween(startX, startY, waypoints[0].x, waypoints[0].y);
-                for (let i = 0; i < waypoints.length - 1; i++) {
-                    this.triNavGraphics.lineBetween(
-                        waypoints[i].x, waypoints[i].y,
-                        waypoints[i + 1].x, waypoints[i + 1].y);
-                }
-
-                // Waypoint dots
-                this.triNavGraphics.fillStyle(0xff00ff, 0.9);
-                for (const wp of waypoints) {
-                    this.triNavGraphics.fillCircle(wp.x, wp.y, 5);
-                }
-
-                // Current target waypoint — larger, yellow
-                const wpIdx = bot.brain.blackboard.get('triWpIndex') || 0;
-                if (wpIdx < waypoints.length) {
-                    this.triNavGraphics.fillStyle(0xffff00, 1.0);
-                    this.triNavGraphics.fillCircle(waypoints[wpIdx].x, waypoints[wpIdx].y, 8);
-                }
-            }
-        }
     }
 
     drawHookForCharacter(character) {
