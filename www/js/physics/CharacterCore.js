@@ -30,7 +30,6 @@ export class CharacterCore {
         this.hookPos = { x: 0, y: 0 };
         this.hookVel = { x: 0, y: 0 };
         this.hookAnchorPos = null;  // { x, y } — anchor coordinates
-        this.ropeLength = 0;
         this.hookCooldown = 0;
         this._prevHookInput = false;  // Teeworlds-style edge detection (replaces hookJustPressed)
 
@@ -122,11 +121,8 @@ export class CharacterCore {
      * Process jump input
      */
     processJump(input) {
-        const hasDoubleJump = this.scene.canDoubleJump &&
-                              this.scene.canDoubleJump(this.sprite);
-
-        const canAirJump = hasDoubleJump &&
-                           !this.grounded &&
+        // Double jump always available (Teeworlds-style)
+        const canAirJump = !this.grounded &&
                            !this.airJumpUsed &&
                            this.jumpBuffer > 0;
 
@@ -325,11 +321,9 @@ export class CharacterCore {
         if (!this.scene) return;
 
         this.hookAnchorPos = { x: anchorX, y: anchorY };
-        this.ropeLength = Math.hypot(anchorX - this.body.x, anchorY - this.body.y);
         this.hookState = 'ATTACHED';
         this.hookPos.x = anchorX;
         this.hookPos.y = anchorY;
-        this._hookStuckTimer = 0;
 
         if (!this.suppressSounds && this._canPlaySound('hookAttached') && this.scene.playSpatialSound) {
             this.scene.playSpatialSound('sfx-hook-attached', anchorX, anchorY, 0.3);
@@ -337,8 +331,8 @@ export class CharacterCore {
     }
 
     /**
-     * Update while attached — distance constraint (replicates original Matter.js rope).
-     * Rope has stiffness, damping, auto-reel, and supplemental pull.
+     * Update while attached — DDNet drag-velocity model (gamecore.cpp).
+     * No rope length, no auto-reel, no stiffness/damping/spring.
      */
     updateAttachedHook(input, delta) {
         if (!this.hookAnchorPos) {
@@ -346,17 +340,15 @@ export class CharacterCore {
             return false;
         }
 
-        // Vector to anchor
         const dx = this.hookAnchorPos.x - this.body.x;
         const dy = this.hookAnchorPos.y - this.body.y;
         const dist = Math.hypot(dx, dy);
 
-        // Jump → release with swing momentum (original behavior)
+        // Jump → release with swing momentum
         if (this.jumpBuffer > 0) {
             let swingVx = this.body.vx * 1.1;
             let swingVy = Math.min(this.body.vy, PHYS.JUMP_FORCE * 0.95);
 
-            // Anti-tunneling: check tiles ahead (from original)
             if (this.scene.platformLayer) {
                 const halfW = 25, halfH = 30;
                 const dt = 1 / 60;
@@ -384,70 +376,42 @@ export class CharacterCore {
             this.jumpBuffer = 0;
             this.coyoteTime = 0;
             this.canJump = false;
-            this._hookStuckTimer = 0;
             this.releaseHook();
             this.hookCooldown = PHYS.HOOK_COOLDOWN * 0.5;
             return false;
         }
 
-        // Auto-release: stuck near anchor with low speed for 500ms
-        if (!this._hookStuckTimer) this._hookStuckTimer = 0;
-        const speed = Math.hypot(this.body.vx, this.body.vy);
-        if (speed < 80 && dist < 80) {
-            this._hookStuckTimer += delta;
-            if (this._hookStuckTimer > 500) {
-                this._hookStuckTimer = 0;
-                this.releaseHook();
-                return false;
-            }
-        } else {
-            this._hookStuckTimer = 0;
-        }
-
-        // Auto-reel: shorten rope (bots can disable via hookNoReel)
-        const noReel = this.sprite?.getData?.('hookNoReel');
-        if (!noReel && this.ropeLength > PHYS.HOOK_MIN_LENGTH) {
-            this.ropeLength -= PHYS.HOOK_REEL_SPEED;
-        }
-
-        // Distance constraint: enforce rope length
-        if (dist > this.ropeLength && dist > 0) {
+        // DDNet drag model: only apply when distance > threshold
+        if (dist > PHYS.HOOK_DRAG_MIN_DIST) {
             const nx = dx / dist;
             const ny = dy / dist;
+            const dt = delta / 1000;
 
-            // Radial velocity (positive = toward anchor)
-            const radialVel = this.body.vx * nx + this.body.vy * ny;
+            let hdx = nx * PHYS.HOOK_DRAG_ACCEL * dt;
+            let hdy = ny * PHYS.HOOK_DRAG_ACCEL * dt;
 
-            // If moving away from anchor, remove outward velocity (stiffness)
-            if (radialVel < 0) {
-                const correction = -radialVel * PHYS.HOOK_STIFFNESS;
-                this.body.vx += nx * correction;
-                this.body.vy += ny * correction;
+            // DDNet: easier to climb up than be pulled down
+            if (hdy > 0) hdy *= 0.3;
+
+            // DDNet: boost if moving same direction as hook pull
+            if ((hdx < 0 && this.body.vx < 0) || (hdx > 0 && this.body.vx > 0))
+                hdx *= 0.95;
+            else
+                hdx *= 0.75;
+
+            const nvx = this.body.vx + hdx;
+            const nvy = this.body.vy + hdy;
+            const newSpd = Math.hypot(nvx, nvy);
+            const oldSpd = Math.hypot(this.body.vx, this.body.vy);
+
+            // DDNet speed cap: only apply if not exceeding drag speed, or decelerating
+            if (newSpd < PHYS.HOOK_DRAG_SPEED || newSpd < oldSpd) {
+                this.body.vx = nvx;
+                this.body.vy = nvy;
             }
-
-            // Apply damping to radial velocity
-            const currentRadial = this.body.vx * nx + this.body.vy * ny;
-            if (Math.abs(currentRadial) > 0) {
-                const dampForce = -currentRadial * PHYS.HOOK_DAMPING;
-                this.body.vx += nx * dampForce;
-                this.body.vy += ny * dampForce;
-            }
-
-            // Pull back to rope length (spring correction)
-            const overshoot = dist - this.ropeLength;
-            this.body.vx += nx * overshoot * 3;
-            this.body.vy += ny * overshoot * 3;
         }
 
-        // Supplemental pull toward anchor (impulse effect - v28: direct velocity add)
-        if (dist > 0) {
-            // Original was applyImpulse with 0.48, which adds directly to velocity
-            // For mass ~1, impulse ≈ velocity change
-            this.body.vx += (dx / dist) * 0.48;
-            this.body.vy += (dy / dist) * 0.48;
-        }
-
-        return true; // On rope
+        return true;
     }
 
     /**
@@ -518,11 +482,8 @@ export class CharacterCore {
             this.hookPos.x = CharacterCore.roundToInt(this.hookPos.x);
             this.hookPos.y = CharacterCore.roundToInt(this.hookPos.y);
         } else if (this.hookState === 'ATTACHED' && this.hookAnchorPos) {
-            // Quantize anchor position to prevent drift
             this.hookAnchorPos.x = CharacterCore.roundToInt(this.hookAnchorPos.x);
             this.hookAnchorPos.y = CharacterCore.roundToInt(this.hookAnchorPos.y);
-            // Quantize rope length to 1/16 precision
-            this.ropeLength = CharacterCore.roundToInt(this.ropeLength * 16) / 16;
         }
     }
 
@@ -546,9 +507,7 @@ export class CharacterCore {
             hookAnchorPos: this.hookAnchorPos
                 ? { x: this.hookAnchorPos.x, y: this.hookAnchorPos.y }
                 : null,
-            ropeLength: this.ropeLength,
-            hookCooldown: this.hookCooldown,
-            _hookStuckTimer: this._hookStuckTimer || 0
+            hookCooldown: this.hookCooldown
         };
     }
 
@@ -573,9 +532,7 @@ export class CharacterCore {
         this.hookAnchorPos = state.hookAnchorPos
             ? { x: state.hookAnchorPos.x, y: state.hookAnchorPos.y }
             : null;
-        this.ropeLength = state.ropeLength;
         this.hookCooldown = state.hookCooldown;
-        this._hookStuckTimer = state._hookStuckTimer;
     }
 
     // === COMPATIBILITY GETTERS (for code expecting Rapier-style API) ===

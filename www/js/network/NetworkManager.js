@@ -382,7 +382,6 @@ export class NetworkManager {
             hookState: p.core?.hookState || 'IDLE',
             hookPos: p.core?.hookPos ? { x: p.core.hookPos.x, y: p.core.hookPos.y } : null,
             hookAnchorPos: p.core?.hookAnchorPos ? { x: p.core.hookAnchorPos.x, y: p.core.hookAnchorPos.y } : null,
-            ropeLength: p.core?.ropeLength || 0,
             grounded: p.core?.grounded || false,
             powerup: this.scene.getActivePowerupType?.(p) || null,
             isDying: p.getData('isDying') || false,
@@ -637,7 +636,6 @@ export class NetworkManager {
             if (!pp || pp.hookState !== 'IDLE' || cp.hookState !== 'IDLE') {
                 slim.hookPos = cp.hookPos;
                 slim.hookAnchorPos = cp.hookAnchorPos;
-                slim.ropeLength = cp.ropeLength;
             }
             if (!pp || pp.grounded !== cp.grounded) slim.grounded = cp.grounded;
             if (!pp || pp.powerup !== cp.powerup) slim.powerup = cp.powerup;

@@ -27,13 +27,21 @@ for t in tileset.get('tiles', []):
     rel = t['image'].replace('\\/', '/')
     gid_to_path[gid] = os.path.normpath(os.path.join(maps_dir, rel))
 
-# Find all used GIDs across ALL tile layers
+# Tiled flip flags (high bits of GID)
+FLIP_H = 0x80000000
+FLIP_V = 0x40000000
+FLIP_D = 0x20000000
+FLIP_MASK = FLIP_H | FLIP_V | FLIP_D
+
+# Find all used GIDs (strip flip bits for identification, but preserve them for output)
 all_gids = set()
 for layer in data['layers']:
     if layer.get('type') == 'tilelayer' and 'data' in layer:
         for g in layer['data']:
             if g > 0:
-                all_gids.add(g)
+                base_gid = g & ~FLIP_MASK
+                if base_gid > 0:
+                    all_gids.add(base_gid)
 
 used_gids = sorted(all_gids)
 print(f"Unique tiles: {len(used_gids)}")
@@ -47,10 +55,14 @@ for gid in used_gids:
         print(f"    Full path: {p}")
         exit(1)
 
-# Build spritesheet
+# Build spritesheet with 2px margin + 2px spacing (fixes tile seams)
+MARGIN = 2
+SPACING = 2
 n = len(used_gids)
 rows = (n + COLS - 1) // COLS
-sheet_w, sheet_h = COLS * TILE, rows * TILE
+cell = TILE + SPACING
+sheet_w = MARGIN * 2 + COLS * cell - SPACING
+sheet_h = MARGIN * 2 + rows * cell - SPACING
 
 sheet = Image.new('RGBA', (sheet_w, sheet_h), (0, 0, 0, 0))
 old_to_new = {}
@@ -62,17 +74,37 @@ for idx, old_gid in enumerate(used_gids):
     img = Image.open(gid_to_path[old_gid]).convert('RGBA')
     if img.size != (TILE, TILE):
         img = img.resize((TILE, TILE), Image.LANCZOS)
-    sheet.paste(img, (c * TILE, r * TILE))
+    px = MARGIN + c * cell
+    py = MARGIN + r * cell
+    sheet.paste(img, (px, py))
+    # Extrude edges by 1px to prevent seam bleeding
+    # Top edge
+    sheet.paste(img.crop((0, 0, TILE, 1)), (px, py - 1))
+    # Bottom edge
+    sheet.paste(img.crop((0, TILE - 1, TILE, TILE)), (px, py + TILE))
+    # Left edge
+    sheet.paste(img.crop((0, 0, 1, TILE)), (px - 1, py))
+    # Right edge
+    sheet.paste(img.crop((TILE - 1, 0, TILE, TILE)), (px + TILE, py))
     print(f"  [{new_gid:2d}] ← GID {old_gid} = {os.path.basename(gid_to_path[old_gid])}")
 
 os.makedirs(os.path.dirname(OUTPUT_SHEET), exist_ok=True)
 sheet.save(OUTPUT_SHEET)
 print(f"\nSpritesheet: {OUTPUT_SHEET} ({sheet_w}x{sheet_h})")
 
-# Remap tile data in all layers
+# Remap tile data in all layers (preserve flip bits)
 for layer in data['layers']:
     if layer.get('type') == 'tilelayer' and 'data' in layer:
-        layer['data'] = [old_to_new.get(g, 0) if g > 0 else 0 for g in layer['data']]
+        new_data = []
+        for g in layer['data']:
+            if g <= 0:
+                new_data.append(0)
+            else:
+                flip = g & FLIP_MASK
+                base = g & ~FLIP_MASK
+                new_gid = old_to_new.get(base, 0)
+                new_data.append((new_gid | flip) if new_gid > 0 else 0)
+        layer['data'] = new_data
 
 # Replace tileset definition
 data['tilesets'] = [{
@@ -81,9 +113,9 @@ data['tilesets'] = [{
     "image": "../snow/sheet.png",
     "imageheight": sheet_h,
     "imagewidth": sheet_w,
-    "margin": 0,
+    "margin": MARGIN,
     "name": "snow",
-    "spacing": 0,
+    "spacing": SPACING,
     "tilecount": n,
     "tileheight": TILE,
     "tilewidth": TILE

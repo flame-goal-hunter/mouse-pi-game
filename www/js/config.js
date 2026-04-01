@@ -15,13 +15,12 @@ export const PHYS = {
     MAX_SPEED_X: 480,       // px/s (max horizontal velocity)
     MAX_SPEED_Y: 900,       // px/s (max fall velocity)
 
-    // Hook / Grapple - Teeworlds style
+    // Hook / Grapple - DDNet style drag model (values in px/s, our units)
     HOOK_SPEED: 25,         // Hook projectile speed (px/frame at 60fps)
     HOOK_RANGE: 500,        // Max hook distance in pixels
-    HOOK_STIFFNESS: 0.9,    // Rope stiffness (0-1, higher = more rigid)
-    HOOK_DAMPING: 0.1,      // Rope damping (oscillation reduction)
-    HOOK_REEL_SPEED: 3,     // How fast rope shortens (px/frame)
-    HOOK_MIN_LENGTH: 50,    // Minimum rope length
+    HOOK_DRAG_ACCEL: 7200,  // px/s² — DDNet ratio: 6x gravity (drag=3.0, grav=0.5 per tick)
+    HOOK_DRAG_SPEED: 600,   // px/s max speed from hook drag
+    HOOK_DRAG_MIN_DIST: 46, // Min distance before drag applies (px)
     HOOK_COOLDOWN: 300,     // Cooldown between hooks (ms)
 
     // Combat
