@@ -1,6 +1,6 @@
 // ============================================
 // HUMAN INPUT - Keyboard + Touch Controls
-// v7: Left stick (move) + Right stick (jump+fire) + Hook button
+// v8: Left stick (move) + 3 buttons (jump, fire, hook)
 // ============================================
 
 export class HumanInput {
@@ -23,11 +23,7 @@ export class HumanInput {
         this.touchJump = false;
         this.touchHook = false;
         this.touchHookJustPressed = false;
-
-        // Right joystick state (tap=jump, drag=fire)
-        this._tapJumpPending = false;
-        this._fireJoystickActive = false;
-        this._fireJoystickAngle = 0;
+        this.touchFireJustPressed = false;
 
         // Joystick direction (from left nipplejs)
         this.joystickDir = 0;
@@ -43,7 +39,6 @@ export class HumanInput {
         if (this.isMobile) {
             this.setupTouchControls();
         } else {
-            // Hide mobile controls on desktop
             const zone = document.getElementById('joystick-zone');
             if (zone) zone.style.display = 'none';
         }
@@ -63,21 +58,18 @@ export class HumanInput {
             }
         });
 
-        // Handle app minimize/restore (Android background, tab switch)
+        // Handle app minimize/restore
         this._onVisibilityChange = () => {
             if (!this.isMobile) return;
-            // Always reset touch state on visibility change (prevents stuck inputs)
             this.joystickDir = 0;
             this.touchJump = false;
             this.touchHook = false;
             this.fireJustPressed = false;
             this.hookJustPressed = false;
             this.wasHookDown = false;
-            this._tapJumpPending = false;
-            this._fireJoystickActive = false;
+            this.touchFireJustPressed = false;
 
             if (!document.hidden) {
-                // Recreate nipplejs — it loses touch state when DOM is hidden
                 this.recreateJoysticks();
             }
         };
@@ -95,9 +87,8 @@ export class HumanInput {
 
     setupTouchControls() {
         this.createJoystick();
-        this.createRightJoystick();
         this.createButtons();
-        console.log('[TouchControls] v7: left stick + right stick + hook button');
+        console.log('[TouchControls] v8: left stick + 3 buttons (jump, fire, hook)');
     }
 
     // ==========================================
@@ -173,87 +164,6 @@ export class HumanInput {
     }
 
     // ==========================================
-    // RIGHT JOYSTICK (nipplejs) — jump + fire
-    // ==========================================
-
-    createRightJoystick() {
-        if (typeof nipplejs === 'undefined') return;
-
-        const zone = document.getElementById('right-joystick-zone');
-        if (!zone) {
-            console.error('[HumanInput] #right-joystick-zone not found!');
-            return;
-        }
-
-        zone.innerHTML = '';
-
-        this._rightJoystickRetries = 0;
-        this._rightJoystickTimer = setTimeout(() => this._tryCreateRightJoystick(), 50);
-    }
-
-    _tryCreateRightJoystick() {
-        this._rightJoystickTimer = null;
-        if (this._destroyed) return;
-
-        const zone = document.getElementById('right-joystick-zone');
-        if (!zone) return;
-
-        if (zone.offsetWidth === 0 || zone.offsetHeight === 0) {
-            this._rightJoystickRetries++;
-            if (this._rightJoystickRetries < 10) {
-                this._rightJoystickTimer = setTimeout(() => this._tryCreateRightJoystick(), 100);
-            }
-            return;
-        }
-
-        this._initRightNipple(zone);
-    }
-
-    _initRightNipple(zone) {
-        if (this._destroyed || this.rightNipple) return;
-
-        this._rightStart = 0;
-        this._rightMaxForce = 0;
-
-        this.rightNipple = nipplejs.create({
-            zone: zone,
-            mode: 'static',
-            position: { right: '22%', bottom: '38%' },
-            size: 120,
-            color: '#42a5f5',
-            fadeTime: 0
-        });
-
-        this.rightNipple.on('start', () => {
-            this._rightStart = Date.now();
-            this._rightMaxForce = 0;
-        });
-
-        this.rightNipple.on('move', (evt, data) => {
-            this._rightMaxForce = Math.max(this._rightMaxForce, data.force);
-            if (data.force > 0.5) {
-                // Drag = continuous fire in drag direction
-                this._fireJoystickActive = true;
-                // nipplejs: 0=right, PI/2=up (math) → game: 0=right, -PI/2=up (screen)
-                this._fireJoystickAngle = -data.angle.radian;
-            } else {
-                this._fireJoystickActive = false;
-            }
-        });
-
-        this.rightNipple.on('end', () => {
-            const duration = Date.now() - this._rightStart;
-            // Tap (no significant drag) = jump
-            if (this._rightMaxForce < 0.5 && duration < 350) {
-                this._tapJumpPending = true;
-            }
-            this._fireJoystickActive = false;
-        });
-
-        console.log('[HumanInput] right joystick created (jump + fire)');
-    }
-
-    // ==========================================
     // RECREATE JOYSTICKS (after visibility change)
     // ==========================================
 
@@ -263,16 +173,10 @@ export class HumanInput {
             this.nippleManager = null;
         }
         this.createJoystick();
-
-        if (this.rightNipple) {
-            this.rightNipple.destroy();
-            this.rightNipple = null;
-        }
-        this.createRightJoystick();
     }
 
     // ==========================================
-    // BUTTONS (DOM-based)
+    // BUTTONS (DOM-based) — jump, fire, hook
     // ==========================================
 
     createButtons() {
@@ -289,7 +193,16 @@ export class HumanInput {
             this._buttonListeners.push({ el, down, up, cancel });
         };
 
-        // Hook button
+        bind(document.getElementById('btn-jump'),
+            () => { this.touchJump = true; },
+            () => { this.touchJump = false; }
+        );
+
+        bind(document.getElementById('btn-fire'),
+            () => { this.touchFireJustPressed = true; },
+            () => {}
+        );
+
         bind(document.getElementById('btn-hook'),
             () => { this.touchHook = true; this.touchHookJustPressed = true; },
             () => this.touchHook = false
@@ -324,13 +237,12 @@ export class HumanInput {
         }
 
         const jump = this.keys.SPACE.isDown || this.keys.W.isDown || this.cursors.up.isDown
-            || this.touchJump || this._tapJumpPending;
-        this._tapJumpPending = false;
+            || this.touchJump;
 
         let fire = false;
         let fireAngle = null;
 
-        // Desktop: click to fire
+        // Desktop: click to fire toward cursor
         if (this.fireJustPressed) {
             fire = true;
             fireAngle = this.fireAngle;
@@ -338,10 +250,11 @@ export class HumanInput {
             this.fireAngle = null;
         }
 
-        // Mobile: continuous fire while dragging right joystick
-        if (this._fireJoystickActive) {
+        // Mobile: fire with auto-aim (angle resolved in GameScene)
+        if (this.touchFireJustPressed) {
             fire = true;
-            fireAngle = this._fireJoystickAngle;
+            fireAngle = null; // null = auto-aim at nearest visible enemy
+            this.touchFireJustPressed = false;
         }
 
         const hookJust = this.hookJustPressed || this.touchHookJustPressed;
@@ -366,23 +279,16 @@ export class HumanInput {
     destroy() {
         this._destroyed = true;
 
-        // Remove visibility handler
         if (this._onVisibilityChange) {
             document.removeEventListener('visibilitychange', this._onVisibilityChange);
             this._onVisibilityChange = null;
         }
 
-        // Cancel pending joystick creation timers
         if (this._joystickTimer) {
             clearTimeout(this._joystickTimer);
             this._joystickTimer = null;
         }
-        if (this._rightJoystickTimer) {
-            clearTimeout(this._rightJoystickTimer);
-            this._rightJoystickTimer = null;
-        }
 
-        // Destroy left nipplejs
         if (this.nippleManager) {
             this.nippleManager.destroy();
             this.nippleManager = null;
@@ -390,15 +296,6 @@ export class HumanInput {
         const zone = document.getElementById('joystick-zone');
         if (zone) zone.innerHTML = '';
 
-        // Destroy right nipplejs
-        if (this.rightNipple) {
-            this.rightNipple.destroy();
-            this.rightNipple = null;
-        }
-        const rightZone = document.getElementById('right-joystick-zone');
-        if (rightZone) rightZone.innerHTML = '';
-
-        // Remove button touch listeners
         this.removeButtonListeners();
     }
 }

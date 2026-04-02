@@ -106,10 +106,6 @@
             pointer-events: auto;
         }
 
-        #hud-debug {
-            margin-left: 10px;
-            opacity: 0.6;
-        }
 
         #hud-ping {
             font-family: 'Nunito', monospace;
@@ -137,8 +133,7 @@
             body.game-active .mobile-controls {
                 display: flex !important;
             }
-            body.game-active #joystick-zone,
-            body.game-active #right-joystick-zone {
+            body.game-active #joystick-zone {
                 display: block !important;
             }
         }
@@ -168,89 +163,54 @@
             user-select: none;
             -webkit-user-select: none;
             cursor: pointer;
-            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            transition: transform 0.08s ease;
+        }
+
+        /* Invisible touch padding — extends hit area 12px beyond visual */
+        .game-btn::after {
+            content: '';
+            position: absolute;
+            top: -12px; left: -12px; right: -12px; bottom: -12px;
         }
 
         .game-btn:active {
-            transform: scale(0.88);
+            transform: scale(0.9);
+            filter: brightness(1.15);
         }
 
-        /* ========== Right joystick zone (mirror of left) ========== */
-        #right-joystick-zone {
-            position: fixed;
-            right: 0;
-            bottom: 0;
-            width: 45vw;
-            height: 45vh;
-            z-index: 10;
-        }
+        /* ========== Action buttons ========== */
+        /*              [🪝]
+           [❄️]       [🐾]      */
 
-        /* Blue/ice style for right joystick */
-        #right-joystick-zone .back {
-            background: radial-gradient(circle, rgba(30,80,180,0.75) 0%, rgba(20,50,130,0.85) 100%) !important;
-            border: 2px solid rgba(100,160,255,0.6) !important;
-            box-shadow: 0 4px 20px rgba(41,98,255,0.5), inset 0 0 20px rgba(0,0,0,0.3) !important;
-        }
-
-        #right-joystick-zone .front {
-            background: radial-gradient(circle at 35% 35%, #90caf9, #42a5f5) !important;
-            border: 2px solid rgba(255,255,255,0.7) !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.5) !important;
-        }
-
-        /* Hint icons on right joystick */
-        #right-joystick-zone .back::after {
-            content: '❄️';
-            position: absolute;
-            top: 4px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 14px;
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        #right-joystick-zone .front::after {
-            content: '⬆';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 22px;
-            font-weight: bold;
-            color: rgba(255,255,255,0.6);
-            pointer-events: none;
-        }
-
-        /* ========== Hook button ========== */
-        #btn-hook {
-            position: fixed;
+        #btn-jump {
+            bottom: 10px;
             right: 8px;
-            bottom: calc(45vh - 55px);
-            width: 72px;
-            height: 72px;
-            background: radial-gradient(circle at 35% 35%, #ffd54f, #ff8f00);
-            border: 2px solid rgba(255,255,255,0.5);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            font-size: 28px;
-            z-index: 10;
+            width: 96px;
+            height: 96px;
+            font-size: 36px;
+            background: radial-gradient(circle at 36% 36%, #bcaaa4, #5d4037);
+            box-shadow: 0 5px 22px rgba(93,64,55,0.55), inset 0 2px 5px rgba(255,255,255,0.3), inset 0 -3px 5px rgba(0,0,0,0.15);
         }
 
-        /* ========== Reload indicator ========== */
-        #hud-player-reload {
-            width: 80px;
-            height: 4px;
-            background: rgba(255,255,255,0.15);
-            border-radius: 2px;
-            margin-top: 3px;
-            overflow: hidden;
+        #btn-fire {
+            bottom: 10px;
+            right: 118px;
+            width: 86px;
+            height: 86px;
+            font-size: 32px;
+            background: radial-gradient(circle at 36% 36%, #64b5f6, #0d47a1);
+            box-shadow: 0 5px 20px rgba(13,71,161,0.55), inset 0 2px 5px rgba(255,255,255,0.3), inset 0 -3px 5px rgba(0,0,0,0.15);
         }
 
-        #hud-player-reload .reload-fill {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, #90caf9, #42a5f5);
-            border-radius: 2px;
+        #btn-hook {
+            bottom: 118px;
+            right: 8px;
+            width: 78px;
+            height: 78px;
+            font-size: 30px;
+            background: radial-gradient(circle at 36% 36%, #ffb74d, #e65100);
+            box-shadow: 0 4px 18px rgba(230,81,0,0.55), inset 0 2px 4px rgba(255,255,255,0.3), inset 0 -2px 4px rgba(0,0,0,0.15);
         }
     </style>
 </head>
@@ -262,12 +222,10 @@
         <div id="hud-player">
             <div class="hud-name" id="hud-player-name"></div>
             <div class="hud-hearts" id="hud-player-hearts"></div>
-            <div id="hud-player-reload"><div class="reload-fill"></div></div>
         </div>
         <div id="hud-center">
             <div class="hud-score" id="hud-score">0 : 0</div>
             <div id="hud-pause">⏸️</div>
-            <div id="hud-debug">📋</div>
             <div id="hud-ping"></div>
         </div>
         <div id="hud-opponents"></div>
@@ -275,7 +233,8 @@
 
     <!-- Mobile controls (hidden until body.game-active + mobile) -->
     <div id="joystick-zone" class="mobile-controls"></div>
-    <div id="right-joystick-zone" class="mobile-controls"></div>
+    <button id="btn-jump" class="mobile-controls game-btn">🐾</button>
+    <button id="btn-fire" class="mobile-controls game-btn">❄️</button>
     <button id="btn-hook" class="mobile-controls game-btn">🪝</button>
 
     <!-- Phaser 3 -->

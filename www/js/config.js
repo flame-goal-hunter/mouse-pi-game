@@ -8,11 +8,11 @@ export const PHYS = {
     GRAVITY: 1200,          // px/s² (Rapier gravity)
 
     // Movement (velocity-based, lerp rates per frame)
-    GROUND_ACCEL: 0.25,     // Lerp rate toward target speed (grounded)
-    AIR_ACCEL: 0.12,        // Lerp rate toward target speed (air)
-    GROUND_FRICTION: 0.96,  // Velocity multiplier when no input (grounded, <1 = decelerate)
+    GROUND_ACCEL: 0.40,     // Lerp rate toward target speed (grounded) — snappy
+    AIR_ACCEL: 0.08,        // Lerp rate toward target speed (air) — less control
+    GROUND_FRICTION: 0.80,  // Velocity multiplier when no input (grounded) — quick stop
     JUMP_FORCE: -710,       // px/s (negative = up, h = 710²/2400 ≈ 210 px ≈ 3 тайла)
-    MAX_SPEED_X: 480,       // px/s (max horizontal velocity)
+    MAX_SPEED_X: 420,       // px/s (max horizontal velocity)
     MAX_SPEED_Y: 900,       // px/s (max fall velocity)
 
     // Hook / Grapple - DDNet style drag model (values in px/s, our units)
@@ -30,11 +30,7 @@ export const PHYS = {
     SNOWBALL_GRAVITY_SCALE: 0.5,  // Gravity multiplier for snowballs (lighter than characters)
     SNOWBALL_BOUNCE: 0.3,         // Bounce off walls/platforms
     SNOWBALL_LIFETIME: 3000,      // ms before auto-destroy
-    SNOWBALL_FIRE_RATE: 250,      // ms between shots
-    SNOWBALL_MAGAZINE: 15,         // snowballs per magazine
-    SNOWBALL_RELOAD_TIME: 2000,    // ms to reload when magazine empty
-    SNOWBALL_REGEN_DELAY: 1000,    // ms after last shot before passive regen starts
-    SNOWBALL_REGEN_RATE: 100,      // ms per ammo regen (1 snowball every 100ms)
+    SNOWBALL_FIRE_RATE: 350,      // ms between shots (~3/sec, cooldown only)
 
     // Coyote time & jump buffer
     COYOTE_TIME: 100,       // ms to jump after leaving ground

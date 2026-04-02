@@ -213,11 +213,25 @@ export class GameScene extends Phaser.Scene {
         const tileset = this.map.addTilesetImage('snow', 'ice-tiles');
         this._tileset = tileset; // Store for prediction world
 
-        // Tiled background image (covers whole map, scrolls with camera)
-        const mapPixelW = this.map.widthInPixels;
-        const mapPixelH = this.map.heightInPixels;
-        this.bgImage = this.add.tileSprite(0, 0, mapPixelW, mapPixelH, 'bg')
-            .setOrigin(0, 0).setDepth(-20).setScrollFactor(1, 1);
+        // Sky gradient (stretches across entire map)
+        this.bgImage = this.add.image(0, 0, 'bg')
+            .setOrigin(0, 0).setDepth(-20)
+            .setDisplaySize(this.map.widthInPixels, this.map.heightInPixels);
+
+        // Sun (parallax — moves slower than camera for depth)
+        const sunGlow = this.add.circle(280, 120, 60, 0xfff9c4, 0.3)
+            .setDepth(-19).setScrollFactor(0.15, 0.15);
+        this.add.circle(280, 120, 36, 0xffee58)
+            .setDepth(-18).setScrollFactor(0.15, 0.15);
+        this.tweens.add({
+            targets: sunGlow,
+            scaleX: 1.15, scaleY: 1.15,
+            alpha: 0.2,
+            duration: 2000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
 
         // Background layer (decorations - no collision)
         this.bgLayer = this.map.createLayer('background', tileset, 0, 0);
@@ -311,8 +325,8 @@ export class GameScene extends Phaser.Scene {
         // v28: Validate spawn points - ensure there's ground below each
         this._validateSpawnPoints();
 
-        // Sky background
-        this.cameras.main.setBackgroundColor('#87CEEB');
+        // Sky background (darker for visibility of snowballs/hooks)
+        this.cameras.main.setBackgroundColor('#93d5f0');
     }
 
     /**
@@ -466,8 +480,6 @@ export class GameScene extends Phaser.Scene {
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('score', 0);
         character.setData('facingRight', true);
-        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
-        character.setData('reloading', false);
         character.animPrefix = `p${charNum}`;
 
         return character;
@@ -847,7 +859,6 @@ export class GameScene extends Phaser.Scene {
         this.hudScore = document.getElementById('hud-score');
         this.hudPause = document.getElementById('hud-pause');
         this.hudOpponents = document.getElementById('hud-opponents');
-        this.hudReloadFill = document.querySelector('#hud-player-reload .reload-fill');
 
         // Player name
         if (this.hudPlayerName) this.hudPlayerName.textContent = '🐭 ' + (window.gameConfig?.nickname || GAME.PLAYER_NAME);
@@ -857,12 +868,6 @@ export class GameScene extends Phaser.Scene {
 
         // Pause button
         if (this.hudPause) this.hudPause.addEventListener('click', () => this.showPauseMenu());
-
-        // Debug log button
-        const hudDebug = document.getElementById('hud-debug');
-        if (hudDebug) hudDebug.addEventListener('click', () => {
-            if (window.DebugLog) window.DebugLog.showUI();
-        });
 
         // === OPPONENTS (right side, stacked) ===
         this.createOpponentPanels();
@@ -1347,13 +1352,10 @@ export class GameScene extends Phaser.Scene {
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
-        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
-        character.setData('reloading', false);
         character.setAngle(0);
         character.setActive(true);
         character.setVisible(true);
         if (character.nameLabel) character.nameLabel.setVisible(true);
-        if (character === this.player) this.updateReloadBar();
     }
 
     respawnCharacter(character) {
@@ -1392,13 +1394,10 @@ export class GameScene extends Phaser.Scene {
         if (character.core) character.core.releaseHook();
         character.setData('health', GAME.MAX_HEALTH);
         character.setData('isDying', false);
-        character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
-        character.setData('reloading', false);
         character.setAngle(0);
         character.setActive(true);
         character.setVisible(true);
         if (character.nameLabel) character.nameLabel.setVisible(true);
-        if (character === this.player) this.updateReloadBar();
 
         this.updateHUD();
     }
@@ -1861,7 +1860,6 @@ export class GameScene extends Phaser.Scene {
         // 7. Snowballs, pickups, powerups
         this.updateSnowballs();
         this.updatePowerups(delta);
-        this.updateAmmoRegen();
 
         // 8. Draw hooks
         this.drawHooks();
@@ -2751,40 +2749,57 @@ export class GameScene extends Phaser.Scene {
 
     // === SNOWBALLS ===
 
+    _autoAimAngle(shooter) {
+        const sx = shooter.x, sy = shooter.y;
+        const facingRight = shooter.getData('facingRight');
+        const fallback = facingRight ? 0 : Math.PI;
+        const range = 600;
+
+        let bestTarget = null;
+        let bestDist = Infinity;
+
+        const checkTarget = (t) => {
+            if (!t || t === shooter || !t.active || (t.getData('health') ?? 0) <= 0) return;
+            const dx = t.x - sx, dy = t.y - sy;
+            const d = Math.hypot(dx, dy);
+            if (d > range || d < 10) return;
+            // LOS check (simple tile raycast)
+            if (this.platformLayer) {
+                const steps = Math.ceil(d / (TILE_SIZE * 0.5));
+                for (let i = 1; i < steps; i++) {
+                    const frac = i / steps;
+                    const tile = this.platformLayer.getTileAtWorldXY(
+                        sx + dx * frac, sy + dy * frac);
+                    if (tile && tile.index > 0) return;
+                }
+            }
+            if (d < bestDist) { bestDist = d; bestTarget = t; }
+        };
+
+        if (this.player) checkTarget(this.player);
+        if (this.guestPlayer) checkTarget(this.guestPlayer);
+        if (this.bots) this.bots.forEach(b => checkTarget(b));
+
+        if (bestTarget) {
+            const angle = Math.atan2(bestTarget.y - sy, bestTarget.x - sx);
+            // Add slight scatter (±8°)
+            return angle + (Math.random() - 0.5) * 0.28;
+        }
+        return fallback;
+    }
+
     shootSnowball(shooter, angle = null) {
         const now = Date.now();
 
-        // Reloading — can't fire
-        if (shooter.getData('reloading')) return;
-
-        // Fire rate (between individual shots)
+        // Fire rate cooldown
         const lastFireTime = shooter.getData('lastFireTime') || 0;
         if (now - lastFireTime < PHYS.SNOWBALL_FIRE_RATE) return;
 
-        // Ammo check
-        let ammo = shooter.getData('ammo');
-        if (ammo === undefined || ammo === null) ammo = PHYS.SNOWBALL_MAGAZINE;
-        if (ammo <= 0) return;
-
-        // Fire!
-        ammo--;
-        shooter.setData('ammo', ammo);
         shooter.setData('lastFireTime', now);
 
-        // Update reload bar (local player only)
-        if (shooter === this.player) {
-            this.updateReloadBar();
-        }
-
-        // Magazine empty — start reload
-        if (ammo <= 0) {
-            this.startReload(shooter);
-        }
-
-        // Determine angle: use provided angle, or default to facing direction (horizontal)
+        // Determine angle: auto-aim at nearest visible enemy, or facing direction
         if (angle === null || angle === undefined) {
-            const facingRight = shooter.getData('facingRight');
-            angle = facingRight ? 0 : Math.PI;
+            angle = this._autoAimAngle(shooter);
         }
 
         const hasFire = this.hasPowerup(shooter, 'fire');
@@ -2823,7 +2838,8 @@ export class GameScene extends Phaser.Scene {
             particles.setDepth(9);
             snowball.setData('particles', particles);
         } else {
-            snowball.setScale(0.5);
+            snowball.setScale(0.55);
+            snowball.setTint(0xe8f4ff);
         }
 
         snowball.setDepth(10);
@@ -2845,60 +2861,6 @@ export class GameScene extends Phaser.Scene {
         snowball.setData('destroyTimer', destroyTimer);
     }
 
-    startReload(character) {
-        character.setData('reloading', true);
-
-        // Reload bar animation (local player only)
-        if (character === this.player && this.hudReloadFill) {
-            this.hudReloadFill.style.transition = 'none';
-            this.hudReloadFill.style.width = '0%';
-            this.hudReloadFill.offsetWidth; // force reflow
-            this.hudReloadFill.style.transition = `width ${PHYS.SNOWBALL_RELOAD_TIME}ms linear`;
-            this.hudReloadFill.style.width = '100%';
-        }
-
-        this.time.delayedCall(PHYS.SNOWBALL_RELOAD_TIME, () => {
-            if (character.active) {
-                character.setData('ammo', PHYS.SNOWBALL_MAGAZINE);
-                character.setData('reloading', false);
-            }
-        });
-    }
-
-    updateReloadBar() {
-        if (!this.hudReloadFill) return;
-        const ammo = this.player.getData('ammo') ?? PHYS.SNOWBALL_MAGAZINE;
-        const pct = (ammo / PHYS.SNOWBALL_MAGAZINE) * 100;
-        this.hudReloadFill.style.transition = 'none';
-        this.hudReloadFill.style.width = pct + '%';
-    }
-
-    _regenAmmoFor(character) {
-        if (!character || !character.active) return;
-        if (character.getData('reloading')) return;
-        const ammo = character.getData('ammo') ?? PHYS.SNOWBALL_MAGAZINE;
-        if (ammo >= PHYS.SNOWBALL_MAGAZINE) return;
-
-        const now = Date.now();
-        const lastFire = character.getData('lastFireTime') || 0;
-        if (now - lastFire < PHYS.SNOWBALL_REGEN_DELAY) return;
-
-        const lastRegen = character.getData('lastRegenTime') || 0;
-        if (now - lastRegen < PHYS.SNOWBALL_REGEN_RATE) return;
-
-        character.setData('ammo', ammo + 1);
-        character.setData('lastRegenTime', now);
-
-        if (character === this.player) this.updateReloadBar();
-    }
-
-    updateAmmoRegen() {
-        this._regenAmmoFor(this.player);
-        if (this.guestPlayer) this._regenAmmoFor(this.guestPlayer);
-        if (this.bots) {
-            this.bots.forEach(bot => this._regenAmmoFor(bot));
-        }
-    }
 
     updateSnowballs() {
         // Update immunity timers and clean up destroyed snowballs

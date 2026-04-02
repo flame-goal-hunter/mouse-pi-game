@@ -38,10 +38,7 @@ const config = {
     width: GAME.WIDTH,
     height: GAME.HEIGHT,
     parent: 'game-container',
-    backgroundColor: '#87CEEB',
-    audio: {
-        disableWebAudio: true
-    },
+    backgroundColor: '#93d5f0',
     input: {
         activePointers: 5  // Поддержка до 5 одновременных касаний для мультитач
     },
@@ -65,16 +62,30 @@ const config = {
 // by the time this module is imported after Rapier WASM init)
 const game = new Phaser.Game(config);
 
+// Suppress DAC pop: on first user touch, resume AudioContext while muted
+document.addEventListener('touchstart', function _unlockAudio() {
+    document.removeEventListener('touchstart', _unlockAudio, true);
+    const ctx = game.sound.context;
+    if (ctx && ctx.state === 'suspended') {
+        game.sound.mute = true;
+        ctx.resume().then(() => {
+            setTimeout(() => { game.sound.mute = false; }, 150);
+        });
+    }
+}, { capture: true, once: true });
+
 // Handle window resize
 window.addEventListener('resize', () => {
     game.scale.refresh();
 });
 
-// Pause/resume Phaser sounds when app goes to background
+// Pause/resume with mute trick to suppress DAC pop on app restore
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         game.sound.pauseAll();
     } else {
+        game.sound.mute = true;
         game.sound.resumeAll();
+        setTimeout(() => { game.sound.mute = false; }, 400);
     }
 });
