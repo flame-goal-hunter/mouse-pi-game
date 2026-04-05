@@ -180,9 +180,13 @@ export class MenuScene extends Phaser.Scene {
     }
 
     generateRoomCode() {
+        // Use persistent code from FavoritesManager if available (index.html flow)
+        if (typeof FavoritesManager !== 'undefined') {
+            return FavoritesManager.getPlayerId();
+        }
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let code = '';
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 4; i++) {
             code += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return code;
