@@ -183,7 +183,10 @@ export class BootScene extends Phaser.Scene {
         const directModes = ['solo', 'host', 'join', 'online'];
         // If we're being launched directly OR MenuScene isn't registered → go to GameScene
         const hasMenu = this.scene.manager.keys && this.scene.manager.keys['MenuScene'];
-        if (directModes.includes(mode) || !hasMenu) {
+        if (mode === 'transylvania') {
+            console.log('[BootScene] mode=transylvania → TransylvaniaScene');
+            this.scene.start('TransylvaniaScene');
+        } else if (directModes.includes(mode) || !hasMenu) {
             console.log('[BootScene] mode=' + mode + ' → GameScene');
             this.scene.start('GameScene');
         } else {

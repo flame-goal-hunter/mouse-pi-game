@@ -241,13 +241,15 @@
 
         .mode-selector {
             display: flex;
-            gap: 3vw;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2vw;
             margin: 1.5vh 0 !important;
         }
 
         .mode-btn {
-            padding: 1.5vh 4vw;
-            font-size: min(3.8vw, 16px);
+            padding: 1.2vh 2.5vw;
+            font-size: min(3.5vw, 15px);
             font-family: 'Comfortaa', sans-serif;
             border: 2px solid #444;
             border-radius: 16px;
@@ -257,9 +259,9 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 1vh;
+            gap: 0.6vh;
             transition: all 0.15s;
-            min-width: 26vw;
+            min-width: 20vw;
         }
 
         .mode-btn .mode-icon {
@@ -281,7 +283,7 @@
             margin-top: 10px !important;
         }
 
-        #adventureOptions, #newyearOptions, #snowballOptions {
+        #adventureOptions, #newyearOptions, #snowballOptions, #transylvaniaOptions {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -451,6 +453,10 @@
                     <span class="mode-icon">❄️</span>
                     <span>Снежки</span>
                 </button>
+                <button class="mode-btn" data-mode="transylvania">
+                    <span class="mode-icon">🦇</span>
+                    <span>Замок Теней</span>
+                </button>
             </div>
             <div id="adventureOptions">
                 <p class="small">🌋 Огненная долина → 🚀 Космос</p>
@@ -471,6 +477,11 @@
                 </div>
                 <p class="small" style="opacity: 0.6;">☃️ Снеговики • 🐧 Пингвины • 👹 Йети</p>
                 <button class="play-btn" id="startNewyearBtn">Играть!</button>
+            </div>
+            <div id="transylvaniaOptions" style="display: none;">
+                <p class="small">🦇 Превью персонажей замка</p>
+                <p class="small" style="opacity: 0.7;">Мышонок Пи, зомби-дворецкий, демон-кот и слайм</p>
+                <button class="play-btn" id="startTransylvaniaBtn" style="background: linear-gradient(135deg, #5a2080, #7a30a0); color: #fff;">🦇 Смотреть</button>
             </div>
             <div id="snowballOptions" style="display: none;">
                 <p class="small">❄️ Битва снежками! ❄️</p>
@@ -1333,6 +1344,7 @@
                     document.getElementById('adventureOptions').style.display = currentGameMode === 'adventure' ? 'flex' : 'none';
                     document.getElementById('newyearOptions').style.display = currentGameMode === 'newyear' ? 'flex' : 'none';
                     document.getElementById('snowballOptions').style.display = currentGameMode === 'snowball' ? 'flex' : 'none';
+                    document.getElementById('transylvaniaOptions').style.display = currentGameMode === 'transylvania' ? 'flex' : 'none';
 
                     // Reset snowball submenu when switching modes
                     document.querySelector('#startScreen .overlay-content').classList.remove('snowball-submenu-active');
@@ -1380,6 +1392,14 @@
             document.getElementById('startAdventureBtn').addEventListener('touchend', (e) => { e.preventDefault(); currentGameMode = 'adventure'; startGame(); });
             document.getElementById('startNewyearBtn').addEventListener('click', () => { currentGameMode = 'newyear'; startGame(); });
             document.getElementById('startNewyearBtn').addEventListener('touchend', (e) => { e.preventDefault(); currentGameMode = 'newyear'; startGame(); });
+
+            // Transylvania mode — launch Phaser TransylvaniaScene via iframe
+            const startTransylvania = (e) => {
+                if (e) e.preventDefault();
+                startTransylvaniaPreview();
+            };
+            document.getElementById('startTransylvaniaBtn').addEventListener('click', startTransylvania);
+            document.getElementById('startTransylvaniaBtn').addEventListener('touchend', startTransylvania);
 
             // Screen buttons (for non-snowball modes)
             document.getElementById('restartBtn1').addEventListener('click', restartGame);
@@ -10527,6 +10547,23 @@
                 phaserRunning = true;
                 gameRunning = true;
                 currentGameMode = 'snowball';
+            };
+            if (phaserRunning) setTimeout(launchGame, 50); else launchGame();
+        }
+
+        function startTransylvaniaPreview() {
+            stopMenuMusic();
+            const frame = document.getElementById('phaserFrame');
+            if (phaserRunning) frame.src = 'about:blank';
+
+            const launchGame = () => {
+                frame.src = 'game-phaser.html?mode=transylvania&_v=' + Date.now();
+                frame.style.display = 'block';
+                document.getElementById('startScreen').classList.remove('visible');
+                document.getElementById('gameCanvas').style.display = 'none';
+                phaserRunning = true;
+                gameRunning = true;
+                currentGameMode = 'transylvania';
             };
             if (phaserRunning) setTimeout(launchGame, 50); else launchGame();
         }

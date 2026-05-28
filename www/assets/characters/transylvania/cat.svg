@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 200" width="220" height="200">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <!-- Outer fluffy fur scribble (irregular outline) -->
+  <path d="M 110 18
+           Q 80 12 56 28
+           Q 30 38 28 70
+           Q 18 90 32 118
+           Q 38 148 70 168
+           Q 90 184 110 184
+           Q 130 184 150 168
+           Q 182 148 188 118
+           Q 202 90 192 70
+           Q 190 38 164 28
+           Q 140 12 110 18 Z"
+        fill="#d63b1f" class="outline"/>
+
+  <!-- Inner fur darker accents -->
+  <path d="M 110 28 Q 138 30 158 50 Q 170 70 168 100 Q 165 130 145 150 Q 125 170 110 170 Q 95 170 75 150 Q 55 130 52 100 Q 50 70 62 50 Q 82 30 110 28 Z"
+        fill="#e85530" opacity="0.5"/>
+
+  <!-- Pointy ears (sticking up out of fluff) -->
+  <path d="M 52 36 L 42 6 L 72 24 Z" fill="#d63b1f" class="outline"/>
+  <path d="M 168 36 L 178 6 L 148 24 Z" fill="#d63b1f" class="outline"/>
+  <!-- Inner ear -->
+  <path d="M 55 30 L 50 14 L 65 22 Z" fill="#8a1f10"/>
+  <path d="M 165 30 L 170 14 L 155 22 Z" fill="#8a1f10"/>
+
+  <!-- Fur tufts around face (small triangles) -->
+  <path d="M 30 70 L 18 66 L 28 80 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+  <path d="M 22 100 L 8 100 L 22 112 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+  <path d="M 30 132 L 18 142 L 36 142 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+  <path d="M 190 70 L 202 66 L 192 80 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+  <path d="M 198 100 L 212 100 L 198 112 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+  <path d="M 190 132 L 202 142 L 184 142 Z" fill="#d63b1f" class="outline" stroke-width="2"/>
+
+  <!-- Eyes (teal narrow slits, angry/sleepy) -->
+  <ellipse cx="78" cy="92" rx="20" ry="9" fill="#1a8a8a" class="outline"/>
+  <ellipse cx="142" cy="92" rx="20" ry="9" fill="#1a8a8a" class="outline"/>
+  <!-- Pupil slits (cat) -->
+  <ellipse cx="78" cy="92" rx="3" ry="7" fill="#1a1a1a"/>
+  <ellipse cx="142" cy="92" rx="3" ry="7" fill="#1a1a1a"/>
+  <!-- Eye shine -->
+  <circle cx="74" cy="89" r="1.5" fill="#fff"/>
+  <circle cx="138" cy="89" r="1.5" fill="#fff"/>
+
+  <!-- Nose (tiny pink triangle) -->
+  <path d="M 110 116 L 104 110 L 116 110 Z" fill="#f5708a" class="outline" stroke-width="2"/>
+
+  <!-- Mouth (grumpy frown with fangs) -->
+  <path d="M 110 122 L 110 132" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M 110 132 Q 100 138 92 134" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M 110 132 Q 120 138 128 134" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Fangs (white triangles hanging down) — bigger, more prominent -->
+  <path d="M 90 132 L 102 132 L 96 156 Z" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <path d="M 118 132 L 130 132 L 124 156 Z" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <!-- Fang shine -->
+  <path d="M 93 138 L 95 144" stroke="#dfeaff" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 121 138 L 123 144" stroke="#dfeaff" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Whiskers -->
+  <path d="M 60 118 L 36 114" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 60 124 L 36 128" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 160 118 L 184 114" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 160 124 L 184 128" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+</svg>

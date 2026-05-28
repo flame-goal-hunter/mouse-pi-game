@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" width="240" height="180">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <radialGradient id="slimeGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#c9a3e8"/>
+      <stop offset="100%" stop-color="#9a6cc4"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Slime body (purple dome with wavy bottom) -->
+  <path d="M 20 158
+           Q 18 150 24 144
+           Q 14 110 32 76
+           Q 50 38 90 24
+           Q 120 16 150 24
+           Q 190 38 208 76
+           Q 226 110 216 144
+           Q 222 150 220 158
+           Q 200 158 188 156
+           Q 170 160 156 156
+           Q 138 160 122 156
+           Q 102 160 88 156
+           Q 70 160 56 156
+           Q 40 160 20 158 Z"
+        fill="url(#slimeGrad)" class="outline"/>
+
+  <!-- Highlight on top -->
+  <ellipse cx="90" cy="50" rx="22" ry="10" fill="#e0c4f0" opacity="0.6"/>
+
+  <!-- Eyes (multiple, scattered, green/teal) -->
+  <!-- Big eye 1 -->
+  <circle cx="78" cy="82" r="14" fill="#ffffff" class="outline"/>
+  <circle cx="78" cy="84" r="7" fill="#2a8a6a"/>
+  <circle cx="79" cy="82" r="2" fill="#1a1a1a"/>
+
+  <!-- Big eye 2 -->
+  <circle cx="124" cy="68" r="14" fill="#ffffff" class="outline"/>
+  <circle cx="124" cy="70" r="7" fill="#2a8a6a"/>
+  <circle cx="125" cy="68" r="2" fill="#1a1a1a"/>
+
+  <!-- Big eye 3 -->
+  <circle cx="168" cy="84" r="14" fill="#ffffff" class="outline"/>
+  <circle cx="168" cy="86" r="7" fill="#2a8a6a"/>
+  <circle cx="169" cy="84" r="2" fill="#1a1a1a"/>
+
+  <!-- Medium eye 4 -->
+  <circle cx="54" cy="112" r="10" fill="#ffffff" class="outline" stroke-width="3"/>
+  <circle cx="54" cy="114" r="5" fill="#2a8a6a"/>
+  <circle cx="55" cy="112" r="1.5" fill="#1a1a1a"/>
+
+  <!-- Medium eye 5 -->
+  <circle cx="100" cy="118" r="11" fill="#ffffff" class="outline" stroke-width="3"/>
+  <circle cx="100" cy="120" r="5" fill="#2a8a6a"/>
+  <circle cx="101" cy="118" r="1.5" fill="#1a1a1a"/>
+
+  <!-- Medium eye 6 -->
+  <circle cx="148" cy="118" r="11" fill="#ffffff" class="outline" stroke-width="3"/>
+  <circle cx="148" cy="120" r="5" fill="#2a8a6a"/>
+  <circle cx="149" cy="118" r="1.5" fill="#1a1a1a"/>
+
+  <!-- Medium eye 7 -->
+  <circle cx="190" cy="112" r="10" fill="#ffffff" class="outline" stroke-width="3"/>
+  <circle cx="190" cy="114" r="5" fill="#2a8a6a"/>
+  <circle cx="191" cy="112" r="1.5" fill="#1a1a1a"/>
+
+  <!-- Small eye 8 -->
+  <circle cx="36" cy="140" r="7" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <circle cx="36" cy="141" r="3.5" fill="#2a8a6a"/>
+
+  <!-- Small eye 9 -->
+  <circle cx="76" cy="146" r="7" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <circle cx="76" cy="147" r="3.5" fill="#2a8a6a"/>
+
+  <!-- Small eye 10 -->
+  <circle cx="120" cy="146" r="8" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <circle cx="120" cy="147" r="4" fill="#2a8a6a"/>
+
+  <!-- Small eye 11 -->
+  <circle cx="164" cy="146" r="7" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <circle cx="164" cy="147" r="3.5" fill="#2a8a6a"/>
+
+  <!-- Small eye 12 -->
+  <circle cx="208" cy="140" r="7" fill="#ffffff" class="outline" stroke-width="2.5"/>
+  <circle cx="208" cy="141" r="3.5" fill="#2a8a6a"/>
+
+  <!-- Goo drips at bottom -->
+  <ellipse cx="50" cy="170" rx="6" ry="4" fill="#9a6cc4" class="outline" stroke-width="2"/>
+  <ellipse cx="120" cy="172" rx="7" ry="5" fill="#9a6cc4" class="outline" stroke-width="2"/>
+  <ellipse cx="190" cy="170" rx="6" ry="4" fill="#9a6cc4" class="outline" stroke-width="2"/>
+</svg>

@@ -83,6 +83,16 @@ export class MenuScene extends Phaser.Scene {
             .on('pointerout', () => joinBtn.setStyle(buttonStyle))
             .on('pointerdown', () => this.showJoinDialog());
 
+        // Story Mode (Transylvania) — preview button
+        const storyStyle = { ...buttonStyle, backgroundColor: '#5a2080' };
+        const storyHover = { ...buttonHoverStyle, backgroundColor: '#7a30a0' };
+        const storyBtn = this.add.text(centerX, 500, '🦇  Замок Теней (превью)', storyStyle)
+            .setOrigin(0.5)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerover', () => storyBtn.setStyle(storyHover))
+            .on('pointerout',  () => storyBtn.setStyle(storyStyle))
+            .on('pointerdown', () => this.scene.start('TransylvaniaScene'));
+
         // === BOT SETTINGS ===
         this.add.text(centerX, 560, 'Bots:', {
             fontFamily: 'Arial, sans-serif',

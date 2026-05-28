@@ -7,6 +7,7 @@ import { GAME, PHYS } from './config.js';
 import { BootScene } from './scenes/BootScene.js';
 import { MenuScene } from './scenes/MenuScene.js';
 import { GameScene } from './scenes/GameScene.js';
+import { TransylvaniaScene } from './scenes/TransylvaniaScene.js';
 
 // Read URL parameters for direct game launch
 const urlParams = new URLSearchParams(window.location.search);
@@ -32,8 +33,8 @@ window.gameConfig = {
 
 // Choose scenes based on mode - skip menu for solo mode
 const scenes = (mode === 'solo' || mode === 'host' || mode === 'join' || mode === 'online')
-    ? [BootScene, GameScene]    // Skip menu, go directly to game
-    : [BootScene, MenuScene, GameScene];  // Normal flow with menu
+    ? [BootScene, GameScene, TransylvaniaScene]
+    : [BootScene, MenuScene, GameScene, TransylvaniaScene];
 
 // Phaser configuration (physics handled by Rapier2D, not Phaser)
 const config = {

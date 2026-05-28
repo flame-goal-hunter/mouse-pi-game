@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 280" width="240" height="280">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <radialGradient id="zombieSkin" cx="40%" cy="35%" r="70%">
+      <stop offset="0%"  stop-color="#9ec98a"/>
+      <stop offset="100%" stop-color="#6fa258"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Shoes / feet (dark purple) -->
+  <ellipse cx="92"  cy="262" rx="22" ry="11" fill="#3a1858" class="outline"/>
+  <ellipse cx="148" cy="262" rx="22" ry="11" fill="#3a1858" class="outline"/>
+
+  <!-- Legs (short, sticking out from jacket) -->
+  <rect x="84"  y="222" width="20" height="32" fill="#7ab884" class="outline"/>
+  <rect x="136" y="222" width="20" height="32" fill="#7ab884" class="outline"/>
+
+  <!-- Tattered purple jacket (jagged bottom hem) -->
+  <path d="M 60 142
+           Q 60 134 70 134
+           L 170 134
+           Q 180 134 180 142
+           L 180 222
+           L 168 218 L 158 226 L 146 218 L 134 226 L 120 218 L 106 226 L 94 218 L 82 226 L 72 218 L 60 222 Z"
+        fill="#7a4ca4" class="outline"/>
+
+  <!-- Jacket inner shadow strip -->
+  <path d="M 70 142 L 170 142 L 168 158 L 72 158 Z" fill="#5a3084" opacity="0.5"/>
+
+  <!-- Patch on jacket (square stitched patch) -->
+  <rect x="100" y="172" width="32" height="28" fill="#5a3084" class="outline" stroke-width="2.5"/>
+  <line x1="100" y1="172" x2="132" y2="200" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="3 2"/>
+  <line x1="132" y1="172" x2="100" y2="200" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="3 2"/>
+
+  <!-- Pockets -->
+  <rect x="70" y="180" width="22" height="18" rx="2" fill="#5a3084" class="outline" stroke-width="2"/>
+  <rect x="148" y="180" width="22" height="18" rx="2" fill="#5a3084" class="outline" stroke-width="2"/>
+
+  <!-- Arms outstretched (zombie reach), left straight, right bent -->
+  <!-- Left arm -->
+  <path d="M 60 150 L 22 158 L 12 174 L 28 178 L 64 168 Z" fill="#7ab884" class="outline"/>
+  <!-- Right arm bent (zigzag) -->
+  <path d="M 180 150 L 214 144 L 222 162 L 208 170 L 218 188 L 200 192 L 188 176 L 180 168 Z"
+        fill="#7ab884" class="outline"/>
+
+  <!-- Hands (3-finger claw mitts) -->
+  <circle cx="18" cy="176" r="13" fill="#7ab884" class="outline"/>
+  <path d="M 10 170 L 6 162" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 10 176 L 5 178" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 12 184 L 8 192" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+
+  <circle cx="206" cy="194" r="13" fill="#7ab884" class="outline"/>
+  <path d="M 214 188 L 220 184" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 218 196 L 226 198" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 216 204 L 222 212" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Bandage on left arm -->
+  <rect x="30" y="166" width="22" height="14" fill="#f0e8d4" class="outline" stroke-width="2.5"/>
+  <line x1="32" y1="170" x2="50" y2="172" stroke="#1a1a1a" stroke-width="1.5"/>
+  <line x1="32" y1="174" x2="50" y2="176" stroke="#1a1a1a" stroke-width="1.5"/>
+
+  <!-- Neck -->
+  <rect x="106" y="124" width="28" height="16" fill="#7ab884" class="outline"/>
+  <!-- Stitches around neck (collar bolt area) -->
+  <line x1="108" y1="132" x2="132" y2="132" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="3 2"/>
+
+  <!-- Head (round, slightly tilted lopsided) -->
+  <ellipse cx="120" cy="80" rx="56" ry="50" fill="url(#zombieSkin)" class="outline"/>
+
+  <!-- Hair tufts (dark green spiky) sticking up on top -->
+  <path d="M 78 36 L 84 18 L 90 36 Z" fill="#3a5828" class="outline"/>
+  <path d="M 96 30 L 104 10 L 110 30 Z" fill="#3a5828" class="outline"/>
+  <path d="M 118 28 L 126 8  L 132 28 Z" fill="#3a5828" class="outline"/>
+  <path d="M 140 30 L 148 12 L 154 30 Z" fill="#3a5828" class="outline"/>
+  <path d="M 158 38 L 164 20 L 168 38 Z" fill="#3a5828" class="outline"/>
+
+  <!-- Big stitch scar across forehead -->
+  <path d="M 78 60 L 162 56" stroke="#1a1a1a" stroke-width="2.5"/>
+  <line x1="86"  y1="56" x2="86"  y2="64" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="100" y1="56" x2="100" y2="64" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="114" y1="56" x2="114" y2="64" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="128" y1="56" x2="128" y2="64" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="142" y1="56" x2="142" y2="64" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="156" y1="56" x2="156" y2="64" stroke="#1a1a1a" stroke-width="2"/>
+
+  <!-- BIG bulgy eye (left) — like slime's big eye -->
+  <circle cx="92" cy="86" r="20" fill="#ffffff" class="outline"/>
+  <circle cx="94" cy="88" r="10" fill="#2a8a6a"/>
+  <circle cx="96" cy="86" r="4"  fill="#1a1a1a"/>
+  <circle cx="98" cy="84" r="1.5" fill="#ffffff"/>
+
+  <!-- Smaller open eye (right) — same shape, smaller, asymmetric placement -->
+  <circle cx="152" cy="90" r="14" fill="#ffffff" class="outline"/>
+  <circle cx="154" cy="92" r="7"  fill="#2a8a6a"/>
+  <circle cx="156" cy="90" r="3"  fill="#1a1a1a"/>
+  <circle cx="157" cy="88" r="1.2" fill="#ffffff"/>
+
+  <!-- Dark eye bags under both eyes -->
+  <path d="M 76 108 Q 92 116 108 108" fill="none" stroke="#3a5828" stroke-width="2.5" opacity="0.6"/>
+  <path d="M 140 110 Q 152 116 164 110" fill="none" stroke="#3a5828" stroke-width="2" opacity="0.5"/>
+
+  <!-- Cheek stitch -->
+  <line x1="150" y1="106" x2="164" y2="112" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="3 2"/>
+
+  <!-- Crooked smile (zigzag with one fang up) -->
+  <path d="M 96 116 Q 102 122 110 118 L 116 122 L 122 116 L 130 122 L 138 116 Q 144 122 150 118"
+        fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Single fang sticking up (broken tooth) -->
+  <path d="M 122 116 L 126 116 L 124 106 Z" fill="#ffffff" class="outline" stroke-width="2"/>
+
+  <!-- Drool drip (like slime drips) -->
+  <ellipse cx="136" cy="128" rx="3" ry="6" fill="#9ec98a" opacity="0.7"/>
+  <circle  cx="136" cy="136" r="2.5" fill="#9ec98a" opacity="0.7"/>
+</svg>
