@@ -1,0 +1,39 @@
+// Server-side physics config (mirror of www/js/config.js)
+export const PHYS = {
+    GRAVITY: 1200,
+    GROUND_ACCEL: 0.40,
+    AIR_ACCEL: 0.08,
+    GROUND_FRICTION: 0.80,
+    JUMP_FORCE: -710,
+    MAX_SPEED_X: 420,
+    MAX_SPEED_Y: 900,
+    HOOK_SPEED: 25,
+    HOOK_RANGE: 500,
+    HOOK_DRAG_ACCEL: 7200,
+    HOOK_DRAG_SPEED: 600,
+    HOOK_DRAG_MIN_DIST: 46,
+    HOOK_COOLDOWN: 300,
+    SNOWBALL_SPEED: 720,
+    SNOWBALL_DAMAGE: 10,
+    KNOCKBACK_FORCE: 1.2,
+    SNOWBALL_GRAVITY_SCALE: 0.5,
+    SNOWBALL_BOUNCE: 0.3,
+    SNOWBALL_LIFETIME: 3000,
+    SNOWBALL_FIRE_RATE: 350,
+    COYOTE_TIME: 100,
+    JUMP_BUFFER: 120
+};
+
+export const TILE_SIZE = 70;
+
+export const GAME = {
+    WIDTH: 1400,
+    HEIGHT: 1050,
+    MAX_HEALTH: 100,
+    RESPAWN_TIME: 2000,
+    WIN_SCORE: 5,
+    BOT_COUNT: 2,
+    MAX_HEARTS: 5,
+    HEALTH_PER_HEART: 20,
+    WINS_TO_WIN: 3
+};

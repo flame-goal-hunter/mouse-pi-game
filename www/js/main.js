@@ -1,6 +1,7 @@
 // ============================================
-// MAIN - Phaser Game Entry Point
+// MAIN - Phaser Game Entry Point  v-online-1
 // ============================================
+console.log('[main.js] loaded — version v-online-1', new Date().toISOString());
 
 import { GAME, PHYS } from './config.js';
 import { BootScene } from './scenes/BootScene.js';
@@ -15,20 +16,22 @@ const character = parseInt(urlParams.get('character')) || 1;
 const peerId = urlParams.get('peerId') || null;
 const nickname = urlParams.get('nickname') || 'Игрок';
 const remoteNickname = urlParams.get('remoteNickname') || null;
+const serverUrl = urlParams.get('server') || 'ws://localhost:2567';
 
 // Store config globally for scenes to access
 window.gameConfig = {
-    mode: mode,           // 'solo', 'host', 'join', or 'menu'
+    mode: mode,           // 'solo', 'host', 'join', 'online', or 'menu'
     botCount: botCount,
     character: character, // 1 = brown bunny (Пи), 2 = gray bunny (Пу)
     isHost: mode === 'host',
     peerId: peerId,
     nickname: nickname,
-    remoteNickname: remoteNickname
+    remoteNickname: remoteNickname,
+    serverUrl: serverUrl
 };
 
 // Choose scenes based on mode - skip menu for solo mode
-const scenes = (mode === 'solo' || mode === 'host' || mode === 'join')
+const scenes = (mode === 'solo' || mode === 'host' || mode === 'join' || mode === 'online')
     ? [BootScene, GameScene]    // Skip menu, go directly to game
     : [BootScene, MenuScene, GameScene];  // Normal flow with menu
 

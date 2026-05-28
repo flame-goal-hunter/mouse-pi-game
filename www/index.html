@@ -479,6 +479,7 @@
                 <div id="snowballMainChoice">
                     <button class="play-btn snowball-mode-btn" data-snowball-mode="solo" style="background: linear-gradient(135deg, #4CAF50, #45a049); color: #fff;">🎮 Играть одному</button>
                     <button class="play-btn snowball-mode-btn" data-snowball-mode="multi" style="background: linear-gradient(135deg, #2196F3, #1976D2); color: #fff;">👫 Играть с другом</button>
+                    <button class="play-btn snowball-mode-btn" data-snowball-mode="online" style="background: linear-gradient(135deg, #E91E63, #AD1457); color: #fff;">🌍 Играть онлайн</button>
                 </div>
 
                 <!-- Solo: bot count selection -->
@@ -1431,6 +1432,20 @@
                 const handler = (e) => {
                     e.preventDefault();
                     const mode = btn.dataset.snowballMode;
+                    if (mode === 'online') {
+                        // Skip menu, launch directly into Colyseus mode
+                        const nick = (localStorage.getItem('playerNickname') || prompt('Твой ник:', 'Игрок') || 'Игрок').slice(0, 12);
+                        localStorage.setItem('playerNickname', nick);
+                        let serverUrl = localStorage.getItem('colyseusServer');
+                        if (!serverUrl) {
+                            // First time — ask for server URL. Default = browser host (works on web localhost)
+                            const guess = (location.protocol === 'https:' ? 'wss://' : 'ws://') + (location.hostname || 'localhost') + ':2567';
+                            serverUrl = prompt('Адрес сервера:', guess) || guess;
+                            localStorage.setItem('colyseusServer', serverUrl);
+                        }
+                        startOnlineSnowball(serverUrl, nick);
+                        return;
+                    }
                     document.getElementById('snowballMainChoice').style.display = 'none';
                     document.getElementById('snowballBackContainer').style.display = 'flex';
                     document.querySelector('#startScreen .overlay-content').classList.add('snowball-submenu-active');
@@ -7487,11 +7502,28 @@
             peer.on('error', (err) => {
                 console.log('Auto-register error:', err.type);
                 if (err.type === 'unavailable-id') {
-                    // Our code is already in use (another tab/session), retry later
                     peer = null;
                     setTimeout(initSnowballNetwork, 5000);
+                } else if (err.type === 'server-error' || err.type === 'network') {
+                    // Signaling server unreachable — try next one
+                    peer = null;
+                    tryNextPeerServer();
+                    window.peerConfig = getPeerConfig();
+                    setTimeout(initSnowballNetwork, 2000);
                 }
             });
+
+            // Timeout: if not connected in 8s, try next server
+            setTimeout(() => {
+                if (peer && !peer.open && !peer.destroyed) {
+                    console.log('Signaling timeout, trying next server');
+                    peer.destroy();
+                    peer = null;
+                    tryNextPeerServer();
+                    window.peerConfig = getPeerConfig();
+                    initSnowballNetwork();
+                }
+            }, 8000);
         }
 
         function showInvitationOverlay(fromNickname, fromCode, conn) {
@@ -7717,6 +7749,10 @@
         }
 
         function cleanupSnowballNetwork() {
+            if (unreliableChannel) {
+                try { unreliableChannel.close(); } catch(e) {}
+                unreliableChannel = null;
+            }
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
@@ -7730,46 +7766,110 @@
         }
 
         // PeerJS config with custom server (exposed globally for iframe access)
-        window.peerConfig = {
-            host: 'peerjs.92k.de',
-            port: 443,
-            secure: true,
-            path: '/',
-            debug: 2,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' },
-                    { urls: 'stun:stun3.l.google.com:19302' },
-                    { urls: 'stun:stun4.l.google.com:19302' },
-                    // OpenRelay TURN servers (free, more reliable)
-                    {
-                        urls: 'turn:openrelay.metered.ca:80',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    {
-                        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                        username: 'openrelayproject',
-                        credential: 'openrelayproject'
-                    },
-                    // Backup TURN
-                    {
-                        urls: 'turn:freestun.net:3478',
-                        username: 'free',
-                        credential: 'free'
-                    }
-                ]
-            }
-        };
+        // PeerJS signaling servers — try multiple for Russia/VPN resilience
+        const peerServers = [
+            { host: 'peerjs.92k.de', port: 443, secure: true, path: '/' },
+            { host: '0.peerjs.com', port: 443, secure: true, path: '/' },
+        ];
+        let _currentPeerServer = 0;
 
-        // Connection options for data channel
+        function getPeerConfig() {
+            const server = peerServers[_currentPeerServer % peerServers.length];
+            return {
+                ...server,
+                debug: 1,
+                config: {
+                    iceServers: [
+                        // Google STUN (global)
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        // Russian STUN servers
+                        { urls: 'stun:stun.rtc.yandex.net' },
+                        { urls: 'stun:stun.sipnet.ru:3478' },
+                        // Cloudflare STUN (global, fast)
+                        { urls: 'stun:stun.cloudflare.com:3478' },
+                        // TURN via TCP on 443 — passes through firewalls/DPI
+                        {
+                            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:freestun.net:3478',
+                            username: 'free',
+                            credential: 'free'
+                        }
+                    ]
+                }
+            };
+        }
+
+        // Try next signaling server on failure
+        function tryNextPeerServer() {
+            _currentPeerServer++;
+            console.log('Switching to signaling server:', peerServers[_currentPeerServer % peerServers.length].host);
+        }
+
+        window.peerConfig = getPeerConfig();
+
+        // Unreliable DataChannel for game data (snapshots, ping/pong)
+        let unreliableChannel = null;
+
+        function setupUnreliableChannel(rtcPeerConnection, isInitiator) {
+            if (isInitiator) {
+                // Host creates the channel
+                unreliableChannel = rtcPeerConnection.createDataChannel('game-unreliable', {
+                    ordered: false,
+                    maxRetransmits: 0
+                });
+                unreliableChannel.onopen = () => console.log('Unreliable channel open (host)');
+                unreliableChannel.onmessage = onUnreliableMessage;
+                unreliableChannel.onerror = (e) => console.log('Unreliable channel error:', e);
+            } else {
+                // Guest listens for channel from host
+                rtcPeerConnection.ondatachannel = (event) => {
+                    if (event.channel.label === 'game-unreliable') {
+                        unreliableChannel = event.channel;
+                        unreliableChannel.onopen = () => console.log('Unreliable channel open (guest)');
+                        unreliableChannel.onmessage = onUnreliableMessage;
+                        unreliableChannel.onerror = (e) => console.log('Unreliable channel error:', e);
+                    }
+                };
+            }
+        }
+
+        function onUnreliableMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (phaserRunning) {
+                    const frame = document.getElementById('phaserFrame');
+                    if (frame && frame.contentWindow) {
+                        frame.contentWindow.postMessage({
+                            type: 'networkReceive',
+                            payload: data,
+                            fromPeerId: peerConnection ? peerConnection.peer : 'remote'
+                        }, '*');
+                    }
+                } else {
+                    handleNetworkMessage(data);
+                }
+            } catch (e) {}
+        }
+
+        function sendUnreliable(data) {
+            if (unreliableChannel && unreliableChannel.readyState === 'open') {
+                unreliableChannel.send(JSON.stringify(data));
+                return true;
+            }
+            return false;
+        }
+
+        // Lobby connections = reliable (start/nickname must not be lost)
         const connOptions = {
             serialization: 'json',
             reliable: true
@@ -7803,6 +7903,8 @@
                     conn.peerConnection.onconnectionstatechange = () => {
                         console.log('Connection state:', conn.peerConnection.connectionState);
                     };
+                    // Host creates unreliable channel
+                    setupUnreliableChannel(conn.peerConnection, true);
                 }
 
                 conn.on('data', (data) => {
@@ -7877,6 +7979,11 @@
                 if (err.type === 'unavailable-id') {
                     document.getElementById('waitingStatus').textContent = 'Код занят (другая сессия?). Повтор...';
                     setTimeout(createSnowballRoom, 3000);
+                } else if (err.type === 'server-error' || err.type === 'network') {
+                    tryNextPeerServer();
+                    window.peerConfig = getPeerConfig();
+                    document.getElementById('waitingStatus').textContent = 'Смена сервера...';
+                    setTimeout(createSnowballRoom, 2000);
                 } else {
                     document.getElementById('waitingStatus').textContent = 'Ошибка: ' + err.type;
                 }
@@ -7896,8 +8003,8 @@
 
             console.log('Creating peer to join room:', code);
 
-            // Create new peer for joining
-            peer = new Peer(window.peerConfig);
+            // Create new peer for joining (use fresh config in case server switched)
+            peer = new Peer(getPeerConfig());
 
             peer.on('open', (id) => {
                 console.log('My peer ID:', id);
@@ -7943,6 +8050,10 @@
                     // Send our nickname to host so they know it before Phaser starts
                     const nick = document.getElementById('playerNickname')?.value?.trim() || 'Игрок';
                     conn.send({ type: 'nickname', nickname: nick });
+                    // Guest listens for unreliable channel from host
+                    if (conn.peerConnection) {
+                        setupUnreliableChannel(conn.peerConnection, false);
+                    }
                 };
 
                 // Check if already open
@@ -10402,6 +10513,24 @@
         }
 
         // Start solo snowball game with bots and selected character
+        function startOnlineSnowball(serverUrl, nickname, character = 1) {
+            stopMenuMusic();
+            const frame = document.getElementById('phaserFrame');
+            if (phaserRunning) frame.src = 'about:blank';
+            const cacheBust = Date.now();
+            const url = `game-phaser.html?mode=online&server=${encodeURIComponent(serverUrl)}&nickname=${encodeURIComponent(nickname)}&character=${character}&_v=${cacheBust}`;
+            const launchGame = () => {
+                frame.src = url;
+                frame.style.display = 'block';
+                document.getElementById('startScreen').classList.remove('visible');
+                document.getElementById('gameCanvas').style.display = 'none';
+                phaserRunning = true;
+                gameRunning = true;
+                currentGameMode = 'snowball';
+            };
+            if (phaserRunning) setTimeout(launchGame, 50); else launchGame();
+        }
+
         function startSoloSnowball(botCount, character = 1) {
             stopMenuMusic();
             const frame = document.getElementById('phaserFrame');
@@ -10438,8 +10567,13 @@
         window.addEventListener('message', (event) => {
             if (event.data === 'closePhaserSnowball') {
                 stopPhaserSnowball();
+            } else if (event.data && event.data.type === 'networkSendUnreliable' && snowballConnected) {
+                // Try unreliable channel first, fallback to reliable
+                if (!sendUnreliable(event.data.payload) && peerConnection) {
+                    peerConnection.send(event.data.payload);
+                }
             } else if (event.data && event.data.type === 'networkSend' && peerConnection && snowballConnected) {
-                // Forward outgoing network message from iframe to peer
+                // Reliable channel for critical messages
                 peerConnection.send(event.data.payload);
             }
         });

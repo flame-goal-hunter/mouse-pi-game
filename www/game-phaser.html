@@ -240,8 +240,25 @@
     <!-- Phaser 3 -->
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 
-    <!-- PeerJS for multiplayer -->
+    <!-- PeerJS for multiplayer (legacy P2P) -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <!-- Colyseus client (authoritative server multiplayer) -->
+    <!-- Local ESM bundle (colyseus.esm.js + ws/schema/httpie deps), patched to use local paths -->
+    <script type="module">
+        try {
+            const mod = await import('./lib/colyseus.esm.js');
+            window.Colyseus = mod.default || mod;
+            window.dispatchEvent(new Event('colyseus-ready'));
+            console.log('[Colyseus] loaded:', Object.keys(window.Colyseus).slice(0,10));
+        } catch (e) {
+            console.error('Failed to load Colyseus ESM:', e);
+            const div = document.createElement('div');
+            div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:14px;font:14px monospace;z-index:99999;';
+            div.textContent = 'Colyseus load failed: ' + (e?.message || e);
+            document.body.appendChild(div);
+        }
+    </script>
 
     <!-- nipplejs - DOM-based virtual joystick for touch controls -->
     <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.10.2/dist/nipplejs.min.js"></script>
@@ -310,10 +327,20 @@
     <!-- v28: SimplePhysicsWorld - no external physics engine needed -->
     <script type="module">
         console.log('v28: Using SimplePhysicsWorld (deterministic)');
+        // Show errors on screen so we can debug without dev tools
+        const showError = (label, e) => {
+            const div = document.createElement('div');
+            div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:14px;font:14px monospace;z-index:99999;white-space:pre-wrap;max-height:60vh;overflow:auto;';
+            div.textContent = `${label}\n${(e && (e.stack || e.message)) || e}`;
+            document.body.appendChild(div);
+            console.error(label, e);
+        };
+        window.addEventListener('error', (ev) => showError('JS Error', ev.error || ev.message));
+        window.addEventListener('unhandledrejection', (ev) => showError('Unhandled rejection', ev.reason));
         try {
             await import('./js/main.js');
         } catch (e) {
-            console.error('Failed to load game:', e);
+            showError('Failed to load game', e);
         }
     </script>
 </body>

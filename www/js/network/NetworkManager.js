@@ -56,7 +56,7 @@ export class NetworkManager {
 
         // Delta compression state (host)
         this._lastSentSnapshot = null;      // Last full snapshot sent (for computing delta)
-        this._keyframeInterval = 60;        // Full snapshot every 60 ticks (~1s at 60Hz)
+        this._keyframeInterval = 30;        // Full snapshot every 30 ticks (~0.5s at 60Hz)
 
         // === GUEST (client) state ===
         this._snapBuffer = [];              // Array of { time, data } for render-behind interpolation
@@ -260,6 +260,15 @@ export class NetworkManager {
 
     // === DATA SENDING ===
 
+    // Send critical message with retry (for unreliable channels)
+    broadcastReliable(data, retries = 3, interval = 100) {
+        this.broadcast(data);
+        if (retries > 0) {
+            setTimeout(() => this.broadcast(data), interval);
+            if (retries > 1) setTimeout(() => this.broadcast(data), interval * 2);
+        }
+    }
+
     broadcast(data) {
         if (this._bridgeMode) {
             window.parent.postMessage({ type: 'networkSend', payload: data }, '*');
@@ -270,6 +279,15 @@ export class NetworkManager {
                 conn.send(data);
             }
         }
+    }
+
+    // Send via unreliable channel (snapshots, ping/pong) — falls back to reliable
+    broadcastUnreliable(data) {
+        if (this._bridgeMode) {
+            window.parent.postMessage({ type: 'networkSendUnreliable', payload: data }, '*');
+            return;
+        }
+        this.broadcast(data);
     }
 
     // === SYNC UPDATE (called from GameScene.update) ===
@@ -295,19 +313,30 @@ export class NetworkManager {
                 const snapshot = this.buildSnapshot();
                 snapshot.type = 'full';
                 this._lastSentSnapshot = snapshot;
-                this.broadcast({ type: 'snapshot', data: snapshot });
+                // Events must not be lost — use reliable if snapshot has events
+                const hasEvents = snapshot.events && snapshot.events.length > 0;
+                if (hasEvents) {
+                    this.broadcast({ type: 'snapshot', data: snapshot });
+                } else {
+                    this.broadcastUnreliable({ type: 'snapshot', data: snapshot });
+                }
             } else {
                 const full = this.buildSnapshot();
                 const delta = this._computeDelta(this._lastSentSnapshot, full);
                 this._lastSentSnapshot = full;
-                this.broadcast({ type: 'snapshot', data: delta });
+                const hasEvents = delta.events && delta.events.length > 0;
+                if (hasEvents) {
+                    this.broadcast({ type: 'snapshot', data: delta });
+                } else {
+                    this.broadcastUnreliable({ type: 'snapshot', data: delta });
+                }
             }
         } else {
-            // Guest: send ping periodically
+            // Guest: send ping periodically (unreliable OK — samples replaceable)
             this._pingTimer += this.SYNC_INTERVAL;
             if (this._pingTimer >= this._pingInterval) {
                 this._pingTimer = 0;
-                this.broadcast({ type: 'ping', t: Date.now() });
+                this.broadcastUnreliable({ type: 'ping', t: Date.now() });
             }
         }
     }
@@ -721,14 +750,14 @@ export class NetworkManager {
 
                     // v25: Aggressive cleanup by age (not just size)
                     // This prevents 56+ inputs accumulating due to network jitter
-                    const MAX_INPUT_AGE_TICKS = 30; // ~500ms at 60Hz
+                    const MAX_INPUT_AGE_TICKS = 48; // ~800ms at 60Hz
                     const currentTick = this.serverTick;
                     this.inputQueue = this.inputQueue.filter(i =>
                         currentTick - i.receivedTick < MAX_INPUT_AGE_TICKS
                     );
 
                     // Also limit by size as fallback
-                    while (this.inputQueue.length > 30) {
+                    while (this.inputQueue.length > 50) {
                         this.inputQueue.shift();
                     }
 
@@ -762,9 +791,9 @@ export class NetworkManager {
                 break;
 
             case 'ping':
-                // Host: echo back immediately
+                // Host: echo back immediately (unreliable — ping samples are replaceable)
                 if (this.isHost) {
-                    this.broadcast({ type: 'pong', t: message.t });
+                    this.broadcastUnreliable({ type: 'pong', t: message.t });
                 }
                 break;
 
@@ -784,10 +813,10 @@ export class NetworkManager {
                         this._recentPings.reduce((sum, p) => sum + Math.pow(p - avg, 2), 0) / this._recentPings.length
                     );
 
-                    // v18: Adaptive render delay = half ping + 2x jitter + base margin
-                    // Min 32ms (2 frames), max 150ms
-                    this.RENDER_DELAY = Math.max(32, Math.min(150,
-                        Math.round(avg * 0.5 + jitter * 2 + 16)
+                    // Aggressive render delay — only for remote player interpolation
+                    // Min 16ms, max 60ms
+                    this.RENDER_DELAY = Math.max(16, Math.min(60,
+                        Math.round(avg * 0.3 + jitter * 1.2 + 8)
                     ));
                 }
                 break;

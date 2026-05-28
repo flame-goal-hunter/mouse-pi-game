@@ -180,11 +180,14 @@ export class BootScene extends Phaser.Scene {
         const config = window.gameConfig || {};
         const mode = config.mode || 'menu';
 
-        if (mode === 'solo' || mode === 'host' || mode === 'join') {
-            // Direct launch - skip menu and go to game
+        const directModes = ['solo', 'host', 'join', 'online'];
+        // If we're being launched directly OR MenuScene isn't registered → go to GameScene
+        const hasMenu = this.scene.manager.keys && this.scene.manager.keys['MenuScene'];
+        if (directModes.includes(mode) || !hasMenu) {
+            console.log('[BootScene] mode=' + mode + ' → GameScene');
             this.scene.start('GameScene');
         } else {
-            // Normal flow - go to menu
+            console.log('[BootScene] mode=' + mode + ' → MenuScene');
             this.scene.start('MenuScene');
         }
     }

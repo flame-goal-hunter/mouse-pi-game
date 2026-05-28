@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><title>Colyseus Smoke Test</title></head>
+<body style="font-family: monospace; padding: 20px;">
+<h1>Colyseus Connection Test</h1>
+<pre id="log"></pre>
+<script src="lib/colyseus.js"></script>
+<script>
+const log = (msg) => {
+    document.getElementById('log').textContent += msg + '\n';
+    console.log(msg);
+};
+
+log('1. Colyseus global: ' + (typeof Colyseus));
+log('2. Colyseus.Client: ' + (typeof Colyseus?.Client));
+
+(async () => {
+    try {
+        log('3. Creating client...');
+        const client = new Colyseus.Client('ws://localhost:2567');
+        log('4. Joining room...');
+        const room = await client.joinOrCreate('snowball', { nickname: 'tester', character: 1 });
+        log('5. Joined! sessionId=' + room.sessionId);
+
+        room.onStateChange((state) => {
+            const me = state.players.get(room.sessionId);
+            if (me) {
+                log(`tick=${state.tick} pos=(${me.x.toFixed(0)},${me.y.toFixed(0)}) anim=${me.animation}`);
+            }
+        });
+
+        // Send some inputs
+        setTimeout(() => room.send('input', { direction: 1, jump: false, fire: false }), 500);
+        setTimeout(() => room.send('input', { direction: 1, jump: true, fire: false }), 1000);
+        setTimeout(() => room.send('input', { direction: 0, jump: false, fire: false }), 2000);
+        setTimeout(() => { room.leave(); log('LEFT room'); }, 5000);
+
+    } catch (err) {
+        log('ERROR: ' + (err?.message || err));
+        console.error(err);
+    }
+})();
+</script>
+</body>
+</html>

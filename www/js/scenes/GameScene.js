@@ -9,6 +9,7 @@ import { BotBrain } from '../ai/BotBrain.js';
 import { BotNav } from '../ai/BotNav.js';
 import { HumanInput } from '../input/HumanInput.js';
 import { NetworkManager } from '../network/NetworkManager.js';
+import { ColyseusNetwork } from '../network/ColyseusNetwork.js';
 import { Pickup } from '../entities/Pickup.js';
 
 export class GameScene extends Phaser.Scene {
@@ -61,13 +62,15 @@ export class GameScene extends Phaser.Scene {
                 backgroundColor: 'rgba(231, 76, 60, 0.8)',
                 padding: { x: 6, y: 2 }
             }).setOrigin(0.5, 1).setDepth(150);
-        } else if (this.gameMode === 'join') {
+        } else if (this.gameMode === 'join' || this.gameMode === 'online') {
             this.bots = [];
             // Create display sprite for host (no physics, position from snapshots)
             // v17.1 FIX: Host spawns at index 0, guest at index 1
             const hostChar = this.playerCharacter === 1 ? 2 : 1;
             this.hostSprite = this.createDisplaySprite(0, hostChar);
             this.hostSprite.setData('playerId', 'host');
+            // Hide until server sends real host data (prevents "ghost" sprite)
+            if (this.gameMode === 'online') this.hostSprite.setVisible(false);
             const hostNick = window.gameConfig?.remoteNickname || 'Противник';
             this.hostSprite.nameLabel = this.add.text(0, 0, hostNick, {
                 fontFamily: 'Arial',
@@ -78,6 +81,7 @@ export class GameScene extends Phaser.Scene {
                 backgroundColor: 'rgba(231, 76, 60, 0.8)',
                 padding: { x: 6, y: 2 }
             }).setOrigin(0.5, 1).setDepth(150);
+            if (this.gameMode === 'online') this.hostSprite.nameLabel.setVisible(false);
 
             // v17: Host sprite has no physics on guest (purely visual)
         } else {
@@ -144,7 +148,23 @@ export class GameScene extends Phaser.Scene {
         // === NETWORK (for multiplayer modes) ===
         this.network = null;
         this._nextSnowballId = 0;  // Unique snowball IDs (host assigns)
-        if (this.gameMode === 'host' || this.gameMode === 'join') {
+
+        if (this.gameMode === 'online') {
+            // Authoritative server (Colyseus)
+            this.network = new ColyseusNetwork();
+            const serverUrl = window.gameConfig?.serverUrl || 'ws://localhost:2567';
+            const nickname = window.gameConfig?.nickname || 'Игрок';
+            this.network.connect(serverUrl, nickname, this.playerCharacter)
+                .then(ok => {
+                    if (ok) {
+                        console.log('[GameScene] Connected to Colyseus server');
+                        this.showMessage('Подключено к серверу');
+                    } else {
+                        console.error('[GameScene] Colyseus connect failed:', this.network.connectError);
+                        this.showMessage('Ошибка подключения: ' + this.network.connectError);
+                    }
+                });
+        } else if (this.gameMode === 'host' || this.gameMode === 'join') {
             this.network = new NetworkManager(this, this.isHost, this.peerId);
 
             this.network.onPlayerJoin = (peerId) => {
@@ -503,17 +523,21 @@ export class GameScene extends Phaser.Scene {
     }
 
     createPlayer() {
-        const spawnIndex = (this.gameMode === 'join') ? 1 : 0;
+        const spawnIndex = (this.gameMode === 'join' || this.gameMode === 'online') ? 1 : 0;
         const charNum = this.playerCharacter || 1;
 
-        if (this.gameMode === 'join') {
-            // Guest: create prediction world + physics body for local prediction
+        if (this.gameMode === 'online') {
+            // Authoritative server mode: create display sprite only (no physics body)
+            this.player = this.createDisplaySprite(spawnIndex, charNum);
+            this.player._physLabel = 'player';
+        } else if (this.gameMode === 'join') {
+            // Legacy P2P guest: create prediction world + physics body for local prediction
             this._createPredictionWorld(spawnIndex, charNum);
         } else {
             this.player = this.createCharacterSprite(spawnIndex, charNum, 'player');
         }
         this.player.setData('colorIndex', 0);
-        this.player.setData('playerId', this.isHost ? 'host' : 'guest');
+        this.player.setData('playerId', (this.isHost || this.gameMode === 'host') ? 'host' : 'guest');
     }
 
     /**
@@ -737,7 +761,7 @@ export class GameScene extends Phaser.Scene {
      * v28: Process collisions with simple AABB overlap checks
      */
     processCollisions() {
-        if (this.gameMode === 'join') return; // Guest doesn't handle collisions
+        if (this.gameMode === 'join' || this.gameMode === 'online') return; // Guest doesn't handle collisions
 
         // Get all characters
         const characters = [this.player, this.guestPlayer, ...this.bots].filter(c => c?.active);
@@ -888,7 +912,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.hudOpponents) return;
         this.hudOpponents.innerHTML = '';
 
-        if (this.gameMode === 'host' || this.gameMode === 'join') {
+        if (this.gameMode === 'host' || this.gameMode === 'join' || this.gameMode === 'online') {
             // Network 1v1: show placeholder for remote player (updated when they connect)
             const nameEl = document.createElement('div');
             nameEl.className = 'hud-name enemy';
@@ -994,7 +1018,7 @@ export class GameScene extends Phaser.Scene {
             this.remotePlayerUI.hearts.textContent = this.getHeartsString(health);
             return;
         }
-        if (this.gameMode === 'join' && this.remotePlayerUI) {
+        if ((this.gameMode === 'join' || this.gameMode === 'online') && this.remotePlayerUI) {
             // Get host health from snapshot
             const snapshot = this.network?.lastSnapshot;
             const hostData = snapshot?.players?.find(p => p.id === 'host');
@@ -1033,28 +1057,31 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Guest: visual ragdoll effect, state management via snapshot
-        if (this.gameMode === 'join') {
+        if (this.gameMode === 'join' || this.gameMode === 'online') {
             this.showDeathEffect(victim.x, victim.y);
             this.playSpatialSound('sfx-snowball-hit', victim.x, victim.y, 0.7);
             if (victim.nameLabel) victim.nameLabel.setVisible(false);
 
             // Ragdoll spin (same as host)
             const spinDir = Math.random() > 0.5 ? 1 : -1;
-            this.tweens.add({
+            const spinTween = this.tweens.add({
                 targets: victim,
                 angle: spinDir * 360,
                 duration: RAGDOLL.DURATION,
                 ease: 'Linear'
             });
+            victim._deathTweens = [spinTween];
 
             // Fade out after ragdoll — snapshot will restore when host respawns
-            this.time.delayedCall(RAGDOLL.DURATION, () => {
-                this.tweens.add({
+            const fadeTimer = this.time.delayedCall(RAGDOLL.DURATION, () => {
+                const fadeTween = this.tweens.add({
                     targets: victim,
                     alpha: 0,
                     duration: RAGDOLL.FADE_TIME
                 });
+                if (victim._deathTweens) victim._deathTweens.push(fadeTween);
             });
+            victim._deathFadeTimer = fadeTimer;
             return;
         }
 
@@ -1184,7 +1211,7 @@ export class GameScene extends Phaser.Scene {
         }
 
         // Guest: death is handled via snapshot (_processSnapshotNonPhysics), no logic here
-        if (this.gameMode === 'join') {
+        if (this.gameMode === 'join' || this.gameMode === 'online') {
             return;
         }
 
@@ -1746,7 +1773,7 @@ export class GameScene extends Phaser.Scene {
 
         if (!this.player || !this.player.active) return;
 
-        if (this.gameMode === 'join') {
+        if (this.gameMode === 'join' || this.gameMode === 'online') {
             this.updateAsGuest(delta);
         } else {
             this.updateAsHost(delta);
@@ -1792,6 +1819,7 @@ export class GameScene extends Phaser.Scene {
         }
         if (guestInput?.fire) {
             this.shootSnowball(this.guestPlayer, guestInput.fireAngle);
+            guestInput.fire = false;
             if (this.network) {
                 const remoteInput = this.network.remoteInputs.get('guest');
                 if (remoteInput) remoteInput.fire = false;
@@ -1903,33 +1931,17 @@ export class GameScene extends Phaser.Scene {
     // === GUEST UPDATE (v19: fixed reconciliation) ===
 
     updateAsGuest(delta) {
-        if (!this._loggedGuestStart) {
-            console.log('[Guest] updateAsGuest started, predictionWorld:', !!this.predictionWorld,
-                'player:', !!this.player, 'simpleBody:', !!this.player?.simpleBody);
-            this._loggedGuestStart = true;
-        }
         const network = this.network;
-        const FIXED_DT_S = 1 / 60;
-        const FIXED_DT_MS = FIXED_DT_S * 1000;
 
-        // 1. v23: SERVER RECONCILIATION with input replay (Teeworlds-style)
-        // Only reconcile when we have a NEW snapshot (tick > last confirmed)
-        const snapshot = network?.lastSnapshot;
-        if (snapshot && snapshot.tick > this._lastConfirmedTick) {
-            this._reconcileWithServer(snapshot);
-        }
-
-        // 2. Gather input
+        // 1. Gather input
         const playerInput = this.humanInput.getInput();
         playerInput.hookTarget = this.findHookTarget(this.player);
 
-        // 3. Send input to host
+        // 2. Send input to host
         network?.sendInput(playerInput);
 
-        // v28: Local snowball visual removed — server snowball arrives via syncSnowballVisuals()
-        // within 1-2 frames, no need for duplicate local preview.
-        // Play shot sound locally (server event filtered by dist<50)
-        if (playerInput.fire) {
+        // 3. Instant fire sound feedback
+        if (playerInput.fire && !this.player.getData('isDying')) {
             const now = Date.now();
             if (now - (this._lastLocalSnowballTime || 0) >= 100) {
                 this._lastLocalSnowballTime = now;
@@ -1937,95 +1949,33 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // 4. OWN character: FIXED TIMESTEP physics (local prediction)
-        this._guestPhysicsAccum = (this._guestPhysicsAccum || 0) + (delta / 1000);
-        this._guestPhysicsAccum = Math.min(this._guestPhysicsAccum, FIXED_DT_S * 4); // Cap at 4 frames
-
-        let guestFirstTick = true;
-        while (this._guestPhysicsAccum >= FIXED_DT_S) {
-            // Clear fire one-shot on subsequent sub-ticks (hook uses edge detection in CharacterCore)
-            const tickInput = guestFirstTick ? playerInput : { ...playerInput, fire: false };
-            this._updateLocalPlayer(tickInput, FIXED_DT_MS);
-            this._guestPhysicsAccum -= FIXED_DT_S;
-            guestFirstTick = false;
-        }
-
-        // 5. OTHER players: interpolation from snapshots
+        // 4. Interpolate ALL players (own + other) from server snapshots
         const interp = network?.getInterpolatedSnapshot();
         if (interp) {
+            this._interpolateGuestSelf(interp);
             this._interpolateOtherPlayers(interp);
         }
 
-        // 6. Non-physics snapshot processing (health, powerups, events)
+        // 5. Non-physics processing (health, death, events, sounds)
+        const snapshot = network?.lastSnapshot;
         if (snapshot) {
             this._processSnapshotNonPhysics(snapshot);
         }
 
-        // 7. Hook visuals (from snapshot — server is authoritative)
+        // 6. Hook visuals from snapshot
         this.hookGraphics.clear();
         this._drawHookVisuals(snapshot);
 
-        // 8. Animations
+        // 7. Animations from snapshot
         this._updateGuestAnimations(playerInput, snapshot);
 
-        // 9. UI
+        // 8. UI
         this.updateHUD();
         this.updateNameLabels();
         network?.update(delta);
     }
 
     // === v28: LOCAL PHYSICS FOR OWN CHARACTER (SimplePhysicsWorld) ===
-
-    _updateLocalPlayer(input, delta) {
-        if (!this.player?.active || this.player.getData('isDying')) {
-            if (!this._loggedGuest1) { console.log('[Guest] _updateLocalPlayer: player not active or dying'); this._loggedGuest1 = true; }
-            return;
-        }
-        if (!this.player.core || !this.predictionWorld) {
-            if (!this._loggedGuest2) {
-                console.log('[Guest] _updateLocalPlayer: missing core or predictionWorld',
-                    'core:', !!this.player.core,
-                    'predWorld:', !!this.predictionWorld,
-                    'simpleBody:', !!this.player.simpleBody);
-                this._loggedGuest2 = true;
-            }
-            return;
-        }
-
-        const FIXED_DT_S = 1 / 60;
-        const FIXED_DT_MS = FIXED_DT_S * 1000;
-
-        // Track local tick for debugging
-        this._localTick = (this._localTick || 0) + 1;
-
-        // Physics tick with FIXED delta
-        const result = this.player.core.tick(input, FIXED_DT_MS);
-        this._localGrounded = result.grounded;
-
-        // Update facing direction
-        if (input.direction !== 0) {
-            this.player.setData('facingRight', input.direction > 0);
-            this.player.setFlipX(input.direction < 0);
-        }
-
-        // v28: Step SimplePhysicsWorld
-        this.predictionWorld.step(FIXED_DT_S);
-        this.player.core.quantize();
-
-        // v28: Direct sprite sync from SimpleBody
-        if (this._localTick % 60 === 1) {
-            const body = this.player.simpleBody;
-            const groundY = body.y + body.halfH + 1;
-            const ts = this.predictionWorld.tileSize;
-            const tileY = Math.floor(groundY / ts);
-            const tileX = Math.floor(body.x / ts);
-            const isSolid = this.predictionWorld._isSolid(tileX, tileY);
-            console.log('[Guest] tick', this._localTick,
-                'y:', body.y.toFixed(1), 'halfH:', body.halfH, 'groundY:', groundY.toFixed(1),
-                'ts:', ts, 'tile:', tileX, tileY, isSolid ? 'SOLID' : 'empty');
-        }
-        this.player.setPosition(this.player.simpleBody.x, this.player.simpleBody.y);
-    }
 
     // === v17: LOCAL GROUND DETECTION (tilemap collision) ===
 
@@ -2059,13 +2009,52 @@ export class GameScene extends Phaser.Scene {
             // Linear interpolation of position
             const x = prevHost.x + (currHost.x - prevHost.x) * t;
             const y = prevHost.y + (currHost.y - prevHost.y) * t;
-            this.hostSprite.setPosition(x, y);
+            if (this.hostSprite.x !== x || this.hostSprite.y !== y) {
+                this.hostSprite.setPosition(x, y);
+            }
+            this.hostSprite.setVisible(true);
+            if (this.hostSprite.nameLabel) this.hostSprite.nameLabel.setVisible(true);
 
             // Direction from current snapshot
-            if (currHost.facingRight !== undefined) {
+            if (currHost.facingRight !== undefined && this.hostSprite.flipX !== !currHost.facingRight) {
                 this.hostSprite.setData('facingRight', currHost.facingRight);
                 this.hostSprite.setFlipX(!currHost.facingRight);
             }
+        } else if (this.hostSprite && !currHost) {
+            // No host in state — hide the placeholder sprite
+            this.hostSprite.setVisible(false);
+            if (this.hostSprite.nameLabel) this.hostSprite.nameLabel.setVisible(false);
+        }
+    }
+
+    // Render OWN player by smoothly lerping the sprite toward the latest server position.
+    // Avoids timestamp-buffer math entirely — just a per-frame visual smoothing toward target.
+    _interpolateGuestSelf(interp) {
+        if (!this.player || this.player.getData('isDying')) return;
+        const latest = this.network?.lastSnapshot;
+        if (!latest) return;
+        const me = latest.players?.find(p => p.id === 'guest');
+        if (!me) return;
+
+        // First frame — snap to position
+        if (!this._guestSelfInit) {
+            this.player.setPosition(me.x, me.y);
+            this._guestSelfInit = true;
+        } else {
+            const lerp = 0.35; // ~3 frame catchup → smooth without much input lag
+            const dx = me.x - this.player.x;
+            const dy = me.y - this.player.y;
+            // Snap to target if very close to avoid jitter
+            if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+                this.player.setPosition(me.x, me.y);
+            } else {
+                this.player.setPosition(this.player.x + dx * lerp, this.player.y + dy * lerp);
+            }
+        }
+
+        if (me.facingRight !== undefined && this.player.flipX !== !me.facingRight) {
+            this.player.setData('facingRight', me.facingRight);
+            this.player.setFlipX(!me.facingRight);
         }
     }
 
@@ -2075,131 +2064,6 @@ export class GameScene extends Phaser.Scene {
      * v21 BENDING: Smooth interpolation toward server state instead of instant reset.
      * Industry-standard approach used by Teeworlds, Source Engine, etc.
      */
-
-    /**
-     * v28: Apply server authoritative state to local player (SimpleBody)
-     */
-    _applyServerState(myData) {
-        const serverVx = (myData.vx || 0) / 256;
-        const serverVy = (myData.vy || 0) / 256;
-
-        // Update sprite position
-        this.player.setPosition(myData.x, myData.y);
-
-        // v28: Update SimpleBody
-        if (this.player.simpleBody) {
-            this.player.simpleBody.x = myData.x;
-            this.player.simpleBody.y = myData.y;
-            this.player.simpleBody.vx = serverVx;
-            this.player.simpleBody.vy = serverVy;
-
-            // v30: Update grounded state after teleport
-            this.player.simpleBody.grounded = this.predictionWorld.isGrounded(this.player.simpleBody);
-        }
-
-        // Update local state
-        this._localVel = { x: serverVx, y: serverVy };
-        this._localGrounded = myData.grounded || this.player.simpleBody?.grounded || false;
-
-        // Update CharacterCore state
-        if (this.player.core) {
-            this.player.core.grounded = this._localGrounded;
-        }
-    }
-
-    // === v23: TEEWORLDS-STYLE INPUT REPLAY RECONCILIATION ===
-
-    /**
-     * v28: Adaptive bending with SimpleBody.
-     * Since SimplePhysicsWorld is deterministic, we should have minimal drift.
-     * Bending handles any remaining discrepancy smoothly.
-     */
-    _reconcileWithServer(snapshot) {
-        const myData = snapshot.players?.find(p => p.id === 'guest');
-        if (!myData || this.player.getData('isDying')) {
-            if (!this._loggedReconcile1) {
-                console.log('[Guest] _reconcileWithServer: no guest data or dying, players:', snapshot.players?.map(p => p.id));
-                this._loggedReconcile1 = true;
-            }
-            return;
-        }
-        if (!this.predictionWorld || !this.player.simpleBody || !this.player.core) {
-            if (!this._loggedReconcile2) {
-                console.log('[Guest] _reconcileWithServer: missing predictionWorld/simpleBody/core');
-                this._loggedReconcile2 = true;
-            }
-            return;
-        }
-
-        const serverTick = snapshot.tick;
-        const lastAckedSeq = snapshot.lastInputSeq;
-
-        // Skip if already processed this tick
-        if (serverTick <= this._lastConfirmedTick) return;
-
-        if (this._lastConfirmedTick < 0) {
-            console.log('[Guest] First reconciliation tick', serverTick,
-                'server pos:', myData.x.toFixed(1), myData.y.toFixed(1),
-                'local pos:', this.player.simpleBody.x.toFixed(1), this.player.simpleBody.y.toFixed(1));
-        }
-        this._lastConfirmedTick = serverTick;
-
-        // Always clear acknowledged inputs
-        this.network.clearAckedInputs(lastAckedSeq);
-
-        // Always sync hook state from server
-        this._syncHookStateFromServer(myData, lastAckedSeq);
-
-        // v28: Calculate error from SimpleBody
-        const body = this.player.simpleBody;
-        const errorX = myData.x - body.x;
-        const errorY = myData.y - body.y;
-        const errorDist = Math.sqrt(errorX * errorX + errorY * errorY);
-
-        const serverVx = (myData.vx || 0) / 256;
-        const serverVy = (myData.vy || 0) / 256;
-
-        // v28: With deterministic physics, threshold can be lower
-        const SKIP_THRESHOLD = 4;
-        const TELEPORT_THRESHOLD = 150;
-
-        if (errorDist < SKIP_THRESHOLD) {
-            return;
-        }
-
-        if (errorDist > TELEPORT_THRESHOLD) {
-            this._applyServerState(myData);
-            if (window.DebugLog) window.DebugLog.log(`TELEPORT err=${errorDist.toFixed(0)}px`);
-            return;
-        }
-
-        const BEND_FACTOR = Math.min(0.5, 0.15 + errorDist * 0.007);
-
-        const newX = body.x + errorX * BEND_FACTOR;
-        const newY = body.y + errorY * BEND_FACTOR;
-
-        // v28: Direct body + sprite sync
-        body.x = newX;
-        body.y = newY;
-        this.player.setPosition(newX, newY);
-
-        // Velocity bending with same factor
-        const newVx = body.vx + (serverVx - body.vx) * BEND_FACTOR;
-        const newVy = body.vy + (serverVy - body.vy) * BEND_FACTOR;
-        body.vx = newVx;
-        body.vy = newVy;
-
-        // v28 FIX: NaN guard — reset to server values if physics corrupted
-        if (!isFinite(body.vx) || !isFinite(body.vy)) { body.vx = serverVx; body.vy = serverVy; }
-        if (!isFinite(body.x) || !isFinite(body.y)) { body.x = myData.x; body.y = myData.y; this.player.setPosition(body.x, body.y); }
-
-        // v30: Update grounded state after position bend
-        body.grounded = this.predictionWorld.isGrounded(body);
-
-        if (window.DebugLog) {
-            window.DebugLog.log(`BEND err=${errorDist.toFixed(1)}px f=${(BEND_FACTOR * 100).toFixed(0)}%`);
-        }
-    }
 
     /**
      * v28: Sync hook state from server, respecting input acknowledgement
@@ -2262,13 +2126,14 @@ export class GameScene extends Phaser.Scene {
     _drawHookVisuals(snapshot) {
         if (!snapshot) return;
 
-        // v21.3: Own hook - use CharacterCore (now soft-synced with server)
-        // This unifies rendering with host mode - same drawHookForCharacter()
-        if (this.player?.active && this.player.core) {
-            this.drawHookForCharacter(this.player);
+        // Quake-1-style: both guest and host hooks drawn from snapshot data
+        const myData = snapshot.players?.find(p => p.id === 'guest');
+        if (myData && this.player?.active) {
+            if (myData.hookState !== 'IDLE' && myData.hookPos) {
+                this._drawHookLine(this.player.x, this.player.y, myData.hookPos.x, myData.hookPos.y);
+            }
         }
 
-        // Host hook - must use snapshot (hostSprite has no CharacterCore)
         const hostData = snapshot.players?.find(p => p.id === 'host');
         if (hostData && this.hostSprite?.active) {
             if (hostData.hookState !== 'IDLE' && hostData.hookPos) {
@@ -2292,28 +2157,56 @@ export class GameScene extends Phaser.Scene {
     // === v17: GUEST ANIMATIONS ===
 
     _updateGuestAnimations(input, snapshot) {
-        // Own character animation (from local state)
-        const prefix = this.player.animPrefix;
-        if (prefix) {
-            if (!this._localGrounded) {
-                this.player.anims.play(`${prefix}-jump`, true);
-            } else if (input.direction !== 0) {
-                this.player.anims.play(`${prefix}-walk`, true);
-            } else {
-                this.player.anims.play(`${prefix}-idle`, true);
+        // Own character animation — from server snapshot (Quake-1-style)
+        // No forceRestart — Phaser skips if animation already playing → smooth playback
+        if (snapshot) {
+            const myData = snapshot.players?.find(p => p.id === 'guest');
+            if (myData) {
+                const prefix = this.player.animPrefix;
+                if (prefix) {
+                    const vx = (myData.vx || 0) / 256;
+                    let key;
+                    if (myData.grounded === false) key = `${prefix}-jump`;
+                    else if (Math.abs(vx) > 10) key = `${prefix}-walk`;
+                    else key = `${prefix}-idle`;
+                    if (this.player.anims.currentAnim?.key !== key) {
+                        this.player.anims.play(key);
+                    }
+                }
             }
-        }
 
-        // Host character animation (from snapshot)
-        if (this.hostSprite && snapshot) {
+            // Host character animation (from snapshot)
             const hostData = snapshot.players?.find(p => p.id === 'host');
-            if (hostData) {
+            if (hostData && this.hostSprite) {
                 const hPrefix = this.hostSprite.animPrefix;
                 if (hPrefix && hostData.animation) {
-                    this.hostSprite.anims.play(hostData.animation, true);
+                    // Server sends short keys ('idle','walk','jump') — prepend sprite prefix
+                    const fullKey = hostData.animation.includes('-')
+                        ? hostData.animation
+                        : `${hPrefix}-${hostData.animation}`;
+                    if (this.hostSprite.anims.currentAnim?.key !== fullKey) {
+                        this.hostSprite.anims.play(fullKey);
+                    }
                 }
             }
         }
+    }
+
+    // Cancel any pending death tweens / fade timers on a sprite (used at respawn)
+    _cancelDeathTweens(sprite) {
+        if (!sprite) return;
+        if (sprite._deathFadeTimer) {
+            sprite._deathFadeTimer.remove(false);
+            sprite._deathFadeTimer = null;
+        }
+        if (sprite._deathTweens) {
+            for (const tw of sprite._deathTweens) {
+                if (tw && tw.isPlaying && tw.isPlaying()) tw.stop();
+            }
+            sprite._deathTweens = null;
+        }
+        // Also kill any remaining tweens targeting this sprite
+        this.tweens.killTweensOf(sprite);
     }
 
     /**
@@ -2330,6 +2223,7 @@ export class GameScene extends Phaser.Scene {
                 this.onCharacterDeath(this.player, null);
             }
             if (!myData.isDying && this.player.getData('isDying')) {
+                this._cancelDeathTweens(this.player);
                 this.player.setData('isDying', false);
                 this.player.setData('health', myData.health);
                 this.player.setAlpha(1);
@@ -2337,9 +2231,8 @@ export class GameScene extends Phaser.Scene {
                 this.player.setVisible(true);
                 this.player.setAngle(0);
                 if (this.player.nameLabel) this.player.nameLabel.setVisible(true);
-                // v17: Direct position set (no Rapier on guest)
                 this.player.setPosition(myData.x, myData.y);
-                this._localVel = { x: 0, y: 0 };
+                this._guestSelfInit = false; // re-init lerp at fresh position
             }
 
             // Health
@@ -2370,24 +2263,28 @@ export class GameScene extends Phaser.Scene {
 
                 // Ragdoll spin
                 const spinDir = Math.random() > 0.5 ? 1 : -1;
-                this.tweens.add({
+                const spinTween = this.tweens.add({
                     targets: this.hostSprite,
                     angle: spinDir * 360,
                     duration: RAGDOLL.DURATION,
                     ease: 'Linear'
                 });
+                this.hostSprite._deathTweens = [spinTween];
 
                 // Fade out after ragdoll
-                this.time.delayedCall(RAGDOLL.DURATION, () => {
-                    this.tweens.add({
+                const fadeTimer = this.time.delayedCall(RAGDOLL.DURATION, () => {
+                    const fadeTween = this.tweens.add({
                         targets: this.hostSprite,
                         alpha: 0,
                         duration: RAGDOLL.FADE_TIME
                     });
+                    if (this.hostSprite._deathTweens) this.hostSprite._deathTweens.push(fadeTween);
                 });
+                this.hostSprite._deathFadeTimer = fadeTimer;
             }
             // Respawn: restore visuals
             if (!hostData.isDying && this.hostSprite.getData('isDying')) {
+                this._cancelDeathTweens(this.hostSprite);
                 this.hostSprite.setData('isDying', false);
                 this.hostSprite.setData('health', hostData.health);
                 this.hostSprite.setAlpha(1);
@@ -2465,11 +2362,11 @@ export class GameScene extends Phaser.Scene {
     // === GUEST: SYNC SNOWBALL VISUALS ===
 
     syncSnowballVisuals(serverSnowballs, interp) {
-        const serverIds = new Set(serverSnowballs.map(s => s.id));
+        const serverIds = new Set(serverSnowballs.map(s => String(s.id)));
 
         // Remove snowballs that no longer exist on server
         this.snowballs = this.snowballs.filter(sb => {
-            if (!serverIds.has(sb.getData('netId'))) {
+            if (!serverIds.has(String(sb.getData('netId')))) {
                 this.destroySnowball(sb);
                 return false;
             }
@@ -2478,13 +2375,8 @@ export class GameScene extends Phaser.Scene {
 
         // Update or create snowball visuals
         for (const ss of serverSnowballs) {
-            let sb = this.snowballs.find(s => s.getData('netId') === ss.id);
+            let sb = this.snowballs.find(s => String(s.getData('netId')) === String(ss.id));
             if (!sb) {
-                // v28 FIX: Destroy local visual when server snowball arrives (prevents duplication)
-                if (this._localSnowballVisual?.active) {
-                    this._localSnowballVisual.destroy();
-                    this._localSnowballVisual = null;
-                }
                 // Create visual-only snowball (no physics body needed on guest)
                 sb = this.add.sprite(ss.x, ss.y, 'snowball');
                 sb.setScale(ss.hasFire ? 0.7 : 0.5);
@@ -2548,42 +2440,6 @@ export class GameScene extends Phaser.Scene {
             }
         }
     }
-
-    // === GUEST: LOCAL SNOWBALL VISUAL (instant feedback) ===
-
-    createLocalSnowballVisual(fireDirection) {
-        // v24: Cooldown to prevent double visuals/sounds
-        const now = Date.now();
-        if (now - (this._lastLocalSnowballTime || 0) < 100) return;
-        this._lastLocalSnowballTime = now;
-
-        // v28 FIX: Destroy previous local visual if still alive
-        if (this._localSnowballVisual?.active) {
-            this._localSnowballVisual.destroy();
-        }
-
-        const dirX = fireDirection || (this.player.getData('facingRight') ? 1 : -1);
-        const sb = this.add.sprite(
-            this.player.x + dirX * 60,
-            this.player.y - 10,
-            'snowball'
-        );
-        sb.setScale(0.5).setDepth(10);
-        this._localSnowballVisual = sb;
-        // Animate flight and fade
-        this.tweens.add({
-            targets: sb,
-            x: sb.x + dirX * 300,
-            alpha: 0,
-            duration: 400,
-            onComplete: () => {
-                sb.destroy();
-                if (this._localSnowballVisual === sb) this._localSnowballVisual = null;
-            }
-        });
-        this.playSpatialSound('sfx-snowball-shot', this.player.x, this.player.y, 0.4);
-    }
-
 
     // === CHARACTER UPDATE ===
 

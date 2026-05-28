@@ -1,0 +1,8 @@
+/**
+ * Bundled by jsDelivr using Rollup v2.79.2 and Terser v5.39.0.
+ * Original file: /npm/httpie@2.0.0-next.13/xhr/index.mjs
+ *
+ * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
+ */
+function t(t,e){e.headers=t.headers||{},e.statusMessage=t.statusText,e.statusCode=t.status,e.data=t.response}function e(e,n,o){return new Promise((function(s,i){o=o||{};var a,r,d,u=new XMLHttpRequest,p=o.body,f=o.headers||{};for(a in o.timeout&&(u.timeout=o.timeout),u.ontimeout=u.onerror=function(t){t.timeout="timeout"==t.type,i(t)},u.open(e,n.href||n),u.onload=function(){for(d=u.getAllResponseHeaders().trim().split(/[\r\n]+/),t(u,u);r=d.shift();)r=r.split(": "),u.headers[r.shift().toLowerCase()]=r.join(": ");if((r=u.headers["content-type"])&&~r.indexOf("application/json"))try{u.data=JSON.parse(u.data,o.reviver)}catch(e){return t(u,e),i(e)}(u.status>=400?i:s)(u)},typeof FormData<"u"&&p instanceof FormData||p&&"object"==typeof p&&(f["content-type"]="application/json",p=JSON.stringify(p)),u.withCredentials=!!o.withCredentials,f)u.setRequestHeader(a,f[a]);u.send(p)}))}var n=e.bind(e,"GET"),o=e.bind(e,"POST"),s=e.bind(e,"PATCH"),i=e.bind(e,"DELETE"),a=e.bind(e,"PUT");export{i as del,n as get,s as patch,o as post,a as put,e as send};export default null;
+//# sourceMappingURL=/sm/35dffa527128fdf9498799370a895d9a6457b71a0ad0f1f487a53b0ecc6450f7.map
