@@ -893,6 +893,9 @@ export class DungeonScene extends Phaser.Scene {
             }
         }
 
+        // Biome mechanic tiles (butter / vines / …) — after walls so their pointInWalls checks are real
+        this.spawnBiomeTiles();
+
         // Random torches per room (some lit, some unlit)
         this.placeRandomTorches();
         for (const t of this.torches) this.drawTorchFlame(t);  // first-frame flames (drawTorchFlame skips unlit)
@@ -1053,8 +1056,6 @@ export class DungeonScene extends Phaser.Scene {
                 }
             }
         }
-        // Apply biome-specific mechanic tiles (slippery butter / vines / etc.)
-        this.spawnBiomeTiles();
     }
 
     spawnBiomeTiles() {
@@ -2146,6 +2147,7 @@ export class DungeonScene extends Phaser.Scene {
                 const gr = Math.floor(y / NAV_CELL);
                 if (this.navGrid[gr]?.[gc] !== 'floor') continue;
                 if (this.pointInWalls(x, y, 18)) continue;   // keep prop bodies off the brick edge
+                if (this.biomeTiles.some(t => Math.hypot(t.x - x, t.y - y) < t.radius + 18)) continue;   // not under a puddle/patch
                 const type = pickDecor(this.biome.decorWeights);
                 if (type) this.drawDecor(x, y, type);
             }
@@ -3336,10 +3338,15 @@ export class DungeonScene extends Phaser.Scene {
         // "Erase" the wall by drawing biome floor pattern on top of it
         const b = this.biome;
         const overlay = this.add.graphics().setDepth(51);
-        overlay.fillStyle(b.floorColorA, 1);
-        overlay.fillRect(wall.x, wall.y, wall.w, wall.h);
-        overlay.lineStyle(1, b.gridColor, 0.5);
-        overlay.strokeRect(wall.x, wall.y, wall.w, wall.h);
+        for (let y = wall.y; y < wall.y + wall.h; y += NAV_CELL) {
+            for (let x = wall.x; x < wall.x + wall.w; x += NAV_CELL) {
+                const r = Math.floor(y / NAV_CELL);
+                const c = Math.floor(x / NAV_CELL);
+                const variant = ((r >> 1) + (c >> 1)) & 1;
+                overlay.fillStyle(variant ? b.floorColorB : b.floorColorA, 1);
+                overlay.fillRect(x, y, NAV_CELL, NAV_CELL);
+            }
+        }
         // Burst of debris
         const cx = wall.x + wall.w / 2;
         const cy = wall.y + wall.h / 2;

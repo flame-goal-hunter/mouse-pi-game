@@ -138,8 +138,8 @@ export const BIOMES = [
         name: 'Тронный зал',
         icon: '👑',
         ambient: 'Тронный зал графа Ратулы. Бабушка здесь!',
-        floorColorA: 0x1c0a16, floorColorB: 0x220c1a,
-        gridColor:   0x100510,
+        floorColorA: 0x1c0a16, floorColorB: 0x261020,
+        gridColor:   0x0a0208,
         wallFill:    0x4a0a18, wallShadow: 0x180408, wallHighlight: 0x7a1830,
         // Crimson-tinted darkness — throne feel
         darknessColor: 0x180408, darknessAlpha: 0.82,
