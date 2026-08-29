@@ -11,11 +11,11 @@ export const BIOMES = [
         name: 'Подземелье',
         icon: '🏰',
         ambient: 'Тёмное каменное подземелье графа',
-        floorColorA: 0x181020, floorColorB: 0x1c1428,
-        gridColor:   0x080410,
-        wallFill:    0x2a182a, wallShadow: 0x100410, wallHighlight: 0x3d2440,
-        // Unified moderate darkness — lantern always matters; color varies per biome
-        darknessColor: 0x080418, darknessAlpha: 0.76,
+        floorColorA: 0x221333, floorColorB: 0x281838,
+        gridColor:   0x120820,
+        wallFill:    0x2a1a3e, wallShadow: 0x120818, wallHighlight: 0x3e2a56,
+        // Warm gothic: violet stone, amber torch pools; darkest of the "normal" floors
+        darknessColor: 0x080418, darknessAlpha: 0.78,
         decorWeights: [
             { type: 'mushroom', w: 3 },
             { type: 'bone',     w: 3 },
@@ -42,11 +42,11 @@ export const BIOMES = [
         name: 'Кухня графа',
         icon: '🍳',
         ambient: 'Жаркая кухня — пар, плиты, разбитая посуда',
-        floorColorA: 0x2a1810, floorColorB: 0x301c10,
-        gridColor:   0x180a04,
+        floorColorA: 0x2c1a12, floorColorB: 0x321e14,
+        gridColor:   0x1a0c06,
         wallFill:    0x4a3020, wallShadow: 0x1a0c04, wallHighlight: 0x6a4828,
         // Warm orange tinted darkness — kitchen feel
-        darknessColor: 0x3a1808, darknessAlpha: 0.76,
+        darknessColor: 0x200c04, darknessAlpha: 0.60,
         decorWeights: [
             { type: 'pot',     w: 3 },
             { type: 'plate',   w: 3 },
@@ -73,16 +73,17 @@ export const BIOMES = [
         name: 'Библиотека',
         icon: '📚',
         ambient: 'Полки до потолка, шёпот призраков, парящие свитки',
-        floorColorA: 0x0c0a1a, floorColorB: 0x10102a,
-        gridColor:   0x040408,
+        floorColorA: 0x14122a, floorColorB: 0x181632,
+        gridColor:   0x0a0818,
         wallFill:    0x4a2a14, wallShadow: 0x1a0a02, wallHighlight: 0x6a3a1c,
         // Cool blue-black tinted darkness — library feel
-        darknessColor: 0x0a0a20, darknessAlpha: 0.76,
+        darknessColor: 0x0a0a20, darknessAlpha: 0.70,
         decorWeights: [
             { type: 'book',      w: 5 },
             { type: 'scroll',    w: 3 },
             { type: 'inkwell',   w: 2 },
-            { type: 'bookshelf', w: 4 },  // cover prop
+            { type: 'bookshelf', w: 4 },
+            { type: 'candle',    w: 2 },
             { type: 'forbiddenBook', w: 0 } // dynamic spawn — 3 per floor in stealth rooms
         ],
         enemyWeights: { librarian: 3, bat: 1 },  // Librarian has cone, bat does NOT
@@ -105,16 +106,18 @@ export const BIOMES = [
         name: 'Зимний сад',
         icon: '🌿',
         ambient: 'Лунный сад с лозами и хищными цветами',
-        floorColorA: 0x0e2230, floorColorB: 0x142838,
-        gridColor:   0x040c08,
+        floorColorA: 0x10222e, floorColorB: 0x142836,
+        gridColor:   0x081418,
         wallFill:    0x1a4438, wallShadow: 0x0a1c14, wallHighlight: 0x305840,
-        // Green-tinted moonlit darkness — garden feel
-        darknessColor: 0x081810, darknessAlpha: 0.76,
+        // Moonlit blue darkness — the one cool floor (accent from the "Лунная ночь" mockup)
+        darknessColor: 0x0a1428, darknessAlpha: 0.74,
         decorWeights: [
             { type: 'moonflower', w: 3 },
             { type: 'glowpod',    w: 2 },
             { type: 'hedge_tuft', w: 3 },
-            { type: 'lilypad',    w: 1 }
+            { type: 'lilypad',    w: 1 },
+            { type: 'flower',     w: 2 },
+            { type: 'vine',       w: 1 }
         ],
         enemyWeights: { cat: 1, slime: 1, bat: 1, snapdragon: 3 },  // signature snapdragon
         mechanic: 'vines',
@@ -135,11 +138,11 @@ export const BIOMES = [
         name: 'Тронный зал',
         icon: '👑',
         ambient: 'Тронный зал графа Ратулы. Бабушка здесь!',
-        floorColorA: 0x1a0814, floorColorB: 0x200a18,
-        gridColor:   0xffd060,
+        floorColorA: 0x1c0a16, floorColorB: 0x220c1a,
+        gridColor:   0x100510,
         wallFill:    0x4a0a18, wallShadow: 0x180408, wallHighlight: 0x7a1830,
         // Crimson-tinted darkness — throne feel
-        darknessColor: 0x180408, darknessAlpha: 0.76,
+        darknessColor: 0x180408, darknessAlpha: 0.82,
         decorWeights: [
             { type: 'goblet',     w: 3 },
             { type: 'bone',       w: 2 },
