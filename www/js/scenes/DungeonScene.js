@@ -17,6 +17,14 @@ const COR_W_BOSS   = 4;                           // 160px corridor to boss room
 const NAV_W = Math.ceil(WORLD_W / NAV_CELL);
 const NAV_H = Math.ceil(WORLD_H / NAV_CELL);
 
+const SHAKE_CFG = {
+    sm:  { dur: 80,  amt: 0.004 },
+    med: { dur: 140, amt: 0.010 },
+    big: { dur: 220, amt: 0.018 },
+    huge:{ dur: 380, amt: 0.026 },
+};
+const POWERUP_EMOJI = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' };
+
 const PLAYER = {
     speed: 240,
     accel: 2200,
@@ -2385,7 +2393,8 @@ export class DungeonScene extends Phaser.Scene {
                         if (e.dead || !e.stealthPatrol) continue;
                         const d = Math.hypot(e.x - tx, e.y - ty);
                         if (d > 350) continue;
-                        e.lastSeen = { x: tx, y: ty };
+                        if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+                        e.lastSeen.x = tx; e.lastSeen.y = ty;
                         e.alertTimer = 4000;
                         e.suspicion = Math.max(e.suspicion || 0, 0.55);
                         // Rotate facing target toward thud
@@ -2644,13 +2653,16 @@ export class DungeonScene extends Phaser.Scene {
         if (this.player.fireTimer > 0) this.player.fireTimer -= dt * 1000;
 
         // Continuous fire while button held — works for mouse, space, and touch aim stick simultaneously
-        const exitBtnArea = (p) => p && p.x > this.cameras.main.width - 60 && p.y < 60;
         if (this.keys.SPACE.isDown) this.tryShoot();
         const mouse = this.input.mousePointer;
-        if (mouse && mouse.isDown && !exitBtnArea(mouse)) this.tryShoot();
+        if (mouse && mouse.isDown && !this._inExitBtnArea(mouse)) this.tryShoot();
         // Fire only when stick is actually pushed past the dead-zone (matches aim threshold at 1734)
         if (this.aimStick && this.aimStick.active &&
             Math.hypot(this.aimStick.dx, this.aimStick.dy) > 0.15) this.tryShoot();
+    }
+
+    _inExitBtnArea(p) {
+        return p && p.x > this.cameras.main.width - 60 && p.y < 60;
     }
 
     updateEnemyBolts(dt) {
@@ -3259,7 +3271,8 @@ export class DungeonScene extends Phaser.Scene {
             // Movement: chase if speed > 0. Pass actual LOS state — if wall blocks,
             // aiPathChase will use A* pathfinding to lastSeen instead of running into wall.
             if (e.def.speed > 0) {
-                e.lastSeen = { x: this.player.x, y: this.player.y };
+                if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+                e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
                 e.alertTimer = e.def.alertMs || 4000;
                 const seesNow = this._cachedSeesPlayer(e);
                 this.aiPathChase(e, dt, dx, dy, dist, seesNow);
@@ -3357,7 +3370,8 @@ export class DungeonScene extends Phaser.Scene {
         this.tweens.add({ targets: t, y: e.y - 90, alpha: 0, duration: 900,
             onComplete: () => t.destroy() });
         if (e.zzz) { e.zzz.destroy(); e.zzz = null; }
-        e.lastSeen = { x: this.player.x, y: this.player.y };
+        if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+        e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
         e.alertTimer = e.def.alertMs;
         // Alert same-room cone enemies — soft propagation
         if (e.roomId !== undefined && this.enemies) {
@@ -3366,7 +3380,8 @@ export class DungeonScene extends Phaser.Scene {
                 if (other.roomId !== e.roomId) continue;
                 if (!other.stealthPatrol) continue;
                 other.suspicion = Math.max(other.suspicion || 0, 0.6);
-                other.lastSeen = { x: this.player.x, y: this.player.y };
+                if (!other.lastSeen) other.lastSeen = { x: 0, y: 0 };
+                other.lastSeen.x = this.player.x; other.lastSeen.y = this.player.y;
             }
             // ALARM CONSEQUENCE: 1-2 enemies from neighbouring rooms come to investigate
             if (this.dungeon && this.dungeon.rooms && e.roomId !== undefined) {
@@ -3380,7 +3395,8 @@ export class DungeonScene extends Phaser.Scene {
                         if (other.stealthPatrol) continue;   // cone enemies stay in their rooms
                         const dToCaller = Math.hypot(other.x - myRoom.x - myRoom.w/2, other.y - myRoom.y - myRoom.h/2);
                         if (dToCaller > 700) continue;       // only nearby neighbours
-                        other.lastSeen = { x: this.player.x, y: this.player.y };
+                        if (!other.lastSeen) other.lastSeen = { x: 0, y: 0 };
+                        other.lastSeen.x = this.player.x; other.lastSeen.y = this.player.y;
                         other.alertTimer = other.def.alertMs || 4000;
                         called++;
                     }
@@ -3491,7 +3507,8 @@ export class DungeonScene extends Phaser.Scene {
             const dx = this.player.x - e.x;
             const dy = this.player.y - e.y;
             const dist = Math.hypot(dx, dy);
-            e.lastSeen = { x: this.player.x, y: this.player.y };
+            if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+            e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
             e.alertTimer = 5000;
             // Boost speed
             const tmpDef = { ...e.def, speed: e.def.speed * e.def.alarmedSpeedMul };
@@ -3790,7 +3807,13 @@ export class DungeonScene extends Phaser.Scene {
                 else e.sprite.clearTint();
             }
         }
-        this.enemies = this.enemies.filter(e => !(e.dead && e.cleanedUp));
+        // In-place compaction — no new array/closure per substep
+        let w = 0;
+        for (let i = 0; i < this.enemies.length; i++) {
+            const e = this.enemies[i];
+            if (!(e.dead && e.cleanedUp)) this.enemies[w++] = e;
+        }
+        this.enemies.length = w;
     }
 
     _timeWarpFactor() {
@@ -3844,7 +3867,8 @@ export class DungeonScene extends Phaser.Scene {
         const sees = inRange && e._cachedSees;
 
         if (sees) {
-            e.lastSeen = { x: this.player.x, y: this.player.y };
+            if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+            e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
             e.alertTimer = e.def.alertMs;
         } else if (e.alertTimer > 0) {
             e.alertTimer -= dt * 1000;
@@ -4068,7 +4092,8 @@ export class DungeonScene extends Phaser.Scene {
                 return;
             }
             // Obstacle on the line → use A* even though LOS-ray says we see player
-            e.lastSeen = { x: this.player.x, y: this.player.y };
+            if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+            e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
             e.alertTimer = e.def.alertMs || 4000;
             this.followPath(e, dt, this.player.x, this.player.y);
             return;
@@ -4097,7 +4122,13 @@ export class DungeonScene extends Phaser.Scene {
     buildDijkstraMap(minClearCells) {
         const W = NAV_W, H = NAV_H;
         const size = W * H;
-        const map = new Int32Array(size);
+        if (!this._dijScratch) this._dijScratch = {};
+        let scratch = this._dijScratch[minClearCells];
+        if (!scratch) {
+            scratch = { map: new Int32Array(size), queue: new Int32Array(size) };
+            this._dijScratch[minClearCells] = scratch;
+        }
+        const map = scratch.map;
         const INFTY = 0x3fffffff;
         map.fill(INFTY);
         if (!this.player) return map;
@@ -4113,7 +4144,7 @@ export class DungeonScene extends Phaser.Scene {
         }
 
         // Ring-buffer FIFO queue. With uniform cost=1, each reachable cell enqueued exactly once.
-        const queue = new Int32Array(size);
+        const queue = scratch.queue;
         let qH = 0, qT = 0;
         const startIdx = pR * W + pC;
         map[startIdx] = 0;
@@ -4195,7 +4226,10 @@ export class DungeonScene extends Phaser.Scene {
                 }
             }
         }
-        return { tx: (bestC + 0.5) * NAV_CELL, ty: (bestR + 0.5) * NAV_CELL };
+        if (!this._dijStep) this._dijStep = { tx: 0, ty: 0 };
+        this._dijStep.tx = (bestC + 0.5) * NAV_CELL;
+        this._dijStep.ty = (bestR + 0.5) * NAV_CELL;
+        return this._dijStep;
     }
 
     // followPath now delegates to Dijkstra Map — wave already routed around all obstacles
@@ -4351,12 +4385,7 @@ export class DungeonScene extends Phaser.Scene {
     _shake(tier) {
         const cam = this.cameras?.main;
         if (!cam) return;
-        const cfg = {
-            sm:  { dur: 80,  amt: 0.004 },
-            med: { dur: 140, amt: 0.010 },
-            big: { dur: 220, amt: 0.018 },
-            huge:{ dur: 380, amt: 0.026 },
-        }[tier] || { dur: 80, amt: 0.004 };
+        const cfg = SHAKE_CFG[tier] || SHAKE_CFG.sm;
         cam.shake(cfg.dur, cfg.amt);
     }
 
@@ -4465,7 +4494,8 @@ export class DungeonScene extends Phaser.Scene {
                             this._raiseAlarm(other);
                         } else {
                             // Distant shot — investigate
-                            other.lastSeen = { x: e.x, y: e.y };
+                            if (!other.lastSeen) other.lastSeen = { x: 0, y: 0 };
+                            other.lastSeen.x = e.x; other.lastSeen.y = e.y;
                             other.suspicion = Math.max(other.suspicion || 0, 0.7);
                             other.alertTimer = (other.def.alertMs || 4000);
                             // Visual cue: enemy heard the shot
@@ -4496,7 +4526,8 @@ export class DungeonScene extends Phaser.Scene {
         const len = Math.hypot(kx, ky) || 1;
         e.vx += (kx / len) * k;
         e.vy += (ky / len) * k;
-        e.lastSeen = { x: this.player.x, y: this.player.y };
+        if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+        e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
         e.alertTimer = e.def.alertMs;
         if (e.hp <= 0) {
             e.dead = true;
@@ -5193,8 +5224,11 @@ export class DungeonScene extends Phaser.Scene {
         if (sC === eC && sR === eR) {
             return this.spatialHash.get(sR * 100000 + sC) || [];
         }
-        const seen = new Set();
-        const result = [];
+        if (!this._wallSeen) { this._wallSeen = new Set(); this._wallScratch = []; }
+        const seen = this._wallSeen;
+        const result = this._wallScratch;
+        seen.clear();
+        result.length = 0;
         for (let r = sR; r <= eR; r++) {
             for (let c = sC; c <= eC; c++) {
                 const bucket = this.spatialHash.get(r * 100000 + c);
@@ -5566,7 +5600,7 @@ export class DungeonScene extends Phaser.Scene {
         // Active power-up timer — cache color + only setText when string actually changed
         if (this.activePowerup && this.time.now < this.activePowerup.endTime) {
             const remaining = ((this.activePowerup.endTime - this.time.now) / 1000).toFixed(1);
-            const emoji = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' }[this.activePowerup.type];
+            const emoji = POWERUP_EMOJI[this.activePowerup.type];
             const txt = `${emoji} ${remaining}с`;
             if (this.powerupText.text !== txt) this.powerupText.setText(txt);
             if (!this.activePowerup.colorStr) {
