@@ -8,6 +8,8 @@ import { biomeForFloor, weightedPick, pickDecor } from './Biomes.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
 import { RELICS, pickRandomRelics, relicById, RARITY_COLORS } from './Relics.js';
+import { computeHudLayout } from '../ui/hudLayout.js';
+import { readSafeArea } from '../ui/safeArea.js';
 
 const WORLD_W = 2600;
 const WORLD_H = 1900;
@@ -2910,7 +2912,8 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     _inExitBtnArea(p) {
-        return p && p.x > this.cameras.main.width - 60 && p.y < 60;
+        const e = this._hudLayout && this._hudLayout.exit;
+        return !!(p && e && Math.hypot(p.x - e.cx, p.y - e.cy) < e.r + 10);
     }
 
     updateEnemyBolts(dt) {
@@ -5688,127 +5691,123 @@ export class DungeonScene extends Phaser.Scene {
     // HUD
     // =================================================================
     buildHUD() {
+        const FONT = '"Nunito", "Roboto", system-ui, sans-serif';
+        const D = LAYER.UI_HUD;
         this.heartIcons = [];
-        for (let i = 0; i < PLAYER.maxHp; i++) {
-            const h = this.add.text(0, 0, '❤️', { fontSize: '30px' }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
-            this.heartIcons.push(h);
+        for (let i = 0; i < this.maxHp; i++) {
+            this.heartIcons.push(this.add.image(0, 0, 'ui_heart').setOrigin(0, 0).setScrollFactor(0).setDepth(D));
         }
-        this.cheeseText = this.add.text(0, 0, '🧀 0/0', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif',
-            fontSize: '24px',
-            color: '#fff0a0', stroke: '#0a0410', strokeThickness: 5,
-            fontStyle: '900',
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
-        this.keyIcon = this.add.text(0, 0, '🔑', { fontSize: '34px' })
-            .setScrollFactor(0).setDepth(LAYER.UI_HUD).setAlpha(0.25);
-        this.objectiveText = this.add.text(0, 0, 'Найди ключ 🔑', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif',
-            fontSize: '17px', fontStyle: '500',
+        this.cheeseIcon = this.add.image(0, 0, 'd_cheese').setOrigin(0, 0).setScrollFactor(0).setDepth(D);
+        this.cheeseText = this.add.text(0, 0, '0/0', {
+            fontFamily: FONT, fontSize: '24px',
+            color: '#fff0a0', stroke: '#0a0410', strokeThickness: 5, fontStyle: '900',
+        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(D);
+        this.keyIcon = this.add.image(0, 0, 'd_key').setOrigin(0, 0).setScrollFactor(0).setDepth(D).setAlpha(0.25);
+        this.objectiveText = this.add.text(0, 0, 'Найди ключ', {
+            fontFamily: FONT, fontSize: '17px', fontStyle: '500',
             color: '#f0d8ff', stroke: '#0a0410', strokeThickness: 3
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
+        }).setScrollFactor(0).setDepth(D);
         this.scoreText = this.add.text(0, 0, '0', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '22px',
-            color: '#ffffff', stroke: '#0a0410', strokeThickness: 4,
-            fontStyle: '700',
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
-        // Floor badge + biome icon
+            fontFamily: FONT, fontSize: '22px',
+            color: '#ffffff', stroke: '#0a0410', strokeThickness: 4, fontStyle: '700',
+        }).setScrollFactor(0).setDepth(D);
+        // Floor badge (hidden — shown by the floor intro)
         const floorLabel = this.isFinalFloor
-            ? `${this.biome.icon} ${this.biome.name}`
-            : `${this.biome.icon} ${this.biome.name} (${this.chapter}/${TOTAL_FLOORS})`;
+            ? this.biome.name
+            : `${this.biome.name} (${this.chapter}/${TOTAL_FLOORS})`;
         this.chapterText = this.add.text(0, 0, floorLabel, {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '13px',
+            fontFamily: FONT, fontSize: '13px',
             color: this.isFinalFloor ? '#ff8060' : '#d0b0f0',
-            stroke: '#0a0410', strokeThickness: 2,
-            fontStyle: '700', letterSpacing: 1,
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
-        // Upgrade icons row (right side, under floor badge)
-        this.upgradeIconsText = this.add.text(0, 0, '', {
-            fontSize: '18px', color: '#ffffff'
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
-        // Combo display
+            stroke: '#0a0410', strokeThickness: 2, fontStyle: '700', letterSpacing: 1,
+        }).setScrollFactor(0).setDepth(D);
+        this.upgradeIconsText = this.add.text(0, 0, '', { fontSize: '18px', color: '#ffffff' }).setScrollFactor(0).setDepth(D);
+        // Combo display — centred under the cheese counter
         this.comboText = this.add.text(0, 0, '', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '30px',
-            color: '#e8b54a', stroke: '#3a1248', strokeThickness: 5,
-            fontStyle: '900',
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD).setVisible(false);
-        // COMPASS arrow toward current objective (key → grandma)
+            fontFamily: FONT, fontSize: '30px',
+            color: '#e8b54a', stroke: '#3a1248', strokeThickness: 5, fontStyle: '900',
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(D).setVisible(false);
+        // COMPASS arrow toward current objective (key → grandma / stairs)
         this.compass = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_COMPASS);
-        this.compassLabel = this.add.text(0, 0, '🔑', { fontSize: '28px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL);
+        this.compassLabel = this.add.image(0, 0, 'd_key').setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL);
         this._compassKey = null; this._compassAngle = undefined;  // fresh Graphics — force first redraw
-        // Active power-up display
+        // Active power-up: icon + remaining seconds
+        this.powerupIcon = this.add.image(0, 0, 'ui_bolt').setOrigin(0.5).setScrollFactor(0).setDepth(D).setVisible(false);
         this.powerupText = this.add.text(0, 0, '', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '20px',
-            color: '#ffffff', stroke: '#0a0410', strokeThickness: 4,
-            fontStyle: '700',
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD).setVisible(false);
-        // === Suspicion meter — small circular gauge near HUD ===
+            fontFamily: FONT, fontSize: '20px',
+            color: '#ffffff', stroke: '#0a0410', strokeThickness: 4, fontStyle: '700',
+        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(D).setVisible(false);
+        // === Suspicion meter — small circular gauge in the status row ===
         this.suspicionMeter = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_2).setVisible(false);
-        this.suspicionLabel = this.add.text(0, 0, '👁', { fontSize: '18px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_HUD_3).setVisible(false);
+        this.suspicionLabel = this.add.image(0, 0, 'ui_eye').setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_HUD_3).setVisible(false);
         // === Distraction book counter ===
-        this.bookCounterIcon = this.add.text(0, 0, '📕', { fontSize: '22px' })
-            .setScrollFactor(0).setDepth(LAYER.UI_HUD);
+        this.bookCounterIcon = this.add.image(0, 0, 'ui_book').setOrigin(0.5).setScrollFactor(0).setDepth(D);
         this.bookCounterText = this.add.text(0, 0, '×3', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '17px',
-            color: '#ffffff', stroke: '#0a0410', strokeThickness: 3,
-            fontStyle: '700',
-        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
+            fontFamily: FONT, fontSize: '17px',
+            color: '#ffffff', stroke: '#0a0410', strokeThickness: 3, fontStyle: '700',
+        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(D);
         // === Crouch indicator ===
-        this.crouchIcon = this.add.text(0, 0, '🦶', { fontSize: '22px' })
-            .setScrollFactor(0).setDepth(LAYER.UI_HUD).setAlpha(0.35);
-        // Premium exit button — circle with X icon
+        this.crouchIcon = this.add.image(0, 0, 'ui_paw').setOrigin(0.5).setScrollFactor(0).setDepth(D).setAlpha(0.35);
+        // Exit button — disc drawn in repositionHUD (radius scales), icon doubles as the hit area
         this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
-        this.exitBtnBg.fillStyle(0x140820, 0.92);
-        this.exitBtnBg.fillCircle(0, 0, 22);
-        this.exitBtnBg.lineStyle(2, 0xe8b54a, 0.75);
-        this.exitBtnBg.strokeCircle(0, 0, 22);
-        this.exitBtn = this.add.text(0, 0, '✕', {
-            fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '22px',
-            color: '#fff0d6', fontStyle: '700',
-        })
-        .setOrigin(0.5)
-        .setScrollFactor(0).setDepth(LAYER.UI_HUD)
-        .setInteractive({ useHandCursor: true })
-        .on('pointerdown', () => this.exitToMenu());
+        this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => this.exitToMenu());
         this.repositionHUD();
     }
 
     repositionHUD() {
         if (!this.heartIcons) return;
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+        this._hudLayout = L;
         for (let i = 0; i < this.heartIcons.length; i++) {
-            this.heartIcons[i].setPosition(16 + i * 34, 16);
+            const h = L.hearts[i];
+            this.heartIcons[i].setPosition(h.x, h.y).setDisplaySize(h.size, h.size);
         }
-        this.cheeseText.setPosition(W / 2, 14).setOrigin(0.5, 0);
-        // === MINIMAL HUD — all stat-counters and decorations hidden ===
-        // Kept visible: HP hearts, cheese counter, key icon, exit button, gameplay tools (suspicion/books/crouch/powerup)
-        this.objectiveText.setVisible(false);   // briefly shown on floor entry only
-        this.scoreText.setVisible(false);       // only on win/lose
-        this.chapterText.setVisible(false);     // only on floor entry
-        this.upgradeIconsText.setVisible(false); // can be viewed in shop/codex
+        this.keyIcon.setPosition(L.key.x, L.key.y).setDisplaySize(L.key.w, L.key.h);
+        this.cheeseIcon.setPosition(L.cheese.iconX, L.cheese.iconY).setDisplaySize(L.cheese.iconW, L.cheese.iconH);
+        this.cheeseText.setPosition(L.cheese.textX, L.cheese.textY).setFontSize(L.cheese.fontSize);
+        this.comboText.setPosition(L.combo.x, L.combo.y).setFontSize(L.combo.fontSize);
+        // === MINIMAL HUD — stat counters hidden; floor/score shown by intro and win/lose screens ===
+        this.objectiveText.setVisible(false);
+        this.scoreText.setVisible(false);
+        this.chapterText.setVisible(false);
+        this.upgradeIconsText.setVisible(false);
         this.comboText.setVisible(false);       // (re-enabled per-frame in updateHUD if active)
-        this.keyIcon.setPosition(16 + PLAYER.maxHp * 34 + 12, 12).setOrigin(0, 0);
-        this.powerupText.setPosition(20, H - 30).setOrigin(0, 1);
-        this.exitBtn.setPosition(W - 32, 32);
-        if (this.exitBtnBg) this.exitBtnBg.setPosition(W - 32, 32);
-        // Suspicion meter — top-left, under hearts row
-        this.suspicionMeter.setPosition(28, 70);
-        this.suspicionLabel.setPosition(28, 70);
-        // Distraction book counter — left side, under hearts
-        this.bookCounterIcon.setPosition(70, 60).setOrigin(0.5, 0.5);
-        this.bookCounterText.setPosition(86, 60).setOrigin(0, 0.5);
-        // Crouch indicator
-        this.crouchIcon.setPosition(110, 60).setOrigin(0.5, 0.5);
+        // Status row
+        this.suspicionMeter.setPosition(L.meter.cx, L.meter.cy);
+        this.suspicionLabel.setPosition(L.eye.cx, L.eye.cy).setDisplaySize(L.eye.size, L.eye.size);
+        this.bookCounterIcon.setPosition(L.book.cx, L.book.cy).setDisplaySize(L.book.size, L.book.size);
+        this.bookCounterText.setPosition(L.bookText.x, L.bookText.y).setFontSize(L.bookText.fontSize);
+        this.crouchIcon.setPosition(L.paw.cx, L.paw.cy).setDisplaySize(L.paw.size, L.paw.size);
+        // Power-up row
+        this.powerupIcon.setPosition(L.powerup.iconCx, L.powerup.iconCy).setDisplaySize(L.powerup.size, L.powerup.size);
+        this.powerupText.setPosition(L.powerup.textX, L.powerup.textY).setFontSize(L.powerup.fontSize);
+        // Exit button
+        this.exitBtnBg.clear();
+        this.exitBtnBg.fillStyle(0x140820, 0.92);
+        this.exitBtnBg.fillCircle(0, 0, L.exit.r);
+        this.exitBtnBg.lineStyle(2, 0xe8b54a, 0.75);
+        this.exitBtnBg.strokeCircle(0, 0, L.exit.r);
+        this.exitBtnBg.setPosition(L.exit.cx, L.exit.cy);
+        this.exitBtn.setPosition(L.exit.cx, L.exit.cy).setDisplaySize(L.exit.iconSize, L.exit.iconSize);
+        // Compass: label size / ring radius depend on the screen — force a redraw
+        this._compassKey = null;
         if (this.joy) this.positionJoystick();
     }
 
     updateHUD() {
-        for (let i = 0; i < this.heartIcons.length; i++) {
-            this.heartIcons[i].setText(i < this.player.hp ? '❤️' : '🖤');
+        if (this.maxHp > this.heartIcons.length) {
+            while (this.heartIcons.length < this.maxHp) {
+                this.heartIcons.push(this.add.image(0, 0, 'ui_heart').setOrigin(0, 0).setScrollFactor(0).setDepth(LAYER.UI_HUD));
+            }
+            this.repositionHUD();
         }
-        this.cheeseText.setText(`🧀 ${this.cheeseGot}/${this.cheeseTotal}`);
+        for (let i = 0; i < this.heartIcons.length; i++) {
+            const key = i < this.player.hp ? 'ui_heart' : 'ui_heart_empty';
+            if (this.heartIcons[i].texture.key !== key) this.heartIcons[i].setTexture(key);
+        }
+        this.cheeseText.setText(`${this.cheeseGot}/${this.cheeseTotal}`);
         this.scoreText.setText(String(this.score));
         this.keyIcon.setAlpha(this.hasKey ? 1 : 0.25);
         // Objective text hidden permanently — compass arrow conveys "where to go"
@@ -5835,13 +5834,14 @@ export class DungeonScene extends Phaser.Scene {
             this.suspicionLabel.setVisible(true);
             this.suspicionMeter.clear();
             const color = maxSus < 0.5 ? 0xffd040 : (maxSus < 0.85 ? 0xff8040 : 0xff3030);
+            const r = this._hudLayout.meter.r;
             // Background ring
-            this.suspicionMeter.lineStyle(3, 0x000000, 0.6);
-            this.suspicionMeter.strokeCircle(0, 0, 16);
+            this.suspicionMeter.lineStyle(Math.max(2, Math.round(3 * this._hudLayout.s)), 0x000000, 0.6);
+            this.suspicionMeter.strokeCircle(0, 0, r);
             // Filled arc
-            this.suspicionMeter.lineStyle(4, color, 0.95);
+            this.suspicionMeter.lineStyle(Math.max(3, Math.round(4 * this._hudLayout.s)), color, 0.95);
             this.suspicionMeter.beginPath();
-            this.suspicionMeter.arc(0, 0, 16, -Math.PI/2, -Math.PI/2 + Math.PI*2 * maxSus, false);
+            this.suspicionMeter.arc(0, 0, r, -Math.PI/2, -Math.PI/2 + Math.PI*2 * maxSus, false);
             this.suspicionMeter.strokePath();
         } else {
             this.suspicionMeter.setVisible(false);
@@ -5855,8 +5855,9 @@ export class DungeonScene extends Phaser.Scene {
         // Active power-up timer — cache color + only setText when string actually changed
         if (this.activePowerup && this.time.now < this.activePowerup.endTime) {
             const remaining = ((this.activePowerup.endTime - this.time.now) / 1000).toFixed(1);
-            const emoji = POWERUP_EMOJI[this.activePowerup.type];
-            const txt = `${emoji} ${remaining}с`;
+            const txt = `${remaining}с`;
+            const iconKey = POWERUP_ICON[this.activePowerup.type] || 'ui_bolt';
+            if (this.powerupIcon.texture.key !== iconKey) this.powerupIcon.setTexture(iconKey);
             if (this.powerupText.text !== txt) this.powerupText.setText(txt);
             if (!this.activePowerup.colorStr) {
                 this.activePowerup.colorStr = '#' + this.activePowerup.tint.toString(16).padStart(6, '0');
@@ -5866,10 +5867,12 @@ export class DungeonScene extends Phaser.Scene {
                 this._powerupColorApplied = this.activePowerup.colorStr;
             }
             this.powerupText.setVisible(true);
+            this.powerupIcon.setVisible(true);
         } else {
             if (this.activePowerup) this.activePowerup = null;
             this._powerupColorApplied = null;
             this.powerupText.setVisible(false);
+            this.powerupIcon.setVisible(false);
         }
     }
 
@@ -6045,7 +6048,8 @@ export class DungeonScene extends Phaser.Scene {
             return;
         }
         // Avoid the exit-X button area top-right
-        if (p.x > this.cameras.main.width - 60 && p.y < 60) return;
+        const eB = this._hudLayout && this._hudLayout.exit;
+        if (eB && Math.hypot(p.x - eB.cx, p.y - eB.cy) < eB.r + 10) return;
 
         const W = this.cameras.main.width;
         const half = W / 2;
@@ -6274,13 +6278,13 @@ export class DungeonScene extends Phaser.Scene {
     updateCompass() {
         if (!this.compass) return;
         // Target: key first → captive (final floor) or exit door (intermediate floor)
-        let target, emoji;
+        let target, icon;
         if (!this.hasKey && this.keyPickup && !this.keyPickup.taken) {
-            target = this.keyPickup; emoji = '🔑';
+            target = this.keyPickup; icon = 'key';
         } else if (this.captive) {
-            target = this.captive; emoji = '👵';
+            target = this.captive; icon = 'grandma';
         } else if (this.exit) {
-            target = this.exit; emoji = '⬇';
+            target = this.exit; icon = 'exit';
         }
         if (!target) {
             this.compass.clear();
@@ -6295,17 +6299,17 @@ export class DungeonScene extends Phaser.Scene {
         const dist = Math.hypot(dx, dy);
         const angle = Math.atan2(dy, dx);
         // Skip the clear+retessellate when nothing moved meaningfully
-        const key = emoji + '|' + this.cameras.main.width + '|' + this.cameras.main.height;
+        const key = icon + '|' + this.cameras.main.width + '|' + this.cameras.main.height;
         if (this._compassKey === key && Math.abs((this._compassAngle ?? 99) - angle) < 0.02) return;
         this._compassKey = key;
         this._compassAngle = angle;
         // Position arrow on a ring near screen edge
-        const ringR = Math.min(cam.width, cam.height) * 0.40;
+        const ringR = this._hudLayout ? this._hudLayout.compass.ringR : Math.min(cam.width, cam.height) * 0.40;
         const ax = cx + Math.cos(angle) * ringR;
         const ay = cy + Math.sin(angle) * ringR;
         this.compass.clear();
         // Arrow triangle pointing in `angle` direction
-        const size = 18;
+        const size = this._hudLayout ? this._hudLayout.compass.arrowSize : 18;
         const tipX = ax + Math.cos(angle) * size;
         const tipY = ay + Math.sin(angle) * size;
         const leftX  = ax + Math.cos(angle + 2.5) * size;
@@ -6322,9 +6326,13 @@ export class DungeonScene extends Phaser.Scene {
         this.compass.closePath();
         this.compass.fillPath();
         this.compass.strokePath();
-        // Emoji slightly back from the arrow
-        this.compassLabel.setText(emoji);
-        this.compassLabel.setPosition(ax - Math.cos(angle) * 26, ay - Math.sin(angle) * 26);
+        // Icon slightly back from the arrow
+        const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };
+        const [tex, wf, hf] = COMPASS_ICON[icon];
+        const ls = this._hudLayout ? this._hudLayout.compass.labelSize : 26;
+        if (this.compassLabel.texture.key !== tex) this.compassLabel.setTexture(tex);
+        this.compassLabel.setDisplaySize(ls * wf, ls * hf);
+        this.compassLabel.setPosition(ax - Math.cos(angle) * ls, ay - Math.sin(angle) * ls);
         this.compassLabel.setVisible(true);
         // Show distance below
         // (skip for clutter)
