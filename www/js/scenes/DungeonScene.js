@@ -827,6 +827,20 @@ export class DungeonScene extends Phaser.Scene {
         this.placeRandomTorches();
         // SPOOKY eyes in dark corners — they fade when Pi approaches
         this.placeSpookyEyes();
+
+        // === BAKE static geometry ===
+        // floor (~7k cmds) + walls (~3.5k cmds) + sconces were Graphics command
+        // buffers re-tessellated EVERY frame. Draw them once into a RenderTexture
+        // and destroy the sources: per-frame cost becomes one textured quad.
+        const worldRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H)
+            .setOrigin(0).setDepth(-100);
+        worldRT.draw(this.floorGfx);
+        worldRT.draw(this.wallGfx);
+        worldRT.draw(this.torchSconceGfx);
+        this.floorGfx.destroy();        this.floorGfx = null;
+        this.wallGfx.destroy();         this.wallGfx = null;
+        this.torchSconceGfx.destroy();  this.torchSconceGfx = null;
+        this.worldRT = worldRT;
     }
 
     placeSpookyEyes() {
@@ -920,6 +934,7 @@ export class DungeonScene extends Phaser.Scene {
         const T = NAV_CELL;
         const floor = this.add.graphics();
         floor.setDepth(-100);
+        this.floorGfx = floor;
         const b = this.biome;
         for (let r = 0; r < NAV_H; r++) {
             for (let c = 0; c < NAV_W; c++) {
