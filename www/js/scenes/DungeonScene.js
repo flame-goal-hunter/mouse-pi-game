@@ -35,6 +35,25 @@ const LAYER = {
     SCONCE:   70,   // torchSconceGfx before baking
     FLAME:    81,
     EYES:     82,   // also used numerically by torch smoke/spark FX
+
+    // ---- UI band (scrollFactor 0). Values are the historical magic numbers.
+    UI_TOUCH: 989,        // stick / dash outer halos
+    UI_TOUCH_BASE: 990,   // stick bases, dash base, touch labels
+    UI_TOUCH_HINT: 990.5, // stick hints, dash cooldown arc
+    UI_TOUCH_KNOB: 991,
+    UI_TOUCH_LABEL: 992,  // dash icon
+    UI_HUD_BG: 999,       // exit button disc
+    UI_HUD: 1000,         // hearts, counters, icons
+    UI_HUD_2: 1001,       // suspicion meter ring
+    UI_HUD_3: 1002,       // suspicion eye
+    UI_COMPASS: 1100,
+    UI_COMPASS_LABEL: 1101,
+    UI_OVERLAY: 2000,     // win/lose overlay, upgrade picker
+    UI_SHOP: 2200,
+    UI_PICKER: 2300,      // relic picker
+    UI_INTRO: 2500,       // story / floor intro
+    UI_FLASH: 3000,       // flashNoCheese
+    UI_DEBUG: 5000,       // fps overlay
 };
 const WALL_TRIM_GOLD = 0xd8a850;   // gilded skirting where walls meet the floor
 
@@ -314,7 +333,7 @@ export class DungeonScene extends Phaser.Scene {
             this._fpsText = this.add.text(8, 8, '', {
                 fontFamily: 'monospace', fontSize: '16px', color: '#00ff80',
                 backgroundColor: '#000000aa', padding: { x: 6, y: 3 }
-            }).setScrollFactor(0).setDepth(5000);
+            }).setScrollFactor(0).setDepth(LAYER.UI_DEBUG);
             this._fpsAccum = 0;
         }
         const onResize = () => this.repositionHUD();
@@ -5549,7 +5568,7 @@ export class DungeonScene extends Phaser.Scene {
     showStoryIntro() {
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
-        const D = 2500;
+        const D = LAYER.UI_INTRO;
 
         const elements = [];
         const addEl = (el) => { el.setScrollFactor(0).setDepth(D); elements.push(el); return el; };
@@ -5663,7 +5682,7 @@ export class DungeonScene extends Phaser.Scene {
     buildHUD() {
         this.heartIcons = [];
         for (let i = 0; i < PLAYER.maxHp; i++) {
-            const h = this.add.text(0, 0, '❤️', { fontSize: '30px' }).setScrollFactor(0).setDepth(1000);
+            const h = this.add.text(0, 0, '❤️', { fontSize: '30px' }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
             this.heartIcons.push(h);
         }
         this.cheeseText = this.add.text(0, 0, '🧀 0/0', {
@@ -5671,19 +5690,19 @@ export class DungeonScene extends Phaser.Scene {
             fontSize: '24px',
             color: '#fff0a0', stroke: '#0a0410', strokeThickness: 5,
             fontStyle: '900',
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         this.keyIcon = this.add.text(0, 0, '🔑', { fontSize: '34px' })
-            .setScrollFactor(0).setDepth(1000).setAlpha(0.25);
+            .setScrollFactor(0).setDepth(LAYER.UI_HUD).setAlpha(0.25);
         this.objectiveText = this.add.text(0, 0, 'Найди ключ 🔑', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif',
             fontSize: '17px', fontStyle: '500',
             color: '#f0d8ff', stroke: '#0a0410', strokeThickness: 3
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         this.scoreText = this.add.text(0, 0, '0', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '22px',
             color: '#ffffff', stroke: '#0a0410', strokeThickness: 4,
             fontStyle: '700',
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         // Floor badge + biome icon
         const floorLabel = this.isFinalFloor
             ? `${this.biome.icon} ${this.biome.name}`
@@ -5693,45 +5712,45 @@ export class DungeonScene extends Phaser.Scene {
             color: this.isFinalFloor ? '#ff8060' : '#d0b0f0',
             stroke: '#0a0410', strokeThickness: 2,
             fontStyle: '700', letterSpacing: 1,
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         // Upgrade icons row (right side, under floor badge)
         this.upgradeIconsText = this.add.text(0, 0, '', {
             fontSize: '18px', color: '#ffffff'
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         // Combo display
         this.comboText = this.add.text(0, 0, '', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '30px',
             color: '#e8b54a', stroke: '#3a1248', strokeThickness: 5,
             fontStyle: '900',
-        }).setScrollFactor(0).setDepth(1000).setVisible(false);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD).setVisible(false);
         // COMPASS arrow toward current objective (key → grandma)
-        this.compass = this.add.graphics().setScrollFactor(0).setDepth(1100);
+        this.compass = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_COMPASS);
         this.compassLabel = this.add.text(0, 0, '🔑', { fontSize: '28px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(1101);
+            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL);
         this._compassKey = null; this._compassAngle = undefined;  // fresh Graphics — force first redraw
         // Active power-up display
         this.powerupText = this.add.text(0, 0, '', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '20px',
             color: '#ffffff', stroke: '#0a0410', strokeThickness: 4,
             fontStyle: '700',
-        }).setScrollFactor(0).setDepth(1000).setVisible(false);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD).setVisible(false);
         // === Suspicion meter — small circular gauge near HUD ===
-        this.suspicionMeter = this.add.graphics().setScrollFactor(0).setDepth(1001).setVisible(false);
+        this.suspicionMeter = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_2).setVisible(false);
         this.suspicionLabel = this.add.text(0, 0, '👁', { fontSize: '18px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(1002).setVisible(false);
+            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_HUD_3).setVisible(false);
         // === Distraction book counter ===
         this.bookCounterIcon = this.add.text(0, 0, '📕', { fontSize: '22px' })
-            .setScrollFactor(0).setDepth(1000);
+            .setScrollFactor(0).setDepth(LAYER.UI_HUD);
         this.bookCounterText = this.add.text(0, 0, '×3', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '17px',
             color: '#ffffff', stroke: '#0a0410', strokeThickness: 3,
             fontStyle: '700',
-        }).setScrollFactor(0).setDepth(1000);
+        }).setScrollFactor(0).setDepth(LAYER.UI_HUD);
         // === Crouch indicator ===
         this.crouchIcon = this.add.text(0, 0, '🦶', { fontSize: '22px' })
-            .setScrollFactor(0).setDepth(1000).setAlpha(0.35);
+            .setScrollFactor(0).setDepth(LAYER.UI_HUD).setAlpha(0.35);
         // Premium exit button — circle with X icon
-        this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(999);
+        this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.exitBtnBg.fillStyle(0x140820, 0.92);
         this.exitBtnBg.fillCircle(0, 0, 22);
         this.exitBtnBg.lineStyle(2, 0xe8b54a, 0.75);
@@ -5741,7 +5760,7 @@ export class DungeonScene extends Phaser.Scene {
             color: '#fff0d6', fontStyle: '700',
         })
         .setOrigin(0.5)
-        .setScrollFactor(0).setDepth(1000)
+        .setScrollFactor(0).setDepth(LAYER.UI_HUD)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => this.exitToMenu());
         this.repositionHUD();
@@ -5859,53 +5878,53 @@ export class DungeonScene extends Phaser.Scene {
         // === LEFT MOVEMENT JOYSTICK ===
         this.joy = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
         // Outer dark backdrop
-        this.joyOuter = this.add.circle(0, 0, JOY_R + 10, 0x000000, 0.35).setScrollFactor(0).setDepth(989);
+        this.joyOuter = this.add.circle(0, 0, JOY_R + 10, 0x000000, 0.35).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
         // Main base ring
-        this.joyBase = this.add.circle(0, 0, JOY_R, 0xffffff, 0.10).setScrollFactor(0).setDepth(990);
+        this.joyBase = this.add.circle(0, 0, JOY_R, 0xffffff, 0.10).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
         this.joyBase.setStrokeStyle(4, 0xffffff, 0.55);
         // 4 direction hints (subtle arrows around the rim)
         this.joyHints = this.add.text(0, 0, '✥', {
             fontSize: '92px', color: '#ffffff'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(990.5).setAlpha(0.15);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.15);
         // Knob — gradient-feel via solid fill + bright stroke
-        this.joyKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xffffff, 0.85).setScrollFactor(0).setDepth(991);
+        this.joyKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xffffff, 0.85).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
         this.joyKnob.setStrokeStyle(3, 0xa0a0a0, 0.8);
 
         // === RIGHT AIM JOYSTICK ===
         this.aimStick = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
-        this.aimStickOuter = this.add.circle(0, 0, JOY_R + 10, 0x4a1c08, 0.40).setScrollFactor(0).setDepth(989);
-        this.aimStickBase = this.add.circle(0, 0, JOY_R, 0xff8050, 0.18).setScrollFactor(0).setDepth(990);
+        this.aimStickOuter = this.add.circle(0, 0, JOY_R + 10, 0x4a1c08, 0.40).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
+        this.aimStickBase = this.add.circle(0, 0, JOY_R, 0xff8050, 0.18).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
         this.aimStickBase.setStrokeStyle(4, 0xff9a60, 0.65);
         this.aimStickHint = this.add.text(0, 0, '🥧', {
             fontSize: '42px'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(990.5).setAlpha(0.45);
-        this.aimStickKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xff7040, 0.95).setScrollFactor(0).setDepth(991);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.45);
+        this.aimStickKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xff7040, 0.95).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
         this.aimStickKnob.setStrokeStyle(3, 0xffd0a0, 0.9);
 
         // === DASH BUTTON (separate, clearly above aim stick) ===
         this.dashBtn = { R: DASH_R, ready: true };
-        this.dashBtnOuter = this.add.circle(0, 0, DASH_R + 8, 0x081c4a, 0.45).setScrollFactor(0).setDepth(989);
-        this.dashBtnBase = this.add.circle(0, 0, DASH_R, 0x4080ff, 0.60).setScrollFactor(0).setDepth(990);
+        this.dashBtnOuter = this.add.circle(0, 0, DASH_R + 8, 0x081c4a, 0.45).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
+        this.dashBtnBase = this.add.circle(0, 0, DASH_R, 0x4080ff, 0.60).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
         this.dashBtnBase.setStrokeStyle(4, 0x80c0ff, 0.85);
         // Cooldown arc (filled wedge when on cooldown)
-        this.dashBtnCdArc = this.add.graphics().setScrollFactor(0).setDepth(990.5);
+        this.dashBtnCdArc = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT);
         this._dashArcP = undefined;  // fresh GameObjects — force first redraw (Scene instance is reused)
         this.dashBtnLabel = this.add.text(0, 0, '💨', { fontSize: '34px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(992);
+            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_LABEL);
 
         // Labels under the joysticks
         this.joyLabel = this.add.text(0, 0, 'ХОДЬБА', {
             fontFamily: 'Arial Black', fontSize: '11px',
             color: '#ffffff', alpha: 0.6
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(990).setAlpha(0.55);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.55);
         this.aimLabel = this.add.text(0, 0, 'ПРИЦЕЛ + ОГОНЬ', {
             fontFamily: 'Arial Black', fontSize: '11px',
             color: '#ffd0a0'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(990).setAlpha(0.65);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.65);
         this.dashLabel = this.add.text(0, 0, 'РЫВОК', {
             fontFamily: 'Arial Black', fontSize: '11px',
             color: '#a0d0ff'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(990).setAlpha(0.75);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.75);
 
         this.input.on('pointerdown', (p) => this.touchDown(p));
         this.input.on('pointermove', (p) => this.touchMove(p));
@@ -6367,7 +6386,7 @@ export class DungeonScene extends Phaser.Scene {
         // Pause input briefly
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
-        const D = 2300;
+        const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
         if (choices.length === 0) return;
         const els = [];
@@ -6455,7 +6474,7 @@ export class DungeonScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
-        const D = 2000;
+        const D = LAYER.UI_OVERLAY;
         // Track every overlay element so we can hide them when shop opens
         this._pickerElements = [];
         const addEl = (el, dep) => {
@@ -6567,7 +6586,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this._pickerElements) this._pickerElements.forEach(e => e.setVisible(false));
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
-        const D = 2200;
+        const D = LAYER.UI_SHOP;
 
         this._shopElements = [];
         const addEl = (el, dep) => {
@@ -6755,7 +6774,7 @@ export class DungeonScene extends Phaser.Scene {
         const t = this.add.text(x, y, 'Не хватает сыра!', {
             fontFamily: 'Arial Black', fontSize: '24px',
             color: '#ff4040', stroke: '#1a0a0a', strokeThickness: 4
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_FLASH);
         this.tweens.add({
             targets: t, y: y - 60, alpha: 0,
             duration: 1100, onComplete: () => t.destroy()
@@ -6813,7 +6832,7 @@ export class DungeonScene extends Phaser.Scene {
         const bgTop = opts.bgTop || 0x3a1248;
         const bgBot = opts.bgBot || 0x18062a;
         const radius = opts.radius != null ? opts.radius : 18;
-        const D = opts.depth || 2000;
+        const D = opts.depth || LAYER.UI_OVERLAY;
         const out = [];
         // DROP SHADOW
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 2);
@@ -6884,7 +6903,7 @@ export class DungeonScene extends Phaser.Scene {
         const hoverBgTop = opts.hoverBgTop || 0x4a2870;
         const hoverBgBot = opts.hoverBgBot || 0x2a1850;
         const radius = opts.radius != null ? opts.radius : 14;
-        const D = opts.depth || 2000;
+        const D = opts.depth || LAYER.UI_OVERLAY;
         const els = [];
         // Drop shadow
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
@@ -6932,7 +6951,7 @@ export class DungeonScene extends Phaser.Scene {
         const hoverTop = opts.hoverTop || 0xc070e0;
         const hoverBase = opts.hover || 0x9a50c0;
         const radius = opts.radius != null ? opts.radius : 14;
-        const D = opts.depth || 2010;
+        const D = opts.depth || (LAYER.UI_OVERLAY + 10);
         const out = [];
         // Draw in LOCAL coords so setScale pivots around button center (no drift on pulse tweens)
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
@@ -6985,7 +7004,7 @@ export class DungeonScene extends Phaser.Scene {
 
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
-        const D = 2000;
+        const D = LAYER.UI_OVERLAY;
         const addEl = (el, dep) => el.setScrollFactor(0).setDepth(dep || D);
 
         const hasSecond = !!(btnText2 && btnAction2);
