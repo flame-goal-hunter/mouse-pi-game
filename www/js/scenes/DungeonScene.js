@@ -462,11 +462,13 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     updateTorches(dt) {
-        // Animate flame ONLY for visible lit torches (no per-torch tweens — manual sin)
+        // ONE clear + redraw of every visible lit flame into the shared layer
+        if (!this.flameGfx) return;
+        this.flameGfx.clear();
         const cam = this.cameras.main;
         const margin = 100;
         for (const t of this.torches) {
-            if (!t.lit || !t.flameGfx) continue;
+            if (!t.lit) continue;
             const visible =
                 t.x + 40 + margin >= cam.scrollX &&
                 t.x - 40 - margin <= cam.scrollX + cam.width &&
@@ -481,12 +483,11 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     drawTorchFlame(torch) {
-        if (!torch.flameGfx) return;
-        const f = torch.flameGfx;
+        // Appends into the shared flameGfx — caller clears once per frame
+        const f = this.flameGfx;
+        if (!f || !torch.lit) return;
         const x = torch.x, y = torch.y;
         const h = torch.flameH || 0;
-        f.clear();
-        if (!torch.lit) return;
         f.fillStyle(0xff7020, 1);
         f.fillEllipse(x, y - 8 - h * 0.4, 7, 12 + h);
         f.fillStyle(0xffd040, 1);
@@ -511,7 +512,6 @@ export class DungeonScene extends Phaser.Scene {
                 onComplete: () => p.destroy()
             });
         }
-        if (torch.flameGfx) torch.flameGfx.clear();
     }
 
     // =================================================================
@@ -732,6 +732,7 @@ export class DungeonScene extends Phaser.Scene {
         // === SHARED GRAPHICS — consolidate static draw calls ===
         this.wallGfx = this.add.graphics().setDepth(50);
         this.torchSconceGfx = this.add.graphics().setDepth(70);
+        this.flameGfx = this.add.graphics().setDepth(81);  // ALL torch flames, one clear per frame
         // Build nav grid FIRST: 'wall' everywhere, then carve floor for rooms + corridors
         const grid = Array.from({ length: NAV_H }, () => Array(NAV_W).fill('wall'));
 
@@ -1937,9 +1938,6 @@ export class DungeonScene extends Phaser.Scene {
         g.fillRoundedRect(x - 7, y - 3, 14, 6, 2);
         g.lineStyle(1.2, 0x1a1a1a, 1);
         g.strokeRoundedRect(x - 7, y - 3, 14, 6, 2);
-        // Flame stays per-torch (animated each frame)
-        torch.flameGfx = this.add.graphics().setDepth(81);
-        if (lit) this.drawTorchFlame(torch);
         this.torches.push(torch);
     }
 
@@ -1948,7 +1946,6 @@ export class DungeonScene extends Phaser.Scene {
         if (torch.lit) return;
         torch.lit = true;
         bus.emit(SFX.LIGHT_TORCH);
-        this.drawTorchFlame(torch);
         this.score += 5;
         this.showFloatingText(torch.x, torch.y - 20, '+5 свет!', '#ffd060', 18);
         // DUNGEON BIOME: lit torch reveals hidden cheese cache in 80px radius (exploration loop)
