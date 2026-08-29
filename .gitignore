@@ -75,3 +75,6 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# Superpowers brainstorm sessions
+.superpowers/
