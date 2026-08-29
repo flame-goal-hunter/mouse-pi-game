@@ -10580,7 +10580,9 @@
             if (phaserRunning) frame.src = 'about:blank';
 
             const launchGame = () => {
-                frame.src = 'game-phaser.html?mode=transylvania&_v=' + Date.now();
+                // Straight to the HTML menu — no Phaser boot just to redirect.
+                // The menu itself navigates the iframe to game-phaser.html on "start run".
+                frame.src = 'transylvania-menu.html?_v=' + Date.now();
                 frame.style.display = 'block';
                 document.getElementById('startScreen').classList.remove('visible');
                 document.getElementById('gameCanvas').style.display = 'none';
