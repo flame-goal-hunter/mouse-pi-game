@@ -1709,6 +1709,10 @@ export class DungeonScene extends Phaser.Scene {
             case 'vine':     return this.drawVineProp(x, y);
             case 'glass':    return this.drawBrokenGlass(x, y);
             case 'goblet':   return this.drawGoblet(x, y);
+            case 'skull':     return this.drawSkull(x, y);
+            case 'chain':     return this.drawChain(x, y);
+            case 'bookshelf': return this.drawBookshelf(x, y);
+            case 'redCarpet': return this.drawRedCarpet(x, y);
             default:         return this.drawMushroom(x, y);
         }
     }
@@ -1908,6 +1912,93 @@ export class DungeonScene extends Phaser.Scene {
         g.strokeEllipse(x, y - 6, 8, 6);
         g.fillStyle(0x7a1010, 1);
         g.fillEllipse(x, y - 8, 6, 2);
+    }
+
+    // ----- Dungeon / throne: skull, chain -----
+    drawSkull(x, y) {
+        const g = this.decorGfx;
+        g.lineStyle(1.5, 0x1a1024, 1);
+        // Cranium
+        g.fillStyle(0xe8e0d0, 1);
+        g.fillCircle(x, y - 3, 7);
+        g.strokeCircle(x, y - 3, 7);
+        // Jaw
+        g.fillRoundedRect(x - 5, y + 1, 10, 5, 2);
+        g.strokeRoundedRect(x - 5, y + 1, 10, 5, 2);
+        // Eye sockets + nose
+        g.fillStyle(0x1a1024, 1);
+        g.fillCircle(x - 3, y - 4, 2);
+        g.fillCircle(x + 3, y - 4, 2);
+        g.fillTriangle(x, y - 1, x - 1.2, y + 1, x + 1.2, y + 1);
+        // Teeth
+        g.lineStyle(1, 0x1a1024, 0.8);
+        for (let i = -3; i <= 3; i += 2) g.lineBetween(x + i, y + 2, x + i, y + 5);
+    }
+    drawChain(x, y) {
+        const g = this.decorGfx;
+        // Four links lying diagonally on the floor, alternating orientation
+        for (let i = 0; i < 4; i++) {
+            const lx = x - 9 + i * 6, ly = y + 4 - i * 3;
+            const wide = (i & 1) === 0;
+            g.lineStyle(2, 0x1a1024, 1);
+            g.strokeEllipse(lx, ly, wide ? 8 : 5, wide ? 5 : 8);
+            g.lineStyle(1, 0x9a9aa4, 0.9);
+            g.strokeEllipse(lx, ly, wide ? 6 : 3.5, wide ? 3.5 : 6);
+        }
+        // Anchor ring at the end
+        g.lineStyle(2, 0x1a1024, 1);
+        g.strokeCircle(x + 12, y - 8, 3.5);
+        g.lineStyle(1, 0x9a9aa4, 0.9);
+        g.strokeCircle(x + 12, y - 8, 2);
+    }
+
+    // ----- Library: bookshelf -----
+    drawBookshelf(x, y) {
+        const g = this.decorGfx;
+        g.lineStyle(1.5, 0x1a1024, 1);
+        // Case
+        g.fillStyle(0x4a2a12, 1);
+        g.fillRect(x - 13, y - 30, 26, 34);
+        g.strokeRect(x - 13, y - 30, 26, 34);
+        // Cornice
+        g.fillStyle(0x6a3e1c, 1);
+        g.fillRect(x - 15, y - 33, 30, 4);
+        g.strokeRect(x - 15, y - 33, 30, 4);
+        // Three shelves of books
+        const colors = [0x7a3030, 0x2a5078, 0x4a6028, 0x7a4a10, 0x5a3a7a];
+        for (let s = 0; s < 3; s++) {
+            const sy = y - 26 + s * 11;
+            let bx = x - 11;
+            while (bx < x + 10) {
+                const bw = 3 + Math.floor(Math.random() * 3);   // 3..5
+                const bh = 7 + Math.floor(Math.random() * 3);   // 7..9
+                g.fillStyle(colors[Math.floor(Math.random() * colors.length)], 1);
+                g.fillRect(bx, sy + (9 - bh), bw, bh);
+                g.lineStyle(1, 0x1a1024, 0.8);
+                g.strokeRect(bx, sy + (9 - bh), bw, bh);
+                bx += bw + 1;
+            }
+            g.fillStyle(0x6a3e1c, 1);
+            g.fillRect(x - 13, sy + 9, 26, 2);
+        }
+    }
+
+    // ----- Throne: red carpet -----
+    drawRedCarpet(x, y) {
+        const g = this.decorGfx;
+        g.fillStyle(0x7a1020, 1);
+        g.lineStyle(1.5, 0x1a1024, 1);
+        g.fillRoundedRect(x - 22, y - 11, 44, 22, 2);
+        g.strokeRoundedRect(x - 22, y - 11, 44, 22, 2);
+        // Gold border
+        g.lineStyle(1.5, WALL_TRIM_GOLD, 0.9);
+        g.strokeRect(x - 18, y - 7, 36, 14);
+        // Fringe on both short ends
+        g.lineStyle(1, WALL_TRIM_GOLD, 0.8);
+        for (let i = -9; i <= 9; i += 3) {
+            g.lineBetween(x - 22, y + i, x - 25, y + i);
+            g.lineBetween(x + 22, y + i, x + 25, y + i);
+        }
     }
 
     // ----- Universal cobweb (dungeon) -----
