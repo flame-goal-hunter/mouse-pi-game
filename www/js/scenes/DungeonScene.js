@@ -1697,21 +1697,31 @@ export class DungeonScene extends Phaser.Scene {
                 }
             }
         }
-        // === Draw on SHARED wall graphics (consolidated draw call) ===
+        // === Draw on SHARED wall graphics (baked once in buildWorld) ===
         const g = this.wallGfx;
         g.fillStyle(b.wallFill, 1);
         g.fillRect(x, y, w, h);
-        g.lineStyle(1.2, b.wallShadow, 0.7);
-        const brickW = 60;
-        for (let bx = x; bx < x + w; bx += brickW) {
-            g.beginPath(); g.moveTo(bx, y); g.lineTo(bx, y + h); g.strokePath();
+        // Running-bond brickwork: two courses, the lower one offset by half a brick
+        const brickW = 30, courseH = h / 2;
+        g.lineStyle(1.2, b.wallShadow, 0.75);
+        g.lineBetween(x, y + courseH, x + w, y + courseH);
+        for (let course = 0; course < 2; course++) {
+            const cy = y + course * courseH;
+            const offset = course === 0 ? 0 : brickW / 2;
+            for (let bx = x + offset; bx < x + w; bx += brickW) {
+                g.lineBetween(bx, cy, bx, cy + courseH);
+            }
         }
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + w, y); g.strokePath();
-        g.beginPath(); g.moveTo(x, y + h); g.lineTo(x + w, y + h); g.strokePath();
-        g.fillStyle(b.wallHighlight, 1);
-        g.fillRect(x, y, w, 3);
-        g.fillStyle(b.wallShadow, 0.5);
-        g.fillRect(x, y + h - 3, w, 3);
+        // Dark recessed cant along the top edge, thin highlight under it
+        g.fillStyle(b.wallShadow, 0.85);
+        g.fillRect(x, y, w, 4);
+        g.fillStyle(b.wallHighlight, 0.9);
+        g.fillRect(x, y + 4, w, 2);
+        // Gilded skirting where the wall meets the floor
+        g.fillStyle(WALL_TRIM_GOLD, 0.55);
+        g.fillRect(x, y + h - 2, w, 2);
+        g.lineStyle(1, b.wallShadow, 0.9);
+        g.lineBetween(x, y + h - 2, x + w, y + h - 2);
     }
 
     // === BIOME DECORATIONS — dispatcher draws the right type ===
