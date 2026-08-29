@@ -47,3 +47,20 @@ test('layout scales with uiScale', () => {
     assert.ok(b.hearts[0].size > a.hearts[0].size);
     assert.ok(b.touch.joyR > a.touch.joyR);
 });
+
+test('12 hearts wrap into rows and still fit on 360x640', () => {
+    const L = computeHudLayout({ W: 360, H: 640, maxHp: 12 });
+    assert.equal(L.hearts.length, 12);
+    assert.ok(L.hearts[5].y > L.hearts[4].y && L.hearts[5].x === L.hearts[0].x, 'second row starts under the first');
+    assert.ok(L.meter.cy - L.meter.r > L.hearts[11].y + L.hearts[11].size, 'status row below the last heart row');
+    for (const r of L.rects) assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= 360 && r.y + r.h <= 640, `${r.name} on-screen`);
+    for (let i = 0; i < L.rects.length; i++) for (let j = i + 1; j < L.rects.length; j++) assert.ok(!overlaps(L.rects[i], L.rects[j]), `${L.rects[i].name} overlaps ${L.rects[j].name}`);
+});
+
+for (const [W, H] of [[320, 568], [568, 320]]) for (const safe of safesFor(W, H)) {
+    test(`floor viewport ${W}x${H} safe=${JSON.stringify(safe)} has no overlaps`, () => {
+        const L = computeHudLayout({ W, H, safe, maxHp: 5 });
+        for (const r of L.rects) assert.ok(r.x >= safe.left && r.y >= safe.top && r.x + r.w <= W - safe.right && r.y + r.h <= H - safe.bottom, `${r.name} inside safe area`);
+        for (let i = 0; i < L.rects.length; i++) for (let j = i + 1; j < L.rects.length; j++) assert.ok(!overlaps(L.rects[i], L.rects[j]), `${L.rects[i].name} overlaps ${L.rects[j].name}`);
+    });
+}

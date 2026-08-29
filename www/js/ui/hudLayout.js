@@ -1,5 +1,6 @@
 // Pure HUD layout — no Phaser, no DOM. All sizes are base px × uiScale.
 // Consumed by DungeonScene.repositionHUD()/setupTouchControls(); tested by tools/tests/hudLayout.test.mjs.
+// Conventions: {x, y} = top-left (origin 0,0); {cx, cy} = centre (origin 0.5); text fields carry their own origin in DungeonScene.
 
 export function uiScaleFor(W, H) {
     return Math.min(1.3, Math.max(0.8, Math.min(W, H) / 640));
@@ -9,9 +10,9 @@ const BASE = {
     margin: 12, heart: 26, heartGap: 4, keyW: 40, keyH: 21, keyGap: 10,
     rowGap: 8, statusH: 28, meterR: 14, eye: 16, bookIcon: 22, bookFont: 17, paw: 22, itemGap: 10,
     powerIcon: 22, powerFont: 18,
-    cheeseW: 24, cheeseH: 20, cheeseGap: 6, cheeseFont: 22, cheeseTextW: 64, comboFont: 26, comboGap: 4,
+    cheeseW: 24, cheeseH: 20, cheeseGap: 6, cheeseFont: 22, cheeseTextW: 72, comboFont: 26, comboGap: 4, comboTextW: 110,
     exitR: 22, exitIcon: 44, compassLabel: 26, compassArrow: 18,
-    joyR: 76, dashR: 52, touchPad: 18, dashGap: 26, touchFont: 11,
+    joyR: 76, dashR: 52, touchPad: 18, touchOuter: 10, dashGap: 26, touchFont: 11,
 };
 
 export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, left: 0 }, maxHp = 5, uiScale }) {
@@ -22,18 +23,22 @@ export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, l
     const rects = [];
     const rect = (name, x, y, w, h) => rects.push({ name, x, y, w, h });
 
-    // --- Top-left: hearts + key
-    const heart = px(BASE.heart), heartGap = px(BASE.heartGap);
+    // --- Top-left: hearts (rows of 5) + key beside the first row
+    const heart = px(BASE.heart), heartGap = px(BASE.heartGap), perRow = 5;
+    const rows = Math.max(1, Math.ceil(maxHp / perRow));
     const hearts = [];
-    for (let i = 0; i < maxHp; i++) hearts.push({ x: left + i * (heart + heartGap), y: top, size: heart });
-    const heartsRight = left + maxHp * (heart + heartGap) - heartGap;
-    rect('hearts', left, top, heartsRight - left, heart);
+    for (let i = 0; i < maxHp; i++) {
+        hearts.push({ x: left + (i % perRow) * (heart + heartGap), y: top + Math.floor(i / perRow) * (heart + heartGap), size: heart });
+    }
+    const heartsRight = left + Math.min(maxHp, perRow) * (heart + heartGap) - heartGap;
+    const heartsBottom = top + rows * (heart + heartGap) - heartGap;
+    rect('hearts', left, top, heartsRight - left, heartsBottom - top);
     const key = { x: heartsRight + px(BASE.keyGap), y: top + Math.round((heart - px(BASE.keyH)) / 2), w: px(BASE.keyW), h: px(BASE.keyH) };
     rect('key', key.x, key.y, key.w, key.h);
     const leftClusterRight = key.x + key.w;
 
     // --- Status row under the hearts: suspicion meter, book counter, crouch paw
-    const rowY = top + heart + px(BASE.rowGap);
+    const rowY = heartsBottom + px(BASE.rowGap);
     const statusH = px(BASE.statusH), itemGap = px(BASE.itemGap), rowCy = rowY + statusH / 2;
     let x = left;
     const meterR = px(BASE.meterR);
@@ -69,6 +74,7 @@ export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, l
     };
     rect('cheese', groupLeft, top, groupW, heart);
     const combo = { x: groupLeft + groupW / 2, y: top + heart + px(BASE.comboGap), fontSize: px(BASE.comboFont) };
+    rect('combo', combo.x - px(BASE.comboTextW) / 2, combo.y, px(BASE.comboTextW), Math.round(px(BASE.comboFont) * 1.2));
 
     // --- Top-right: exit button
     const exitR = px(BASE.exitR);
@@ -79,15 +85,15 @@ export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, l
     const compass = { ringR: Math.min(W, H) * 0.40, labelSize: px(BASE.compassLabel), arrowSize: px(BASE.compassArrow) };
 
     // --- Touch controls (radii are applied once at setup; offsets every reposition)
-    const joyR = px(BASE.joyR), dashR = px(BASE.dashR), pad = px(BASE.touchPad);
+    const joyR = px(BASE.joyR), dashR = px(BASE.dashR), pad = px(BASE.touchPad) + px(BASE.touchOuter);
     const touch = {
         joyR, dashR,
         bottomOff: joyR + pad + safe.bottom,
         sideOffLeft: joyR + pad + safe.left,
         sideOffRight: joyR + pad + safe.right,
         dashGap: px(BASE.dashGap),
-        labelFont: px(BASE.touchFont),
+        labelFont: Math.max(10, px(BASE.touchFont)),
     };
 
-    return { s, W, H, safe, hearts, key, meter, eye, book, bookText, paw, powerup, cheese, combo, exit, compass, touch, rects };
+    return { s, safe, hearts, key, meter, eye, book, bookText, paw, powerup, cheese, combo, exit, compass, touch, rects };
 }

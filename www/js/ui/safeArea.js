@@ -1,5 +1,6 @@
 // Reads CSS env(safe-area-inset-*) through a hidden probe element.
 // Needs <meta name="viewport" … viewport-fit=cover> (already set in game-phaser.html).
+// Note: this Android build (targetSdk 33, no edge-to-edge) never draws under the cutout, so env() resolves to 0 today; the || 0 fallback keeps that harmless.
 let probe = null;
 
 export function readSafeArea() {
