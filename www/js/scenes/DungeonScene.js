@@ -5489,6 +5489,7 @@ export class DungeonScene extends Phaser.Scene {
         this.compass = this.add.graphics().setScrollFactor(0).setDepth(1100);
         this.compassLabel = this.add.text(0, 0, '🔑', { fontSize: '28px' })
             .setOrigin(0.5).setScrollFactor(0).setDepth(1101);
+        this._compassKey = null; this._compassAngle = undefined;  // fresh Graphics — force first redraw
         // Active power-up display
         this.powerupText = this.add.text(0, 0, '', {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif', fontSize: '20px',
@@ -5669,6 +5670,7 @@ export class DungeonScene extends Phaser.Scene {
         this.dashBtnBase.setStrokeStyle(4, 0x80c0ff, 0.85);
         // Cooldown arc (filled wedge when on cooldown)
         this.dashBtnCdArc = this.add.graphics().setScrollFactor(0).setDepth(990.5);
+        this._dashArcP = undefined;  // fresh GameObjects — force first redraw (Scene instance is reused)
         this.dashBtnLabel = this.add.text(0, 0, '💨', { fontSize: '34px' })
             .setOrigin(0.5).setScrollFactor(0).setDepth(992);
 
@@ -5745,9 +5747,12 @@ export class DungeonScene extends Phaser.Scene {
     // Redraw dash cooldown indicator (called from update)
     updateDashButton() {
         if (!this.dashBtnCdArc || !this.dashBtn) return;
-        this.dashBtnCdArc.clear();
         const cdMs = this.player.dashCooldown;
         const maxCd = PLAYER.dashCooldownMs * (this.dashCdMul || 1);
+        const arcP = cdMs <= 0 ? -1 : Math.round((1 - Math.min(1, cdMs / maxCd)) * 50); // 2% buckets
+        if (this._dashArcP === arcP) return;
+        this._dashArcP = arcP;
+        this.dashBtnCdArc.clear();
         if (cdMs <= 0) {
             // Ready — bright glow ring
             this.dashBtnBase.setFillStyle(0x4080ff, 0.70);
@@ -6034,6 +6039,7 @@ export class DungeonScene extends Phaser.Scene {
         if (!target) {
             this.compass.clear();
             this.compassLabel.setVisible(false);
+            this._compassKey = null;
             return;
         }
         const cam = this.cameras.main;
@@ -6042,6 +6048,11 @@ export class DungeonScene extends Phaser.Scene {
         const dy = target.y - this.player.y;
         const dist = Math.hypot(dx, dy);
         const angle = Math.atan2(dy, dx);
+        // Skip the clear+retessellate when nothing moved meaningfully
+        const key = emoji + '|' + this.cameras.main.width + '|' + this.cameras.main.height;
+        if (this._compassKey === key && Math.abs((this._compassAngle ?? 99) - angle) < 0.02) return;
+        this._compassKey = key;
+        this._compassAngle = angle;
         // Position arrow on a ring near screen edge
         const ringR = Math.min(cam.width, cam.height) * 0.40;
         const ax = cx + Math.cos(angle) * ringR;
