@@ -7026,6 +7026,7 @@
 
         function update() {
             if (!gameRunning || gamePaused) return;
+            if (currentGameMode === 'transylvania') return; // Phaser iframe owns this mode
 
             // New Year platformer maze mode
             if (currentGameMode === 'newyear') {
@@ -7383,6 +7384,13 @@
                     ctx.fillStyle = '#1a237e';
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
+                return;
+            }
+
+            // Transylvania is rendered by the Phaser iframe — keep canvas blank
+            if (currentGameMode === 'transylvania') {
+                ctx.fillStyle = '#0a0510';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 return;
             }
 
@@ -10650,8 +10658,12 @@
         };
 
         function gameLoop() {
-            update();
-            draw();
+            // While the Phaser iframe is up it owns rendering — the hidden canvas
+            // must not simulate or draw anything (Android perf).
+            if (!phaserRunning) {
+                update();
+                draw();
+            }
             requestAnimationFrame(gameLoop);
         }
 
