@@ -10,7 +10,7 @@
 
 **Ground rules:** only touch the files each task names; stage only those files (never `git add -A`); no comments/refactors outside the snippets; syntax-check DungeonScene.js with `cp www/js/scenes/DungeonScene.js <scratch>/ds.mjs && /opt/homebrew/bin/node --check <scratch>/ds.mjs`; the Scene instance is reused on restart — every new field is (re)assigned in `create()`/`buildHUD()`/`setupTouchControls()`.
 
-**Current facts (verified 2026-08-29, HEAD `cffba2f`):** `buildHUD()` ≈ line 5663, `repositionHUD()` ≈ 5750, `updateHUD()` ≈ 5780, `setupTouchControls()` ≈ 5852, `positionJoystick()` ≈ 5930, `updateCompass()` ≈ 6247, `preload()` ≈ 174-200, `create()` calls `buildHUD()` ≈ 311 and `setupTouchControls()` ≈ 270-275, `this.scale.on('resize', () => this.repositionHUD())` ≈ 320. `LAYER` const ≈ line 33. Existing SVG textures: `d_key` (60×32), `d_cheese` (48×40), `d_grandma` (135×150), `d_pie` (40×40). `POWERUP_EMOJI` ≈ line 26. No `www/assets/ui/` dir yet; no `tools/tests/` yet.
+**Current facts (verified 2026-08-29, HEAD `cffba2f`):** `this.maxHp` (5 + upgrades, up to 12) is the live max HP — use it, not `PLAYER.maxHp` (5), for hearts. `buildHUD()` ≈ line 5663, `repositionHUD()` ≈ 5750, `updateHUD()` ≈ 5780, `setupTouchControls()` ≈ 5852, `positionJoystick()` ≈ 5930, `updateCompass()` ≈ 6247, `preload()` ≈ 174-200, `create()` calls `buildHUD()` ≈ 311 and `setupTouchControls()` ≈ 270-275, `this.scale.on('resize', () => this.repositionHUD())` ≈ 320. `LAYER` const ≈ line 33. Existing SVG textures: `d_key` (60×32), `d_cheese` (48×40), `d_grandma` (135×150), `d_pie` (40×40). `POWERUP_EMOJI` ≈ line 26. No `www/assets/ui/` dir yet; no `tools/tests/` yet.
 
 ---
 
@@ -459,7 +459,7 @@ import { readSafeArea } from '../ui/safeArea.js';
         const FONT = '"Nunito", "Roboto", system-ui, sans-serif';
         const D = LAYER.UI_HUD;
         this.heartIcons = [];
-        for (let i = 0; i < PLAYER.maxHp; i++) {
+        for (let i = 0; i < this.maxHp; i++) {
             this.heartIcons.push(this.add.image(0, 0, 'ui_heart').setOrigin(0, 0).setScrollFactor(0).setDepth(D));
         }
         this.cheeseIcon = this.add.image(0, 0, 'd_cheese').setOrigin(0, 0).setScrollFactor(0).setDepth(D);
@@ -527,7 +527,7 @@ import { readSafeArea } from '../ui/safeArea.js';
     repositionHUD() {
         if (!this.heartIcons) return;
         const cam = this.cameras.main;
-        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: PLAYER.maxHp });
+        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
         this._hudLayout = L;
         for (let i = 0; i < this.heartIcons.length; i++) {
             const h = L.hearts[i];
@@ -568,8 +568,14 @@ import { readSafeArea } from '../ui/safeArea.js';
 
 - [ ] **Step 4: `updateHUD()` edits** (keep everything else as is):
 
-Hearts + cheese (first lines of the method):
+Hearts + cheese (first lines of the method). `this.maxHp` can grow mid-run (max-HP relic/upgrade), so add hearts on demand; the layout wraps them in rows of 5:
 ```js
+        if (this.maxHp > this.heartIcons.length) {
+            while (this.heartIcons.length < this.maxHp) {
+                this.heartIcons.push(this.add.image(0, 0, 'ui_heart').setOrigin(0, 0).setScrollFactor(0).setDepth(LAYER.UI_HUD));
+            }
+            this.repositionHUD();
+        }
         for (let i = 0; i < this.heartIcons.length; i++) {
             const key = i < this.player.hp ? 'ui_heart' : 'ui_heart_empty';
             if (this.heartIcons[i].texture.key !== key) this.heartIcons[i].setTexture(key);
@@ -654,7 +660,7 @@ git commit -m "feat(hud): layout-driven HUD with uiScale + safe-area, SVG icons 
 with
 ```js
         const cam = this.cameras.main;
-        const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: PLAYER.maxHp });
+        const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
         const JOY_R = L.touch.joyR;
         const DASH_R = L.touch.dashR;
         const LABEL_FONT = `${L.touch.labelFont}px`;
@@ -686,7 +692,7 @@ The three text labels (`joyLabel 'ХОДЬБА'`, `aimLabel 'ПРИЦЕЛ + ОГ
 ```
 with
 ```js
-        const L = this._hudLayout || computeHudLayout({ W, H, safe: readSafeArea(), maxHp: PLAYER.maxHp });
+        const L = this._hudLayout || computeHudLayout({ W, H, safe: readSafeArea(), maxHp: this.maxHp });
         const bottomOff = L.touch.bottomOff;
         const sideOffL = L.touch.sideOffLeft, sideOffR = L.touch.sideOffRight;
 ```
