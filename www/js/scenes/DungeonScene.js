@@ -5882,10 +5882,11 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     setupTouchControls() {
         // Scale touch UI down on small phones so it doesn't eat the gameplay area
-        const isSmall = (window.innerHeight < 500) || (window.innerWidth < 800);
-        const JOY_R = isSmall ? 58 : 76;
-        const DASH_R = isSmall ? 42 : 52;
-        this._touchUiSmall = isSmall;
+        const cam = this.cameras.main;
+        const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+        const JOY_R = L.touch.joyR;
+        const DASH_R = L.touch.dashR;
+        const LABEL_FONT = `${L.touch.labelFont}px`;
 
         // === LEFT MOVEMENT JOYSTICK ===
         this.joy = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
@@ -5895,9 +5896,8 @@ export class DungeonScene extends Phaser.Scene {
         this.joyBase = this.add.circle(0, 0, JOY_R, 0xffffff, 0.10).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
         this.joyBase.setStrokeStyle(4, 0xffffff, 0.55);
         // 4 direction hints (subtle arrows around the rim)
-        this.joyHints = this.add.text(0, 0, '✥', {
-            fontSize: '92px', color: '#ffffff'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.15);
+        this.joyHints = this.add.image(0, 0, 'ui_move').setOrigin(0.5).setScrollFactor(0)
+            .setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.15).setDisplaySize(JOY_R * 1.2, JOY_R * 1.2);
         // Knob — gradient-feel via solid fill + bright stroke
         this.joyKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xffffff, 0.85).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
         this.joyKnob.setStrokeStyle(3, 0xa0a0a0, 0.8);
@@ -5907,9 +5907,8 @@ export class DungeonScene extends Phaser.Scene {
         this.aimStickOuter = this.add.circle(0, 0, JOY_R + 10, 0x4a1c08, 0.40).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
         this.aimStickBase = this.add.circle(0, 0, JOY_R, 0xff8050, 0.18).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
         this.aimStickBase.setStrokeStyle(4, 0xff9a60, 0.65);
-        this.aimStickHint = this.add.text(0, 0, '🥧', {
-            fontSize: '42px'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.45);
+        this.aimStickHint = this.add.image(0, 0, 'd_pie').setOrigin(0.5).setScrollFactor(0)
+            .setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.45).setDisplaySize(JOY_R * 0.7, JOY_R * 0.7);
         this.aimStickKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xff7040, 0.95).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
         this.aimStickKnob.setStrokeStyle(3, 0xffd0a0, 0.9);
 
@@ -5921,20 +5920,20 @@ export class DungeonScene extends Phaser.Scene {
         // Cooldown arc (filled wedge when on cooldown)
         this.dashBtnCdArc = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT);
         this._dashArcP = undefined;  // fresh GameObjects — force first redraw (Scene instance is reused)
-        this.dashBtnLabel = this.add.text(0, 0, '💨', { fontSize: '34px' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_LABEL);
+        this.dashBtnLabel = this.add.image(0, 0, 'ui_dash').setOrigin(0.5).setScrollFactor(0)
+            .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(DASH_R * 0.8, DASH_R * 0.8);
 
         // Labels under the joysticks
         this.joyLabel = this.add.text(0, 0, 'ХОДЬБА', {
-            fontFamily: 'Arial Black', fontSize: '11px',
+            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
             color: '#ffffff', alpha: 0.6
         }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.55);
         this.aimLabel = this.add.text(0, 0, 'ПРИЦЕЛ + ОГОНЬ', {
-            fontFamily: 'Arial Black', fontSize: '11px',
+            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
             color: '#ffd0a0'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.65);
         this.dashLabel = this.add.text(0, 0, 'РЫВОК', {
-            fontFamily: 'Arial Black', fontSize: '11px',
+            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
             color: '#a0d0ff'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.75);
 
@@ -5962,9 +5961,9 @@ export class DungeonScene extends Phaser.Scene {
         const cam = this.cameras.main;
         const W = cam.width, H = cam.height;
 
-        const small = this._touchUiSmall;
-        const bottomOff = small ? this.joy.R + 18 : 130;
-        const sideOff   = small ? this.joy.R + 18 : 130;
+        const L = this._hudLayout || computeHudLayout({ W, H, safe: readSafeArea(), maxHp: this.maxHp });
+        const bottomOff = L.touch.bottomOff;
+        const sideOffL = L.touch.sideOffLeft, sideOffR = L.touch.sideOffRight;
 
         // Idle ALPHAs — sticks are faded hints until you touch them
         if (!this.joy.active)      this.setJoyAlpha(0);
@@ -5972,20 +5971,20 @@ export class DungeonScene extends Phaser.Scene {
 
         // Reposition idle sticks to their rest corners (only when not held)
         if (!this.joy.active) {
-            this.joy.baseX = sideOff;
+            this.joy.baseX = sideOffL;
             this.joy.baseY = H - bottomOff;
             this.moveJoyTo(this.joy.baseX, this.joy.baseY);
         }
         if (this.aimStick && !this.aimStick.active) {
-            this.aimStick.baseX = W - sideOff;
+            this.aimStick.baseX = W - sideOffR;
             this.aimStick.baseY = H - bottomOff;
             this.moveAimStickTo(this.aimStick.baseX, this.aimStick.baseY);
         }
 
         // DASH — above aim stick with clear vertical gap (no overlap)
         if (this.dashBtn) {
-            const gap = small ? 22 : 30;
-            this.dashBtn.x = W - sideOff;
+            const gap = L.touch.dashGap;
+            this.dashBtn.x = W - sideOffR;
             this.dashBtn.y = H - bottomOff - this.aimStick.R - this.dashBtn.R - gap;
             this.dashBtnOuter.setPosition(this.dashBtn.x, this.dashBtn.y);
             this.dashBtnBase.setPosition(this.dashBtn.x, this.dashBtn.y);
@@ -6114,9 +6113,8 @@ export class DungeonScene extends Phaser.Scene {
             this.joy.dx = 0; this.joy.dy = 0;
             // Snap back to idle resting position in the bottom-left corner
             const cam = this.cameras.main;
-            const small = this._touchUiSmall;
-            const off = small ? this.joy.R + 18 : 130;
-            this.joy.baseX = off; this.joy.baseY = cam.height - off;
+            const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+            this.joy.baseX = L.touch.sideOffLeft; this.joy.baseY = cam.height - L.touch.bottomOff;
             this.moveJoyTo(this.joy.baseX, this.joy.baseY);
             this.setJoyAlpha(0);
         }
@@ -6125,9 +6123,8 @@ export class DungeonScene extends Phaser.Scene {
             this.aimStick.pointerId = null;
             this.aimStick.dx = 0; this.aimStick.dy = 0;
             const cam = this.cameras.main;
-            const small = this._touchUiSmall;
-            const off = small ? this.aimStick.R + 18 : 130;
-            this.aimStick.baseX = cam.width - off; this.aimStick.baseY = cam.height - off;
+            const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+            this.aimStick.baseX = cam.width - L.touch.sideOffRight; this.aimStick.baseY = cam.height - L.touch.bottomOff;
             this.moveAimStickTo(this.aimStick.baseX, this.aimStick.baseY);
             this.setAimStickAlpha(0);
         }
