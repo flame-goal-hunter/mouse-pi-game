@@ -187,6 +187,11 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     create() {
+        // A hit-stop setTimeout from the previous floor may have died with the
+        // scene — never inherit a scaled clock (the Scene instance is reused).
+        this.time.timeScale = 1;
+        this.tweens.timeScale = 1;
+        this._hitStopUntil = 0;
         // Pools must not survive scene restart — the Scene instance is reused
         // and shutdown destroys all pooled display objects.
         this._circlePool = [];
@@ -302,6 +307,9 @@ export class DungeonScene extends Phaser.Scene {
         const onResize = () => this.repositionHUD();
         this.scale.on('resize', onResize);
         this.events.once('shutdown', () => this.scale.off('resize', onResize));
+        this.events.once('shutdown', () => {
+            if (this._hitStopTimeout) { clearTimeout(this._hitStopTimeout); this._hitStopTimeout = null; }
+        });
 
         // STORY INTRO
         this.showStoryIntro();
@@ -4395,17 +4403,17 @@ export class DungeonScene extends Phaser.Scene {
         // Avoid stacking hit-stops within a window.
         if (this._hitStopUntil && this.time.now < this._hitStopUntil) return;
         this._hitStopUntil = this.time.now + ms;
-        // Use Phaser's tween/time scale to slow physics during the freeze.
-        const orig = this.time.timeScale;
         this.time.timeScale = 0.05;
         this.tweens.timeScale = 0.05;
-        const cam = this.cameras?.main;
-        // Restore on real-time delay (setTimeout bypasses our scaled time)
-        setTimeout(() => {
-            try {
-                this.time.timeScale = orig || 1;
-                this.tweens.timeScale = 1;
-            } catch (e) {}
+        // Restore on REAL time (scene clock is scaled to 0.05 right now).
+        // Tracked so shutdown can cancel it — otherwise a floor transition
+        // during the freeze leaves the next scene stuck at 5% speed.
+        if (this._hitStopTimeout) clearTimeout(this._hitStopTimeout);
+        this._hitStopTimeout = setTimeout(() => {
+            this._hitStopTimeout = null;
+            if (!this.sys || !this.scene || !this.sys.isActive()) return;
+            this.time.timeScale = 1;
+            this.tweens.timeScale = 1;
         }, ms);
     }
 
