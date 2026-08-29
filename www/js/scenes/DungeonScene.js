@@ -523,11 +523,12 @@ export class DungeonScene extends Phaser.Scene {
         if (k && !k.taken && k.x >= L && k.x <= R && k.y >= T && k.y <= B) {
             const s = Math.sin(t * 0.0031 + (k.bobPhase || 0));
             k.sprite.y = k.y - 3 - s * 3;
-            k.sprite.setAngle(s * 8);
+            k.sprite.setAngle(4 + s * 4);
+            k.glow.setScale(1.1 + 0.1 * s);
             k.glow.setAlpha(0.14 + 0.08 * s);
         }
         const ex = this.exit;
-        if (ex && ex.glow && ex.x >= L && ex.x <= R && ex.y >= T && ex.y <= B) {
+        if (ex && ex.glow && !(ex.glowHoldUntil > t) && ex.x >= L && ex.x <= R && ex.y >= T && ex.y <= B) {
             const s = Math.sin(t * 0.0022);
             ex.glow.setScale(1.15 + 0.15 * s);
             ex.glow.setAlpha(0.125 + 0.055 * s);
@@ -880,6 +881,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // Random torches per room (some lit, some unlit)
         this.placeRandomTorches();
+        for (const t of this.torches) this.drawTorchFlame(t);  // first-frame flames (drawTorchFlame skips unlit)
         // SPOOKY eyes in dark corners — they fade when Pi approaches
         this.placeSpookyEyes();
 
@@ -4992,6 +4994,7 @@ export class DungeonScene extends Phaser.Scene {
             targets: this.exit.lockIcon, alpha: 0, scale: 1.6,
             duration: 600, onComplete: () => this.exit.lockIcon.destroy()
         });
+        this.exit.glowHoldUntil = this.time.now + 600;  // let the unlock flash win over the bob for its duration
         this.tweens.add({ targets: this.exit.glow, alpha: 0.30, duration: 600 });
         // Free grandma — only exists on the final floor
         if (this.captive) this.freeCaptive();
