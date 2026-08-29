@@ -25,6 +25,19 @@ const SHAKE_CFG = {
 };
 const POWERUP_EMOJI = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' };
 
+// Render-depth bands for level visuals. Values are the historical magic numbers —
+// this table only names them. UI bands (989+) are named in the HUD rework.
+const LAYER = {
+    WORLD:  -100,   // baked RenderTexture: floor + decor + walls + sconces
+    TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
+    DECOR:   -50,   // decor layer before baking
+    WALL:     50,   // wall Graphics before baking (and weak-wall overlays 51-52)
+    SCONCE:   70,
+    FLAME:    81,
+    EYES:     82,
+};
+const WALL_TRIM_GOLD = 0xd8a850;   // gilded skirting where walls meet the floor
+
 const PLAYER = {
     speed: 240,
     accel: 2200,
@@ -783,9 +796,9 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     buildWorld() {
         // === SHARED GRAPHICS — consolidate static draw calls ===
-        this.wallGfx = this.add.graphics().setDepth(50);
-        this.torchSconceGfx = this.add.graphics().setDepth(70);
-        this.flameGfx = this.add.graphics().setDepth(81);  // ALL torch flames, one clear per frame
+        this.wallGfx = this.add.graphics().setDepth(LAYER.WALL);
+        this.torchSconceGfx = this.add.graphics().setDepth(LAYER.SCONCE);
+        this.flameGfx = this.add.graphics().setDepth(LAYER.FLAME);  // ALL torch flames, one clear per frame
         // Build nav grid FIRST: 'wall' everywhere, then carve floor for rooms + corridors
         const grid = Array.from({ length: NAV_H }, () => Array(NAV_W).fill('wall'));
 
@@ -890,7 +903,7 @@ export class DungeonScene extends Phaser.Scene {
         // buffers re-tessellated EVERY frame. Draw them once into a RenderTexture
         // and destroy the sources: per-frame cost becomes one textured quad.
         const worldRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H)
-            .setOrigin(0).setDepth(-100);
+            .setOrigin(0).setDepth(LAYER.WORLD);
         worldRT.draw(this.floorGfx);
         worldRT.draw(this.wallGfx);
         worldRT.draw(this.torchSconceGfx);
@@ -918,8 +931,8 @@ export class DungeonScene extends Phaser.Scene {
             else { x = room.x + room.w - 30; y = room.y + Phaser.Math.Between(40, room.h - 40); }
             if (this.pointInWalls(x, y, 18)) continue;
             // Two glowing yellow eyes
-            const c1 = this.add.circle(x - 5, y, 2.5, 0xffd040, 0.9).setDepth(82);
-            const c2 = this.add.circle(x + 5, y, 2.5, 0xffd040, 0.9).setDepth(82);
+            const c1 = this.add.circle(x - 5, y, 2.5, 0xffd040, 0.9).setDepth(LAYER.EYES);
+            const c2 = this.add.circle(x + 5, y, 2.5, 0xffd040, 0.9).setDepth(LAYER.EYES);
             // Blink animation
             this.tweens.add({
                 targets: [c1, c2], alpha: 0.2,
@@ -990,7 +1003,7 @@ export class DungeonScene extends Phaser.Scene {
     drawCarvedFloor() {
         const T = NAV_CELL;
         const floor = this.add.graphics();
-        floor.setDepth(-100);
+        floor.setDepth(LAYER.WORLD);
         this.floorGfx = floor;
         const b = this.biome;
         for (let r = 0; r < NAV_H; r++) {
@@ -1570,7 +1583,7 @@ export class DungeonScene extends Phaser.Scene {
             this._redrawHotpan(tile);
             return;
         }
-        const g = this.add.graphics().setDepth(-90);
+        const g = this.add.graphics().setDepth(LAYER.TILE);
         if (type === 'butter') {
             // Yellow slippery butter puddle
             g.fillStyle(0xffd060, 0.65);
