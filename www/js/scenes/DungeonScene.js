@@ -1009,23 +1009,47 @@ export class DungeonScene extends Phaser.Scene {
         floor.setDepth(LAYER.WORLD);
         this.floorGfx = floor;
         const b = this.biome;
+        const grid = this.navGrid;
+        const isFloor = (r, c) => r >= 0 && r < NAV_H && c >= 0 && c < NAV_W && grid[r][c] === 'floor';
+
+        // 1. Stone plates: 80px (2×2 nav cells), two close tones in a checker of PLATES
         for (let r = 0; r < NAV_H; r++) {
             for (let c = 0; c < NAV_W; c++) {
-                if (this.navGrid[r][c] !== 'floor') continue;
-                const x = c * T, y = r * T;
-                const variant = (r + c) & 1;
+                if (grid[r][c] !== 'floor') continue;
+                const variant = ((r >> 1) + (c >> 1)) & 1;
                 floor.fillStyle(variant ? b.floorColorB : b.floorColorA, 1);
-                floor.fillRect(x, y, T, T);
-                floor.lineStyle(1, b.gridColor, 0.5);
-                floor.strokeRect(x, y, T, T);
-                if (Math.random() < 0.06) {
-                    floor.lineStyle(1, b.gridColor, 0.6);
-                    const cx = x + T / 2, cy = y + T / 2;
+                floor.fillRect(c * T, r * T, T, T);
+            }
+        }
+        // 2. Mortar seams ONLY on plate boundaries (every 80px) and only between two floor cells
+        floor.lineStyle(1, b.gridColor, 0.35);
+        for (let r = 0; r < NAV_H; r++) {
+            for (let c = 0; c < NAV_W; c++) {
+                if (grid[r][c] !== 'floor') continue;
+                const x = c * T, y = r * T;
+                if ((c & 1) === 0 && isFloor(r, c - 1)) floor.lineBetween(x, y, x, y + T);
+                if ((r & 1) === 0 && isFloor(r - 1, c)) floor.lineBetween(x, y, x + T, y);
+            }
+        }
+        // 3. Sparse detail: cracks (4% of cells) and pebbles (2%)
+        for (let r = 0; r < NAV_H; r++) {
+            for (let c = 0; c < NAV_W; c++) {
+                if (grid[r][c] !== 'floor') continue;
+                const roll = Math.random();
+                if (roll >= 0.06) continue;
+                const cx = c * T + T / 2, cy = r * T + T / 2;
+                if (roll < 0.04) {
+                    floor.lineStyle(1, b.gridColor, 0.55);
                     floor.beginPath();
-                    floor.moveTo(cx - 8, cy - 4);
-                    floor.lineTo(cx + 2, cy + 6);
-                    floor.lineTo(cx + 10, cy - 2);
+                    floor.moveTo(cx - 9, cy - 3);
+                    floor.lineTo(cx - 2, cy + 2);
+                    floor.lineTo(cx + 4, cy - 1);
+                    floor.lineTo(cx + 10, cy + 5);
                     floor.strokePath();
+                } else {
+                    floor.fillStyle(b.gridColor, 0.5);
+                    floor.fillCircle(cx + 6, cy - 5, 1.5);
+                    floor.fillCircle(cx - 7, cy + 6, 1.2);
                 }
             }
         }
