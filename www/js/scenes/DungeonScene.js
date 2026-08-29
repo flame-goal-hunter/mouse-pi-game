@@ -1709,8 +1709,8 @@ export class DungeonScene extends Phaser.Scene {
             case 'vine':     return this.drawVineProp(x, y);
             case 'glass':    return this.drawBrokenGlass(x, y);
             case 'goblet':   return this.drawGoblet(x, y);
-            case 'skull':     return this.drawSkull(x, y);
-            case 'chain':     return this.drawChain(x, y);
+            case 'skull':    return this.drawSkull(x, y);
+            case 'chain':    return this.drawChain(x, y);
             case 'bookshelf': return this.drawBookshelf(x, y);
             case 'redCarpet': return this.drawRedCarpet(x, y);
             default:         return this.drawMushroom(x, y);
@@ -1914,7 +1914,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x, y - 8, 6, 2);
     }
 
-    // ----- Dungeon / throne: skull, chain -----
+    // ----- Dungeon: skull, chain (chain also in throne) -----
     drawSkull(x, y) {
         const g = this.decorGfx;
         g.lineStyle(1.5, 0x1a1024, 1);
@@ -1923,6 +1923,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillCircle(x, y - 3, 7);
         g.strokeCircle(x, y - 3, 7);
         // Jaw
+        g.fillStyle(0xe8e0d0, 1);
         g.fillRoundedRect(x - 5, y + 1, 10, 5, 2);
         g.strokeRoundedRect(x - 5, y + 1, 10, 5, 2);
         // Eye sockets + nose
@@ -1967,7 +1968,7 @@ export class DungeonScene extends Phaser.Scene {
         // Three shelves of books
         const colors = [0x7a3030, 0x2a5078, 0x4a6028, 0x7a4a10, 0x5a3a7a];
         for (let s = 0; s < 3; s++) {
-            const sy = y - 26 + s * 11;
+            const sy = y - 27 + s * 10;
             let bx = x - 11;
             while (bx < x + 10) {
                 const bw = 3 + Math.floor(Math.random() * 3);   // 3..5
