@@ -1707,13 +1707,18 @@ export class DungeonScene extends Phaser.Scene {
             case 'inkwell':  return this.drawInkwell(x, y);
             case 'flower':   return this.drawFlower(x, y);
             case 'vine':     return this.drawVineProp(x, y);
-            case 'glass':    return this.drawBrokenGlass(x, y);
             case 'goblet':   return this.drawGoblet(x, y);
             case 'skull':    return this.drawSkull(x, y);
             case 'chain':    return this.drawChain(x, y);
             case 'bookshelf': return this.drawBookshelf(x, y);
             case 'redCarpet': return this.drawRedCarpet(x, y);
-            default:         return this.drawMushroom(x, y);
+            case 'moonflower': return this.drawMoonflower(x, y);
+            case 'glowpod':    return this.drawGlowpod(x, y);
+            case 'hedge_tuft': return this.drawHedgeTuft(x, y);
+            case 'lilypad':    return this.drawLilypad(x, y);
+            default:
+                console.warn('[DungeonScene] unknown decor type', type);
+                return;
         }
     }
 
@@ -1837,7 +1842,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x - 1, y + 5, 5, 2);
     }
 
-    // ----- Garden: flower, vine prop, broken glass -----
+    // ----- Garden: flower, vine prop -----
     drawFlower(x, y) {
         const g = this.decorGfx;
         // Stem
@@ -1875,24 +1880,81 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x + 5, y - 1, 4, 2.5);
         g.fillEllipse(x, y - 3, 4, 2.5);
     }
-    drawBrokenGlass(x, y) {
+    // ----- Garden: moonflower, glowpod, hedge tuft, lily pad -----
+    drawMoonflower(x, y) {
         const g = this.decorGfx;
-        g.fillStyle(0xa0e8ff, 0.6);
-        g.lineStyle(1, 0x6080a0, 0.9);
-        // Triangle shards
-        const pts = [
-            [x - 6, y + 4], [x - 2, y - 4], [x + 1, y + 3],
-            [x + 4, y - 2], [x + 7, y + 4]
-        ];
-        for (let i = 0; i < pts.length - 1; i++) {
-            g.beginPath();
-            g.moveTo(pts[i][0], pts[i][1]);
-            g.lineTo(pts[i+1][0], pts[i+1][1]);
-            g.lineTo(x + (i - 2), y + 5);
-            g.closePath();
-            g.fillPath();
-            g.strokePath();
+        // Soft glow halo
+        g.fillStyle(0xbfd8ff, 0.18);
+        g.fillCircle(x, y - 10, 11);
+        // Stem + leaf
+        g.lineStyle(2, 0x2e5a3a, 1);
+        g.lineBetween(x, y + 2, x, y - 8);
+        g.fillStyle(0x3a7c46, 1);
+        g.fillEllipse(x - 4, y - 3, 6, 3);
+        // Six pale petals
+        g.fillStyle(0xdbe8ff, 1);
+        g.lineStyle(1, 0x1a1024, 0.6);
+        for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            g.fillEllipse(x + Math.cos(a) * 4.5, y - 10 + Math.sin(a) * 4.5, 5, 3);
+            g.strokeEllipse(x + Math.cos(a) * 4.5, y - 10 + Math.sin(a) * 4.5, 5, 3);
         }
+        // Glowing center
+        g.fillStyle(0xfff4c8, 1);
+        g.fillCircle(x, y - 10, 2.5);
+    }
+    drawGlowpod(x, y) {
+        const g = this.decorGfx;
+        // Outer glow
+        g.fillStyle(0x7ad0a0, 0.2);
+        g.fillCircle(x, y - 4, 11);
+        // Stem
+        g.lineStyle(2, 0x2e5a3a, 1);
+        g.lineBetween(x, y + 4, x, y - 2);
+        // Pod
+        g.fillStyle(0x5ab884, 1);
+        g.lineStyle(1.5, 0x1a1024, 1);
+        g.fillEllipse(x, y - 6, 9, 13);
+        g.strokeEllipse(x, y - 6, 9, 13);
+        // Bright core + highlight
+        g.fillStyle(0xd0ffe0, 0.95);
+        g.fillEllipse(x, y - 6, 4, 7);
+        g.fillStyle(0xffffff, 0.7);
+        g.fillEllipse(x - 2, y - 9, 1.5, 2.5);
+    }
+    drawHedgeTuft(x, y) {
+        const g = this.decorGfx;
+        g.lineStyle(1.5, 0x1a3a22, 1);
+        const blobs = [[-6, 2, 5], [0, -2, 6], [6, 2, 5], [-3, 4, 4], [3, 4, 4]];
+        for (const [dx, dy, r] of blobs) {
+            g.fillStyle(0x2e6a3a, 1);
+            g.fillCircle(x + dx, y + dy, r);
+            g.strokeCircle(x + dx, y + dy, r);
+        }
+        // Leaf highlights
+        g.fillStyle(0x4c9a58, 0.9);
+        g.fillCircle(x - 5, y, 2);
+        g.fillCircle(x + 1, y - 4, 2.2);
+        g.fillCircle(x + 6, y, 1.8);
+    }
+    drawLilypad(x, y) {
+        const g = this.decorGfx;
+        // Pad
+        g.fillStyle(0x3f8a4a, 1);
+        g.lineStyle(1.5, 0x1a3a22, 1);
+        g.fillEllipse(x, y, 18, 11);
+        g.strokeEllipse(x, y, 18, 11);
+        // Notch cut toward the center — dark wedge so it reads as a gap on any floor/tile
+        g.fillStyle(0x0a1a12, 0.7);
+        g.fillTriangle(x, y, x + 10, y - 3, x + 10, y + 3);
+        g.lineStyle(1.5, 0x1a3a22, 1);
+        g.lineBetween(x, y, x + 9, y - 3);
+        g.lineBetween(x, y, x + 9, y + 3);
+        // Pink bud
+        g.fillStyle(0xff8fb0, 1);
+        g.lineStyle(1, 0x1a1024, 0.7);
+        g.fillCircle(x - 4, y - 2, 2.5);
+        g.strokeCircle(x - 4, y - 2, 2.5);
     }
 
     // ----- Throne: goblet -----
