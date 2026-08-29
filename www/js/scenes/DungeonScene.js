@@ -328,6 +328,7 @@ export class DungeonScene extends Phaser.Scene {
             remaining -= step;
         }
         this.updateTorches(totalDt);
+        this.updatePickupBob();
         this.updateBiomeParticles(totalDt);
         this.updateAmbientClouds(totalDt);
         this.updateKitchenHotpans(totalDt);
@@ -483,6 +484,37 @@ export class DungeonScene extends Phaser.Scene {
             this.drawTorchFlame(t);
             // Rare permanent extinction (atmosphere)
             if (Math.random() < 0.00004) this.extinguishTorch(t);
+        }
+    }
+
+    updatePickupBob() {
+        // Replaces per-pickup infinite tweens: one pass, view-culled, sin-driven
+        const cam = this.cameras.main;
+        const L = cam.scrollX - 60, R = cam.scrollX + cam.width + 60;
+        const T = cam.scrollY - 60, B = cam.scrollY + cam.height + 60;
+        const t = this.time.now;
+        for (const pk of this.pickups) {
+            if (pk.taken) continue;
+            if (pk.x < L || pk.x > R || pk.y < T || pk.y > B) continue;
+            const s = Math.sin(t * (pk.heart ? 0.0045 : 0.0035) + (pk.bobPhase || 0));
+            pk.sprite.y = pk.y - (pk.heart ? 4 + s * 4 : 3 + s * 3);
+            if (pk.glow) {
+                pk.glow.setAlpha(pk.heart ? 0.165 + 0.085 * s : 0.095 + 0.055 * s);
+                if (pk.heart) pk.glow.setScale(1.15 + 0.15 * s);
+            }
+        }
+        const k = this.keyPickup;
+        if (k && !k.taken && k.x >= L && k.x <= R && k.y >= T && k.y <= B) {
+            const s = Math.sin(t * 0.0031 + (k.bobPhase || 0));
+            k.sprite.y = k.y - 3 - s * 3;
+            k.sprite.setAngle(s * 8);
+            k.glow.setAlpha(0.14 + 0.08 * s);
+        }
+        const ex = this.exit;
+        if (ex && ex.glow && ex.x >= L && ex.x <= R && ex.y >= T && ex.y <= B) {
+            const s = Math.sin(t * 0.0022);
+            ex.glow.setScale(1.15 + 0.15 * s);
+            ex.glow.setAlpha(0.125 + 0.055 * s);
         }
     }
 
@@ -4589,13 +4621,8 @@ export class DungeonScene extends Phaser.Scene {
 
     placeCheese(x, y) {
         const sprite = this.add.image(x, y, 'd_cheese').setScale(0.8).setDepth(150);
-        this.tweens.add({
-            targets: sprite, y: y - 6,
-            duration: 800 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
         const glow = this.add.circle(x, y, 18, 0xffd040, 0.15).setDepth(149);
-        this.tweens.add({ targets: glow, alpha: 0.04, duration: 1200, yoyo: true, repeat: -1 });
-        this.pickups.push({ sprite, glow, x, y, taken: false });
+        this.pickups.push({ sprite, glow, x, y, taken: false, bobPhase: Math.random() * Math.PI * 2 });
     }
 
     // Public helper — called from lit-torch cache reveal (dungeon biome)
@@ -4648,25 +4675,18 @@ export class DungeonScene extends Phaser.Scene {
         const sprite = this.add.text(x, y, '❤️', { fontSize: '28px' })
             .setOrigin(0.5).setDepth(155);
         const glow = this.add.circle(x, y, 22, 0xff3060, 0.25).setDepth(154);
-        this.tweens.add({
-            targets: sprite, y: y - 8, duration: 700,
-            yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
-        this.tweens.add({
-            targets: glow, alpha: 0.08, scale: 1.3,
-            duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
         // Auto-despawn after 12 seconds
         this.time.delayedCall(12000, () => {
             const pk = this.pickups.find(p => p.sprite === sprite);
             if (pk && !pk.taken) {
+                pk.taken = true;
                 this.tweens.add({
                     targets: [sprite, glow], alpha: 0, duration: 500,
-                    onComplete: () => { sprite.destroy(); glow.destroy(); pk.taken = true; }
+                    onComplete: () => { sprite.destroy(); glow.destroy(); }
                 });
             }
         });
-        this.pickups.push({ sprite, glow, x, y, taken: false, heart: true });
+        this.pickups.push({ sprite, glow, x, y, taken: false, heart: true, bobPhase: Math.random() * Math.PI * 2 });
     }
 
     spawnKey() {
@@ -4681,15 +4701,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         const sprite = this.add.image(x, y, 'd_key').setScale(1.3).setDepth(155);
         const glow = this.add.circle(x, y, 40, 0xffd040, 0.22).setDepth(154);
-        this.tweens.add({
-            targets: sprite, y: y - 6, angle: 8,
-            duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
-        this.tweens.add({
-            targets: glow, alpha: 0.06, scale: 1.2,
-            duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
-        this.keyPickup = { sprite, glow, x, y, taken: false };
+        this.keyPickup = { sprite, glow, x, y, taken: false, bobPhase: Math.random() * Math.PI * 2 };
     }
 
     spawnExitDoor() {
@@ -4701,10 +4713,6 @@ export class DungeonScene extends Phaser.Scene {
             if (safe) { x = safe.x; y = safe.y; }
         }
         const ringGlow = this.add.circle(x, y, 60, 0xa060ff, 0.18).setDepth(120);
-        this.tweens.add({
-            targets: ringGlow, scale: 1.3, alpha: 0.07,
-            duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-        });
         const g = this.add.graphics().setPosition(x, y).setDepth(122);
         g.fillStyle(0x5a3088, 1); g.lineStyle(3, 0x1a0a2e, 1);
         g.fillRoundedRect(-34, -52, 68, 94, { tl: 34, tr: 34, bl: 0, br: 0 });
