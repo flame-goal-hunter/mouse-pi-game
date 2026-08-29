@@ -2145,6 +2145,7 @@ export class DungeonScene extends Phaser.Scene {
                 const gc = Math.floor(x / NAV_CELL);
                 const gr = Math.floor(y / NAV_CELL);
                 if (this.navGrid[gr]?.[gc] !== 'floor') continue;
+                if (this.pointInWalls(x, y, 18)) continue;   // keep prop bodies off the brick edge
                 const type = pickDecor(this.biome.decorWeights);
                 if (type) this.drawDecor(x, y, type);
             }
