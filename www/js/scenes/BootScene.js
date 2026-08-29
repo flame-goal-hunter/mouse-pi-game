@@ -184,8 +184,22 @@ export class BootScene extends Phaser.Scene {
         // If we're being launched directly OR MenuScene isn't registered → go to GameScene
         const hasMenu = this.scene.manager.keys && this.scene.manager.keys['MenuScene'];
         if (mode === 'transylvania') {
-            console.log('[BootScene] mode=transylvania → TransylvaniaScene');
-            this.scene.start('TransylvaniaScene');
+            // New HTML menu lives at transylvania-menu.html. We only stay in Phaser
+            // when a runMode is already chosen (story/endless) — then jump straight
+            // into DungeonScene. Otherwise, hand off to the native HTML menu so we
+            // avoid spinning up Phaser just to render menu chrome.
+            const runMode = config.runMode || null;
+            if (runMode === 'story' || runMode === 'endless') {
+                console.log('[BootScene] mode=transylvania runMode=' + runMode + ' → DungeonScene');
+                this.scene.start('DungeonScene', { runMode, chapter: 1 });
+            } else {
+                console.log('[BootScene] mode=transylvania → redirect to transylvania-menu.html');
+                try { window.location.replace('transylvania-menu.html'); }
+                catch (e) {
+                    console.warn('[BootScene] redirect failed, falling back to TransylvaniaScene', e);
+                    this.scene.start('TransylvaniaScene');
+                }
+            }
         } else if (directModes.includes(mode) || !hasMenu) {
             console.log('[BootScene] mode=' + mode + ' → GameScene');
             this.scene.start('GameScene');

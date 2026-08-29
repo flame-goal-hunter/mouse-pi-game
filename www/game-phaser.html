@@ -9,8 +9,10 @@
     <meta name="theme-color" content="#1a1a2e">
     <title>Mousie Pi - Snowball Fight</title>
 
-    <!-- Nunito font for game UI -->
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+    <!-- Nunito only — preloaded so Phaser Text textures are correct on first render. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
 
     <style>
         * {
@@ -338,7 +340,8 @@
         window.addEventListener('error', (ev) => showError('JS Error', ev.error || ev.message));
         window.addEventListener('unhandledrejection', (ev) => showError('Unhandled rejection', ev.reason));
         try {
-            await import('./js/main.js');
+            // Cache-bust ES modules every load — Safari aggressively caches modules by URL
+            await import('./js/main.js?v=' + Date.now());
         } catch (e) {
             showError('Failed to load game', e);
         }

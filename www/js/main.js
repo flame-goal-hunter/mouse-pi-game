@@ -1,13 +1,17 @@
 // ============================================
 // MAIN - Phaser Game Entry Point  v-online-1
 // ============================================
-console.log('[main.js] loaded — version v-online-1', new Date().toISOString());
+const BUILD_VERSION = 'v-multipipeline-2026-06-04';
+console.log('%c[Mousie Pi] BUILD: ' + BUILD_VERSION, 'background:#e8b54a;color:#140820;font-size:14px;padding:4px 8px;border-radius:4px;');
+window.__BUILD_VERSION__ = BUILD_VERSION;
 
 import { GAME, PHYS } from './config.js';
 import { BootScene } from './scenes/BootScene.js';
 import { MenuScene } from './scenes/MenuScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { TransylvaniaScene } from './scenes/TransylvaniaScene.js';
+import { DungeonScene } from './scenes/DungeonScene.js';
+import { initAudioManager } from './audio/AudioManager.js';
 
 // Read URL parameters for direct game launch
 const urlParams = new URLSearchParams(window.location.search);
@@ -18,6 +22,7 @@ const peerId = urlParams.get('peerId') || null;
 const nickname = urlParams.get('nickname') || 'Игрок';
 const remoteNickname = urlParams.get('remoteNickname') || null;
 const serverUrl = urlParams.get('server') || 'ws://localhost:2567';
+const runMode = urlParams.get('runMode') || null;
 
 // Store config globally for scenes to access
 window.gameConfig = {
@@ -28,15 +33,21 @@ window.gameConfig = {
     peerId: peerId,
     nickname: nickname,
     remoteNickname: remoteNickname,
-    serverUrl: serverUrl
+    serverUrl: serverUrl,
+    runMode: runMode      // 'story' | 'endless' | null (Transylvania mode)
 };
 
 // Choose scenes based on mode - skip menu for solo mode
 const scenes = (mode === 'solo' || mode === 'host' || mode === 'join' || mode === 'online')
-    ? [BootScene, GameScene, TransylvaniaScene]
-    : [BootScene, MenuScene, GameScene, TransylvaniaScene];
+    ? [BootScene, GameScene, TransylvaniaScene, DungeonScene]
+    : [BootScene, MenuScene, GameScene, TransylvaniaScene, DungeonScene];
 
 // Phaser configuration (physics handled by Rapier2D, not Phaser)
+// CRITICAL: autoMobilePipeline: false forces the desktop MultiPipeline instead of
+// Phaser's "MobilePipeline" (auto-enabled on Android in 3.60+). MobilePipeline is
+// tuned for low-end phones and hits a pathological code path on Pixel 9a / Tensor G4
+// causing ~1 fps in WebGL. MultiPipeline on this flagship GPU runs at 60 fps.
+// Refs: phaser/changelog/3.60/MobilePerformance.md, phaser issue #6989.
 const config = {
     type: Phaser.AUTO,
     width: GAME.WIDTH,
@@ -47,17 +58,24 @@ const config = {
         activePointers: 5  // Поддержка до 5 одновременных касаний для мультитач
     },
     scale: {
-        mode: Phaser.Scale.RESIZE,  // Заполняет весь экран
+        mode: Phaser.Scale.RESIZE,
         parent: 'game-container',
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: '100%',
         height: '100%'
     },
     render: {
-        antialias: true,
+        antialias: false,
+        antialiasGL: false,
         pixelArt: false,
-        roundPixels: false
+        roundPixels: true,
+        powerPreference: 'high-performance',
+        autoMobilePipeline: false,  // ← THE FIX. Bypass mobile-tuned shader path.
+        batchSize: 1024,
+        maxTextures: 8,
+        failIfMajorPerformanceCaveat: false,
     },
+    fps: { target: 60, forceSetTimeOut: false },
     plugins: {},
     scene: scenes
 };
@@ -66,21 +84,35 @@ const config = {
 // by the time this module is imported after Rapier WASM init)
 const game = new Phaser.Game(config);
 
-// Suppress DAC pop: on first user touch, resume AudioContext while muted
-document.addEventListener('touchstart', function _unlockAudio() {
-    document.removeEventListener('touchstart', _unlockAudio, true);
+// Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
+window.audio = initAudioManager(game);
+
+// Suppress DAC pop + resume both AudioContexts (Phaser + ProceduralSfx) on first gesture.
+// Capture phase + document so Phaser canvas handlers can't stop propagation.
+function _unlockAllAudio() {
+    document.removeEventListener('touchstart', _unlockAllAudio, true);
+    document.removeEventListener('pointerdown', _unlockAllAudio, true);
+    document.removeEventListener('mousedown', _unlockAllAudio, true);
+    document.removeEventListener('keydown', _unlockAllAudio, true);
     const ctx = game.sound.context;
     if (ctx && ctx.state === 'suspended') {
         game.sound.mute = true;
-        ctx.resume().then(() => {
-            setTimeout(() => { game.sound.mute = false; }, 150);
-        });
+        ctx.resume().then(() => setTimeout(() => { game.sound.mute = false; }, 150));
     }
-}, { capture: true, once: true });
+    // CRITICAL: resume the ProceduralSfx context too — it's a separate AudioContext
+    try { window.audio?.proc?.resume(); } catch (e) {}
+}
+document.addEventListener('touchstart', _unlockAllAudio, { capture: true });
+document.addEventListener('pointerdown', _unlockAllAudio, { capture: true });
+document.addEventListener('mousedown', _unlockAllAudio, { capture: true });
+document.addEventListener('keydown', _unlockAllAudio, { capture: true });
 
-// Handle window resize
+// Handle window resize — debounced so Android URL-bar storms don't trigger refresh storms.
+// Phaser already refreshes internally on its 'resize' event; this is a safety net only.
+let _resizeRefreshTimer = null;
 window.addEventListener('resize', () => {
-    game.scale.refresh();
+    if (_resizeRefreshTimer) clearTimeout(_resizeRefreshTimer);
+    _resizeRefreshTimer = setTimeout(() => { try { game.scale.refresh(); } catch (e) {} }, 200);
 });
 
 // Pause/resume with mute trick to suppress DAC pop on app restore
@@ -91,5 +123,7 @@ document.addEventListener('visibilitychange', () => {
         game.sound.mute = true;
         game.sound.resumeAll();
         setTimeout(() => { game.sound.mute = false; }, 400);
+        // ProceduralSfx ctx also auto-suspends on Android — resume it too
+        try { window.audio?.proc?.resume(); } catch (e) {}
     }
 });

@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 200" width="180" height="200">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <!-- Tail -->
+  <path d="M 140 145 Q 162 142 166 122 Q 168 110 160 105" fill="none" stroke="#f08aa8" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Feet (rounded slippers) -->
+  <ellipse cx="74" cy="188" rx="14" ry="8" fill="#6a4a8a" class="outline"/>
+  <ellipse cx="110" cy="188" rx="14" ry="8" fill="#6a4a8a" class="outline"/>
+
+  <!-- Body (gray) -->
+  <ellipse cx="92" cy="148" rx="40" ry="36" fill="#9a9a9a" class="outline"/>
+
+  <!-- Apron (pink polka dot) -->
+  <path d="M 60 138 Q 60 132 70 132 L 114 132 Q 124 132 124 138 L 124 178 Q 124 184 116 184 L 68 184 Q 60 184 60 178 Z"
+        fill="#f08abe" class="outline"/>
+  <!-- Polka dots on apron -->
+  <circle cx="75" cy="150" r="2.5" fill="#f5d4e4"/>
+  <circle cx="92" cy="158" r="2.5" fill="#f5d4e4"/>
+  <circle cx="108" cy="148" r="2.5" fill="#f5d4e4"/>
+  <circle cx="82" cy="170" r="2.5" fill="#f5d4e4"/>
+  <circle cx="102" cy="172" r="2.5" fill="#f5d4e4"/>
+  <!-- Apron strap -->
+  <path d="M 65 132 L 60 122 M 119 132 L 124 122" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 60 122 Q 92 116 124 122" stroke="#f08abe" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 60 122 Q 92 116 124 122" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Arms -->
+  <ellipse cx="50" cy="148" rx="9" ry="14" fill="#9a9a9a" class="outline" transform="rotate(-20 50 148)"/>
+  <ellipse cx="134" cy="148" rx="9" ry="14" fill="#9a9a9a" class="outline" transform="rotate(20 134 148)"/>
+
+  <!-- Ears (behind head) -->
+  <ellipse cx="62" cy="68" rx="14" ry="16" fill="#9a9a9a" class="outline"/>
+  <ellipse cx="122" cy="68" rx="14" ry="16" fill="#9a9a9a" class="outline"/>
+  <ellipse cx="62" cy="70" rx="6" ry="9" fill="#f5b0c5"/>
+  <ellipse cx="122" cy="70" rx="6" ry="9" fill="#f5b0c5"/>
+
+  <!-- Head -->
+  <circle cx="92" cy="96" r="38" fill="#9a9a9a" class="outline"/>
+
+  <!-- HEADSCARF (white with red dots — babushka kerchief) -->
+  <path d="M 54 86 Q 50 60 70 50 Q 92 42 114 50 Q 134 60 130 86 L 130 92 L 54 92 Z"
+        fill="#f5e8f0" class="outline"/>
+  <!-- Knot under chin -->
+  <ellipse cx="92" cy="92" rx="14" ry="8" fill="#f5e8f0" class="outline"/>
+  <path d="M 80 92 Q 76 100 70 102 M 104 92 Q 108 100 114 102" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Red polka dots on scarf -->
+  <circle cx="68" cy="64" r="2.5" fill="#d63b3b"/>
+  <circle cx="84" cy="58" r="2.5" fill="#d63b3b"/>
+  <circle cx="100" cy="58" r="2.5" fill="#d63b3b"/>
+  <circle cx="116" cy="64" r="2.5" fill="#d63b3b"/>
+  <circle cx="78" cy="76" r="2.5" fill="#d63b3b"/>
+  <circle cx="106" cy="76" r="2.5" fill="#d63b3b"/>
+  <circle cx="92" cy="68" r="2.5" fill="#d63b3b"/>
+
+  <!-- ROUND GLASSES -->
+  <circle cx="80" cy="104" r="9" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="104" cy="104" r="9" fill="none" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="89" y1="104" x2="95" y2="104" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- Reflection on glasses -->
+  <path d="M 75 100 Q 78 98 82 100" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 99 100 Q 102 98 106 100" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- Eyes behind glasses (small kind dots) -->
+  <circle cx="80" cy="104" r="2.5" fill="#1a1a1a"/>
+  <circle cx="104" cy="104" r="2.5" fill="#1a1a1a"/>
+
+  <!-- Cheeks (rosy) -->
+  <circle cx="68" cy="116" r="5" fill="#f5b0c5" opacity="0.7"/>
+  <circle cx="116" cy="116" r="5" fill="#f5b0c5" opacity="0.7"/>
+
+  <!-- Nose -->
+  <ellipse cx="92" cy="118" rx="4" ry="3" fill="#f08aa8" class="outline" stroke-width="1.5"/>
+
+  <!-- Smiling mouth -->
+  <path d="M 85 124 Q 92 128 99 124" fill="none" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Whiskers -->
+  <path d="M 72 120 L 54 117" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M 72 124 L 54 126" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M 112 120 L 130 117" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M 112 124 L 130 126" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round"/>
+</svg>

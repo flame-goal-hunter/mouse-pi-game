@@ -1,24 +1,104 @@
 // ============================================
-// TRANSYLVANIA SCENE - Story mode character preview
+// TRANSYLVANIA MENU - Character preview + Start + SHOP
+// Shows characters; player clicks Start to enter dungeon, or visits Shop
 // ============================================
+
+import { Progress, SKINS, PERMANENT_UPGRADES } from '../storage/ProgressStore.js';
+import { bus } from '../audio/EventBus.js';
+import { UI } from '../audio/SoundKeys.js';
+import {
+    C, CS, S, R, STROKE, FONT, TXT, EASE, DUR, STAGGER, SHADOW,
+    hex, drawPanel, makeButton, staggerIn,
+} from '../ui/theme.js';
 
 export class TransylvaniaScene extends Phaser.Scene {
     constructor() {
         super({ key: 'TransylvaniaScene' });
     }
 
+    init(data) {
+        this._autoOpenShop = !!(data && data.openShop);
+    }
+
     preload() {
         const base = 'assets/characters/transylvania/';
-        // Load SVGs at 2x render resolution for crisp scaling
-        this.load.svg('tr_pi',     base + 'pi.svg',     { width: 400, height: 440 });
-        this.load.svg('tr_zombie', base + 'zombie.svg', { width: 480, height: 520 });
-        this.load.svg('tr_cat',    base + 'cat.svg',    { width: 440, height: 400 });
-        this.load.svg('tr_slime',  base + 'slime.svg',  { width: 480, height: 360 });
+        this.load.svg('m_pi',     base + 'pi.svg',     { width: 400, height: 460 });
+        this.load.svg('m_zombie', base + 'zombie.svg', { width: 480, height: 560 });
+        this.load.svg('m_cat',    base + 'cat.svg',    { width: 440, height: 400 });
+        this.load.svg('m_slime',  base + 'slime.svg',  { width: 480, height: 360 });
+        // Pi skins for shop previews — nested under transylvania/skins
+        const skinBase = 'assets/characters/transylvania/skins/';
+        this.load.svg('m_skin_brown',         skinBase + 'brown.svg',         { width: 180, height: 207 });
+        this.load.svg('m_skin_pink',          skinBase + 'pink.svg',          { width: 180, height: 207 });
+        this.load.svg('m_skin_yellow_antler', skinBase + 'yellow-antler.svg', { width: 180, height: 207 });
+        this.load.svg('m_skin_robot',         skinBase + 'robot.svg',         { width: 180, height: 207 });
+        this.load.svg('m_skin_green_monster', skinBase + 'green-monster.svg', { width: 180, height: 207 });
+        this.load.svg('m_skin_shadow',        skinBase + 'shadow.svg',        { width: 180, height: 207 });
+        this.load.svg('m_skin_devil',         skinBase + 'devil.svg',         { width: 180, height: 207 });
+        this.load.svg('m_skin_angel',         skinBase + 'angel.svg',         { width: 180, height: 207 });
+        this.load.svg('m_skin_yellow_lion',   skinBase + 'yellow-lion.svg',   { width: 180, height: 207 });
     }
 
     create() {
+        // Diagnostic: disable input polling on move (research recommendation).
+        try { this.input.setPollOnMove?.(false); } catch (e) {}
+
         this.build();
-        this.scale.on('resize', () => this.rebuild());
+
+        // === DIAGNOSTIC FPS COUNTER (top-center, big, visible) ===
+        // Shows real-time fps. If this drops below 30, something is throttling Phaser.
+        this._fpsText = this.add.text(this.scale.width / 2, 4, 'fps ?', {
+            fontFamily: 'monospace', fontSize: '12px',
+            color: '#80ff80', backgroundColor: '#000000', padding: { x: 6, y: 2 },
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(10000);
+        this._fpsLastUpdate = 0;
+        this._fpsFrames = 0;
+        // Debounce resize — Android URL-bar show/hide fires a storm of resize events
+        // that would otherwise call rebuild() many times per second. We only rebuild
+        // 250ms after the LAST resize, and skip rebuilds for tiny changes (<24px).
+        this._lastW = this.scale.width;
+        this._lastH = this.scale.height;
+        const onResize = () => {
+            const W = this.scale.width, H = this.scale.height;
+            if (Math.abs(W - this._lastW) < 24 && Math.abs(H - this._lastH) < 24) return;
+            if (this._resizeTimer) clearTimeout(this._resizeTimer);
+            this._resizeTimer = setTimeout(() => {
+                this._lastW = this.scale.width;
+                this._lastH = this.scale.height;
+                this.rebuild();
+            }, 250);
+        };
+        this.scale.on('resize', onResize);
+        // DIAGNOSTIC: BGM DISABLED in this build to rule out Web Audio as a lag source.
+        // The procedural BGM creates oscillators / setInterval / reverb delay nodes.
+        // If menu FPS jumps with this build, we know BGM was the culprit.
+        // try { window.audio?.playBgmPreset?.('menu'); } catch (e) {}
+        console.log('[Menu] BGM intentionally disabled in this build for diagnostics');
+        this.events.once('shutdown', () => {
+            this.scale.off('resize', onResize);
+            if (this._resizeTimer) clearTimeout(this._resizeTimer);
+            try { window.audio?.stopBgmPreset?.(); } catch (e) {}
+        });
+    }
+
+    update(time, dt) {
+        // Lightweight FPS counter — updates label every 500ms.
+        this._fpsFrames++;
+        if (time - this._fpsLastUpdate > 500) {
+            const fps = Math.round(this._fpsFrames * 1000 / (time - this._fpsLastUpdate));
+            const gameLoopFps = Math.round(this.game.loop.actualFps);
+            const tweenCount = this.tweens.getTweens().length;
+            const objCount = this.children.list.length;
+            if (this._fpsText) {
+                this._fpsText.setText(
+                    `fps ${fps} (loop ${gameLoopFps}) · tw ${tweenCount} · obj ${objCount}`
+                );
+                // Color-code: green ≥50, yellow 30-49, red <30
+                this._fpsText.setColor(fps >= 50 ? '#80ff80' : (fps >= 30 ? '#ffe080' : '#ff8080'));
+            }
+            this._fpsLastUpdate = time;
+            this._fpsFrames = 0;
+        }
     }
 
     rebuild() {
@@ -27,71 +107,446 @@ export class TransylvaniaScene extends Phaser.Scene {
         this.build();
     }
 
+    // === GOTHIC UI HELPERS ===
+    drawGothicPanel(cx, cy, w, h, opts = {}) {
+        const accent = opts.accent || 0xd49920;
+        const bgTop = opts.bgTop || 0x3a1248;
+        const bgBot = opts.bgBot || 0x18062a;
+        const radius = opts.radius != null ? opts.radius : 18;
+        const D = opts.depth || 500;
+        const out = [];
+        const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 2);
+        shadow.fillStyle(0x000000, 0.55);
+        shadow.fillRoundedRect(cx - w/2 + 8, cy - h/2 + 10, w, h, radius);
+        out.push(shadow);
+        const panel = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
+        panel.fillGradientStyle(bgTop, bgTop, bgBot, bgBot, 1);
+        panel.fillRoundedRect(cx - w/2, cy - h/2, w, h, radius);
+        panel.fillStyle(0xffffff, 0.06);
+        panel.fillRoundedRect(cx - w/2 + 4, cy - h/2 + 4, w - 8, h * 0.45, radius - 4);
+        panel.lineStyle(4, accent, 1);
+        panel.strokeRoundedRect(cx - w/2, cy - h/2, w, h, radius);
+        panel.lineStyle(1.5, 0xfff0a0, 0.55);
+        panel.strokeRoundedRect(cx - w/2 + 5, cy - h/2 + 5, w - 10, h - 10, radius - 5);
+        out.push(panel);
+        const cornerCurl = (x, y, side) => {
+            const c = this.add.graphics().setScrollFactor(0).setDepth(D);
+            c.fillStyle(accent, 1);
+            c.fillCircle(x, y, 6);
+            c.fillStyle(0x1a0820, 1);
+            c.fillCircle(x, y, 2.5);
+            c.lineStyle(2, accent, 0.95);
+            const r = 10;
+            const startA = side === 0 ? Math.PI : (side === 1 ? -Math.PI / 2 : (side === 2 ? Math.PI / 2 : 0));
+            c.beginPath();
+            c.arc(x, y, r, startA, startA + Math.PI / 2);
+            c.strokePath();
+            out.push(c);
+        };
+        const inset = 14;
+        cornerCurl(cx - w/2 + inset, cy - h/2 + inset, 0);
+        cornerCurl(cx + w/2 - inset, cy - h/2 + inset, 1);
+        cornerCurl(cx - w/2 + inset, cy + h/2 - inset, 2);
+        cornerCurl(cx + w/2 - inset, cy + h/2 - inset, 3);
+        if (opts.themed !== false) {
+            const themes = opts.theme || ['🕸️', '🦇', '💀', '🕯️'];
+            const corners = [
+                { x: cx - w/2 + 30, y: cy - h/2 + 30 },
+                { x: cx + w/2 - 30, y: cy - h/2 + 30 },
+                { x: cx - w/2 + 30, y: cy + h/2 - 30 },
+                { x: cx + w/2 - 30, y: cy + h/2 - 30 }
+            ];
+            for (let i = 0; i < 4; i++) {
+                const t = this.add.text(corners[i].x, corners[i].y, themes[i % themes.length],
+                    { fontSize: '24px' }).setOrigin(0.5)
+                    .setScrollFactor(0).setDepth(D + 1).setAlpha(0.55);
+                out.push(t);
+            }
+        }
+        return out;
+    }
+
+    drawGothicButton(cx, cy, w, h, label, opts = {}) {
+        const colorBase = opts.color || 0x7a30a0;
+        const colorTop  = opts.colorTop || 0xa050d0;
+        const accent = opts.accent || 0xffd040;
+        const hoverTop = opts.hoverTop || 0xc070e0;
+        const hoverBase = opts.hover || 0x9a50c0;
+        const radius = opts.radius != null ? opts.radius : 14;
+        const D = opts.depth || 500;
+        const out = [];
+        // Draw in LOCAL coords (centered at 0,0), then setPosition(cx,cy).
+        // This makes setScale pivot around the button center — fixes drift on pulse tween.
+        const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
+        shadow.fillStyle(0x000000, 0.55);
+        shadow.fillRoundedRect(-w/2 + 4, -h/2 + 5, w, h, radius);
+        shadow.setPosition(cx, cy);
+        out.push(shadow);
+        const body = this.add.graphics().setScrollFactor(0).setDepth(D);
+        const drawBody = (top, bot) => {
+            body.clear();
+            body.fillGradientStyle(top, top, bot, bot, 1);
+            body.fillRoundedRect(-w/2, -h/2, w, h, radius);
+            body.fillStyle(0xffffff, 0.18);
+            body.fillRoundedRect(-w/2 + 4, -h/2 + 4, w - 8, h * 0.42, radius - 3);
+            body.lineStyle(3, accent, 0.95);
+            body.strokeRoundedRect(-w/2, -h/2, w, h, radius);
+        };
+        drawBody(colorTop, colorBase);
+        body.setPosition(cx, cy);
+        out.push(body);
+        const fontSize = opts.fontSize || Math.max(16, Math.round(h * 0.4));
+        const text = this.add.text(cx, cy, label, {
+            fontFamily: 'Arial Black', fontSize: fontSize + 'px',
+            color: '#ffffff', stroke: '#1a0a3a', strokeThickness: 3, align: 'center'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
+        const hit = this.add.rectangle(cx, cy, w, h, 0xffffff, 0.001)
+            .setScrollFactor(0).setDepth(D + 2)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerover', () => drawBody(hoverTop, hoverBase))
+            .on('pointerout',  () => drawBody(colorTop, colorBase))
+            .on('pointerdown', () => {
+                this.tweens.add({
+                    targets: [body, text, shadow], scaleX: 0.96, scaleY: 0.96,
+                    duration: 80, yoyo: true, ease: 'Quad.easeOut',
+                    onComplete: () => { if (opts.onClick) opts.onClick(); }
+                });
+            });
+        out.push(text, hit);
+        return out;
+    }
+
+    // ============================================
+    // VERTICAL LAYOUT — clean, readable, mobile-first.
+    //
+    // Stack from top to bottom:
+    //   [HEADER]    Back ‹                 🧀 Balance
+    //   [TITLE]     ЗАМОК ТЕНЕЙ
+    //               — • —
+    //               Глава 1 · Подземелье графа Ратулы
+    //   [HERO]      Single big skin sprite, idle bob
+    //               Skin name pill
+    //   [STORY]     👵 СПАСТИ БАБУШКУ           ▸
+    //               5 этажей · босс
+    //   [ENDLESS]   ∞ БЕСКОНЕЧНЫЙ СПУСК         ▸
+    //               Лучший этаж: 8
+    //   [FOOTER]    🏪 ЛАВКА      📜 КОДЕКС
+    //
+    // No overlaps. Every block has guaranteed vertical space.
+    // ============================================
     build() {
         const W = this.scale.width;
         const H = this.scale.height;
+        const cx = W / 2;
 
-        this.drawNightSky(W, H);
-        this.drawMoon(W * 0.78, H * 0.16);
-        this.drawCastleSilhouette(W, H);
-        this.drawGround(W, H);
+        // === Layout constants — proportional to height, clamped sensibly ===
+        const HEADER_H = 60;
+        const FOOTER_H = 56;
+        const FOOTER_PAD = 12;
+        const cardH = Math.max(72, Math.min(86, H * 0.095));
+        const cardGap = 10;
+        const cardsTotal = cardH * 2 + cardGap;
+        const titleSize = Math.max(28, Math.min(46, W * 0.072));
+        const titleBlockH = titleSize + 36;   // title + rule + subtitle
+        const heroBlockH = Math.max(160, H - HEADER_H - titleBlockH - cardsTotal - FOOTER_H - FOOTER_PAD - 40);
 
-        // Title — scaled to canvas size
-        const titleSize = Math.max(28, Math.min(56, W * 0.05));
-        this.add.text(W / 2, H * 0.07, 'ЗАМОК ТЕНЕЙ', {
-            fontFamily: 'Arial Black, sans-serif',
+        // === BACKGROUND — MINIMAL (perf-first)
+        // Two solid rects + one circle. No 120-strip gradient, no castle silhouette,
+        // no stars, no decorations. If menu lags now, the cause is elsewhere.
+        const bg = this.add.graphics();
+        // Top half — deep gothic violet
+        bg.fillStyle(0x1d0b2e, 1);
+        bg.fillRect(0, 0, W, H * 0.55);
+        // Bottom half — slightly different solid color
+        bg.fillStyle(0x12061f, 1);
+        bg.fillRect(0, H * 0.55, W, H * 0.45);
+        // Moon — single circle
+        bg.fillStyle(0xfff4c8, 1);
+        bg.fillCircle(W * 0.82, H * 0.16, 50);
+        bg.fillStyle(0xffe8a0, 0.18);
+        bg.fillCircle(W * 0.82, H * 0.16, 80);
+
+        // === [HEADER] — Back + Balance ===
+        this._buildHeader(W, HEADER_H);
+
+        // === [TITLE] — gothic display ===
+        const titleCy = HEADER_H + Math.max(24, titleSize * 0.7);
+        const ttext = this.add.text(cx, titleCy, 'ЗАМОК ТЕНЕЙ', {
+            fontFamily: FONT.display,
             fontSize: titleSize + 'px',
-            color: '#f0d8ff',
-            stroke: '#2a0040',
-            strokeThickness: Math.max(4, titleSize * 0.14)
-        }).setOrigin(0.5);
+            color: hex(C.accent),
+            stroke: hex(C.bgVoid),
+            strokeThickness: Math.max(5, titleSize * 0.12),
+            fontStyle: '900',
+            align: 'center',
+        }).setOrigin(0.5).setDepth(420);
 
-        this.add.text(W / 2, H * 0.07 + titleSize * 0.9, 'Превью персонажей', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: Math.max(14, titleSize * 0.4) + 'px',
-            color: '#b08ad0',
-            fontStyle: 'italic'
-        }).setOrigin(0.5);
+        // Thin gold rule under title with center diamond
+        const ruleY = titleCy + titleSize * 0.62 + 4;
+        const ruleHalf = Math.min(W * 0.32, titleSize * 2.6);
+        const rule = this.add.graphics().setDepth(420);
+        rule.lineStyle(STROKE.thin, C.accent, 0.85);
+        rule.lineBetween(cx - ruleHalf, ruleY, cx - 14, ruleY);
+        rule.lineBetween(cx + 14, ruleY, cx + ruleHalf, ruleY);
+        rule.fillStyle(C.accent, 1);
+        rule.fillCircle(cx, ruleY, 3);
 
-        // Stage characters — scale fits canvas width
-        const nativeWidthSum = 200 + 240 + 220 + 240;
-        const charScale = Math.min(0.55, (W * 0.86 - 80) / nativeWidthSum);
+        // Subtitle
+        this.add.text(cx, ruleY + 18, 'Глава 1 · Подземелье графа Ратулы', {
+            fontFamily: FONT.body,
+            fontSize: Math.max(11, titleSize * 0.28) + 'px',
+            color: hex(C.textSecond),
+            fontStyle: 'italic',
+        }).setOrigin(0.5).setDepth(420);
 
-        const groundY = H - Math.max(120, H * 0.18);
-        const slot = W / 4;
-        this.placeCharacter('tr_pi',     'Мышонок Пи',      slot * 0.5,   groundY,         charScale, 'idle');
-        this.placeCharacter('tr_zombie', 'Зомби-дворецкий', slot * 1.5,   groundY,         charScale, 'sway');
-        this.placeCharacter('tr_cat',    'Демон-кот',       slot * 2.5,   groundY,         charScale, 'breathe');
-        this.placeCharacter('tr_slime',  'Слайм',           slot * 3.5,   groundY + 8,     charScale, 'wobble');
+        // === [HERO] — single big skin sprite, centered ===
+        const heroBlockTop = HEADER_H + titleBlockH + 8;
+        const heroBlockBot = heroBlockTop + heroBlockH;
+        this._buildHero(cx, heroBlockTop, heroBlockBot);
 
-        // Back button — postMessage to parent if in iframe, else go to MenuScene
-        const backBtn = this.add.text(20, 20, '← Меню', {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: Math.max(16, Math.min(24, W * 0.022)) + 'px',
-            color: '#ffffff',
-            backgroundColor: '#5a2080',
-            padding: { x: 16, y: 8 }
-        }).setOrigin(0, 0)
-          .setInteractive({ useHandCursor: true })
-          .on('pointerover', () => backBtn.setBackgroundColor('#7a30a0'))
-          .on('pointerout',  () => backBtn.setBackgroundColor('#5a2080'))
-          .on('pointerdown', () => {
-              if (window.parent && window.parent !== window) {
-                  window.parent.postMessage('closePhaserSnowball', '*');
-              } else if (this.scene.manager.keys && this.scene.manager.keys['MenuScene']) {
-                  this.scene.start('MenuScene');
-              }
-          });
+        // === [CARDS + FOOTER] anchored to bottom ===
+        const sStat = (Progress.getStoryStats ? Progress.getStoryStats() : null) || { wins: 0 };
+        const eStat = (Progress.getEndlessStats ? Progress.getEndlessStats() : null) || { bestFloor: 0 };
 
-        this.spawnStars(W, H * 0.5);
-        this.spawnFireflies(W, H);
+        const footerCy = H - FOOTER_PAD - FOOTER_H / 2;
+        const endlessCy = footerCy - FOOTER_H / 2 - 24 - cardH / 2;
+        const storyCy   = endlessCy - cardH - cardGap;
+        const cardW = Math.min(W * 0.88, 440);
+
+        const startRun = (runMode) => {
+            try { bus.emit(UI.BUTTON_CLICK); } catch (e) {}
+            try { if (Progress.setLastRunMode) Progress.setLastRunMode(runMode); } catch (e) {}
+            this.cameras.main.fadeOut(280, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () =>
+                this.scene.start('DungeonScene', { runMode, chapter: 1 }));
+        };
+
+        this._buildModeCard(cx, storyCy, cardW, cardH, {
+            icon: '👵',
+            title: 'СПАСТИ БАБУШКУ',
+            hint: sStat.wins > 0 ? `✓ Спасений: ${sStat.wins}` : '5 этажей · босс · спасение',
+            accent: C.accent, titleColor: C.accentSoft,
+            bg: 0x2d104a,
+            chevron: true,
+            onClick: () => startRun('story'),
+        });
+        this._buildModeCard(cx, endlessCy, cardW, cardH, {
+            icon: '∞',
+            title: 'БЕСКОНЕЧНЫЙ СПУСК',
+            hint: eStat.bestFloor > 0 ? `🏆 Лучший этаж: ${eStat.bestFloor}` : 'Спускайся вечно · растущая сложность',
+            accent: C.danger, titleColor: 0xffd2c8,
+            bg: 0x300c10,
+            chevron: true,
+            onClick: () => startRun('endless'),
+        });
+
+        this._buildFooterRow(cx, footerCy, cardW);
+
+        // Visible build tag (bottom-left, tiny) — proves which APK you're running.
+        this.add.text(6, H - 14, (window.__BUILD_VERSION__ || 'unknown'), {
+            fontFamily: 'monospace', fontSize: '9px',
+            color: '#7a6a92',
+        }).setOrigin(0, 0.5).setDepth(9999).setAlpha(0.55);
+
+        // Single scene fade-in
+        this.cameras.main.fadeIn(400, 0, 0, 0);
+
+        if (this._autoOpenShop) {
+            this._autoOpenShop = false;
+            this.time.delayedCall(420, () => this.openShop());
+        }
     }
 
-    // ---------- Background ----------
+    // ============================================
+    // BLOCK BUILDERS — each is one cohesive UI band
+    // ============================================
 
+    _buildHeader(W, headerH) {
+        // Subtle bottom-divider line under header strip
+        const sep = this.add.graphics().setDepth(498);
+        sep.lineStyle(1, C.borderSoft, 0.4);
+        sep.lineBetween(S.md, headerH, W - S.md, headerH);
+
+        // Back button (left)
+        const backBtn = makeButton(this, S.md + 50, headerH / 2, 96, 38, 'Меню', {
+            variant: 'ghost', icon: '‹', textSize: '13px', depth: 500,
+            clickEvent: 'ui.button.back',
+            onClick: () => {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage('closePhaserSnowball', '*');
+                } else if (this.scene.manager.keys && this.scene.manager.keys['MenuScene']) {
+                    this.scene.start('MenuScene');
+                }
+            }
+        });
+
+        // Balance pill (right)
+        const balance = Progress.getCheese();
+        const balText = String(balance);
+        const pillW = Math.max(96, 60 + balText.length * 14);
+        const pillH = 36;
+        const pillCx = W - S.md - pillW / 2;
+        const pillCy = headerH / 2;
+
+        const g = this.add.graphics().setDepth(500);
+        g.fillStyle(C.bgVoid, 0.45);
+        g.fillRoundedRect(pillCx - pillW/2 + 1, pillCy - pillH/2 + 2, pillW, pillH, R.pill);
+        g.fillStyle(C.bgPanel, 0.92);
+        g.fillRoundedRect(pillCx - pillW/2, pillCy - pillH/2, pillW, pillH, R.pill);
+        g.lineStyle(STROKE.thin, C.accent, 0.85);
+        g.strokeRoundedRect(pillCx - pillW/2, pillCy - pillH/2, pillW, pillH, R.pill);
+
+        this.add.text(pillCx - pillW/2 + 18, pillCy, '🧀', { fontSize: '18px' })
+            .setOrigin(0.5).setDepth(501);
+        this.add.text(pillCx + 10, pillCy, balText, {
+            fontFamily: FONT.display, fontSize: '18px',
+            color: hex(C.accentSoft), fontStyle: '900',
+        }).setOrigin(0.5).setDepth(501);
+    }
+
+    _buildHero(cx, top, bot) {
+        const skin = Progress.getCurrentSkin();
+        const previewKey = (skin?.menuKey && this.textures.exists(skin.menuKey)) ? skin.menuKey : 'm_pi';
+        const heroH = bot - top;
+
+        // Determine sprite scale — fit ~80% of the hero block height
+        const targetH = Math.max(140, heroH * 0.78);
+        // Source SVG heights vary per character (Pi 460, skins 207)
+        // Use texture dimensions for a faithful scale
+        const tex = this.textures.get(previewKey);
+        const srcH = (tex && tex.source && tex.source[0]) ? tex.source[0].height : 460;
+        const scale = targetH / srcH;
+
+        // Position: sprite bottom anchored slightly above the bottom of the block
+        // so the name pill below has room.
+        const pillSpace = 36;
+        const spriteBottomY = bot - pillSpace;
+
+        // Soft elliptical shadow under hero
+        const shadowG = this.add.graphics().setDepth(150);
+        shadowG.fillStyle(C.bgVoid, 0.55);
+        // Width approximation — half sprite displayWidth
+        const shadowW = (tex && tex.source && tex.source[0])
+            ? tex.source[0].width * scale * 0.55
+            : 120;
+        shadowG.fillEllipse(cx, spriteBottomY + 4, shadowW, 18);
+
+        const sprite = this.add.image(cx, spriteBottomY, previewKey)
+            .setOrigin(0.5, 1)
+            .setScale(scale)
+            .setDepth(160);
+
+        // Skin tint mood for shadow/angel/etc.
+        if (skin?.id === 'shadow') sprite.setAlpha(0.85);
+        if (skin?.id === 'angel') sprite.setAlpha(0.95);
+
+        // NO idle tween — even one infinite tween can be a frame source on some Android WebViews.
+        // Static hero is the safest baseline.
+
+        // Skin name pill under sprite
+        const skinName = (skin?.accent ? skin.accent + ' ' : '') + (skin?.name || 'Мышонок Пи');
+        const labelText = this.add.text(cx, bot - 14, skinName, {
+            fontFamily: FONT.body, fontSize: '13px',
+            color: hex(C.textPrimary), fontStyle: '700',
+        }).setOrigin(0.5).setDepth(161);
+        const lpw = labelText.width + 22;
+        const lph = 26;
+        const labelG = this.add.graphics().setDepth(160);
+        labelG.fillStyle(C.bgDeep, 0.88);
+        labelG.fillRoundedRect(cx - lpw/2, bot - 14 - lph/2, lpw, lph, R.pill);
+        labelG.lineStyle(STROKE.hairline, C.accent, 0.5);
+        labelG.strokeRoundedRect(cx - lpw/2, bot - 14 - lph/2, lpw, lph, R.pill);
+    }
+
+    _buildModeCard(cx, cy, w, h, opts) {
+        // Solid fill card (no gradient at runtime). Hover/press = alpha+scale tween only.
+        const left = cx - w/2;
+
+        const body = this.add.graphics().setDepth(499);
+        // Drop shadow
+        body.fillStyle(C.bgVoid, 0.55);
+        body.fillRoundedRect(left + 2, cy - h/2 + 5, w, h, R.lg);
+        // Body
+        body.fillStyle(opts.bg, 1);
+        body.fillRoundedRect(left, cy - h/2, w, h, R.lg);
+        // Accent stripe (left edge)
+        body.fillStyle(opts.accent, 1);
+        body.fillRoundedRect(left, cy - h/2, 6, h, { tl: R.lg, bl: R.lg, tr: 0, br: 0 });
+        // Border
+        body.lineStyle(STROKE.thin, opts.accent, 0.85);
+        body.strokeRoundedRect(left, cy - h/2, w, h, R.lg);
+
+        // Icon (left)
+        const iconSize = h > 80 ? 32 : 28;
+        const icon = this.add.text(left + 38, cy, opts.icon,
+            { fontSize: iconSize + 'px' }).setOrigin(0.5).setDepth(500);
+
+        // Title + hint stack
+        const titleSize = h > 80 ? 18 : 16;
+        const hintSize  = h > 80 ? 12 : 11;
+        const title = this.add.text(left + 76, cy - 11, opts.title, {
+            fontFamily: FONT.display, fontSize: titleSize + 'px',
+            color: hex(opts.titleColor),
+            fontStyle: '900',
+            stroke: hex(C.bgVoid), strokeThickness: 3,
+        }).setOrigin(0, 0.5).setDepth(500);
+        const hint = this.add.text(left + 76, cy + 12, opts.hint, {
+            fontFamily: FONT.body, fontSize: hintSize + 'px',
+            color: hex(C.textSecond), fontStyle: '500',
+        }).setOrigin(0, 0.5).setDepth(500);
+
+        // Chevron (right) — affordance for "tap to enter"
+        if (opts.chevron) {
+            this.add.text(left + w - 22, cy, '›', {
+                fontFamily: FONT.display, fontSize: '26px',
+                color: hex(opts.accent), fontStyle: '900',
+            }).setOrigin(0.5).setDepth(500);
+        }
+
+        // Hit zone + tactile feedback
+        const group = [body, icon, title, hint];
+        const hit = this.add.zone(cx, cy, w, h)
+            .setInteractive({ useHandCursor: true }).setDepth(501);
+        hit.on('pointerover', () => {
+            this.tweens.add({ targets: group, alpha: 1, scale: 1.015, duration: 130, ease: 'Cubic.easeOut' });
+        });
+        hit.on('pointerout', () => {
+            this.tweens.add({ targets: group, alpha: 0.94, scale: 1, duration: 130, ease: 'Cubic.easeOut' });
+        });
+        let isDown = false;
+        hit.on('pointerdown', () => {
+            isDown = true;
+            this.tweens.add({ targets: group, scale: 0.97, duration: 70, ease: 'Cubic.easeOut' });
+        });
+        hit.on('pointerup', () => {
+            if (!isDown) return; isDown = false;
+            this.tweens.add({ targets: group, scale: 1.02, duration: 120, ease: 'Back.easeOut' });
+            try { bus.emit(UI.BUTTON_CLICK); } catch (e) {}
+            opts.onClick();
+        });
+        group.forEach(g => g.setAlpha(0.94));
+    }
+
+    _buildFooterRow(cx, cy, totalW) {
+        const gap = 12;
+        const btnW = (totalW - gap) / 2;
+        const btnH = 50;
+
+        makeButton(this, cx - btnW/2 - gap/2, cy, btnW, btnH, 'ЛАВКА', {
+            variant: 'secondary', icon: '🏪', textSize: '15px',
+            depth: 500, clickEvent: 'ui.menu.open',
+            onClick: () => this.openShop(),
+        });
+        makeButton(this, cx + btnW/2 + gap/2, cy, btnW, btnH, 'КОДЕКС', {
+            variant: 'secondary', icon: '📜', textSize: '15px',
+            depth: 500, clickEvent: 'ui.menu.open',
+            onClick: () => this.openCodex(),
+        });
+    }
+
+    // ---------- Background drawing ----------
     drawNightSky(W, H) {
         const gfx = this.add.graphics();
-        // Vertical gradient via stacked rects
         const stops = [
             { y: 0,         color: 0x1a0a2e },
             { y: H * 0.35,  color: 0x3a1a5a },
@@ -118,30 +573,26 @@ export class TransylvaniaScene extends Phaser.Scene {
     }
 
     drawMoon(x, y) {
-        // Glow halo
+        const out = [];
         for (let r = 110; r > 60; r -= 10) {
             const alpha = (110 - r) / 200 + 0.05;
-            this.add.circle(x, y, r, 0xffe8a0, alpha);
+            out.push(this.add.circle(x, y, r, 0xffe8a0, alpha));
         }
-        // Moon disc
-        this.add.circle(x, y, 60, 0xfff4c8);
-        // Craters
-        this.add.circle(x - 18, y - 10, 8, 0xe8d8a0);
-        this.add.circle(x + 12, y + 8, 6, 0xe8d8a0);
-        this.add.circle(x + 22, y - 22, 4, 0xe8d8a0);
+        out.push(this.add.circle(x, y, 60, 0xfff4c8));
+        out.push(this.add.circle(x - 18, y - 10, 8, 0xe8d8a0));
+        out.push(this.add.circle(x + 12, y + 8, 6, 0xe8d8a0));
+        out.push(this.add.circle(x + 22, y - 22, 4, 0xe8d8a0));
+        return out;
     }
 
     drawCastleSilhouette(W, H) {
         const gfx = this.add.graphics();
         gfx.fillStyle(0x180828, 1);
-        const baseY = H * 0.62;
-
-        // Far castle silhouette
+        const baseY = H * 0.58;
         gfx.beginPath();
         gfx.moveTo(0, baseY + 40);
         gfx.lineTo(0, baseY);
         gfx.lineTo(W * 0.08, baseY);
-        // Tower 1
         gfx.lineTo(W * 0.08, baseY - 90);
         gfx.lineTo(W * 0.11, baseY - 110);
         gfx.lineTo(W * 0.14, baseY - 90);
@@ -149,20 +600,18 @@ export class TransylvaniaScene extends Phaser.Scene {
         gfx.lineTo(W * 0.22, baseY - 30);
         gfx.lineTo(W * 0.22, baseY - 60);
         gfx.lineTo(W * 0.30, baseY - 60);
-        // Big central tower
-        gfx.lineTo(W * 0.30, baseY - 140);
-        gfx.lineTo(W * 0.34, baseY - 170);
-        gfx.lineTo(W * 0.38, baseY - 140);
+        gfx.lineTo(W * 0.30, baseY - 150);
+        gfx.lineTo(W * 0.34, baseY - 180);
+        gfx.lineTo(W * 0.38, baseY - 150);
         gfx.lineTo(W * 0.38, baseY - 60);
         gfx.lineTo(W * 0.50, baseY - 60);
-        gfx.lineTo(W * 0.50, baseY - 100);
-        gfx.lineTo(W * 0.58, baseY - 100);
+        gfx.lineTo(W * 0.50, baseY - 110);
+        gfx.lineTo(W * 0.58, baseY - 110);
         gfx.lineTo(W * 0.58, baseY - 40);
-        // Right tower
         gfx.lineTo(W * 0.72, baseY - 40);
-        gfx.lineTo(W * 0.72, baseY - 130);
-        gfx.lineTo(W * 0.76, baseY - 150);
-        gfx.lineTo(W * 0.80, baseY - 130);
+        gfx.lineTo(W * 0.72, baseY - 140);
+        gfx.lineTo(W * 0.76, baseY - 160);
+        gfx.lineTo(W * 0.80, baseY - 140);
         gfx.lineTo(W * 0.80, baseY - 50);
         gfx.lineTo(W * 0.92, baseY - 50);
         gfx.lineTo(W * 0.92, baseY);
@@ -170,78 +619,45 @@ export class TransylvaniaScene extends Phaser.Scene {
         gfx.lineTo(W, baseY + 40);
         gfx.closePath();
         gfx.fillPath();
-
-        // Tiny lit windows
         const windows = [
             [W * 0.11, baseY - 70],
             [W * 0.34, baseY - 100],
-            [W * 0.34, baseY - 60],
+            [W * 0.34, baseY - 70],
             [W * 0.54, baseY - 80],
-            [W * 0.76, baseY - 95]
+            [W * 0.76, baseY - 100]
         ];
-        windows.forEach(([wx, wy]) => {
-            this.add.rectangle(wx, wy, 6, 8, 0xffc060);
-        });
-
-        // Bats
+        windows.forEach(([wx, wy]) => this.add.rectangle(wx, wy, 7, 9, 0xffc060));
         for (let i = 0; i < 4; i++) {
-            const bx = Phaser.Math.Between(W * 0.2, W * 0.85);
-            const by = Phaser.Math.Between(180, 280);
-            this.drawBat(bx, by);
+            this.drawBat(Phaser.Math.Between(W * 0.2, W * 0.85), Phaser.Math.Between(180, 300));
         }
     }
 
     drawBat(x, y) {
+        // Static bat silhouette — no tween (perf-conscious)
         const bat = this.add.graphics();
-        bat.lineStyle(2, 0x180828, 1);
         bat.fillStyle(0x180828, 1);
-        // Body
         bat.fillCircle(0, 0, 3);
-        // Wings (simple "m" shape)
         bat.beginPath();
-        bat.moveTo(-3, 0);
-        bat.lineTo(-12, -5);
-        bat.lineTo(-8, 2);
-        bat.lineTo(-3, 0);
-        bat.closePath();
-        bat.fillPath();
+        bat.moveTo(-3, 0); bat.lineTo(-12, -5); bat.lineTo(-8, 2); bat.lineTo(-3, 0);
+        bat.closePath(); bat.fillPath();
         bat.beginPath();
-        bat.moveTo(3, 0);
-        bat.lineTo(12, -5);
-        bat.lineTo(8, 2);
-        bat.lineTo(3, 0);
-        bat.closePath();
-        bat.fillPath();
+        bat.moveTo(3, 0); bat.lineTo(12, -5); bat.lineTo(8, 2); bat.lineTo(3, 0);
+        bat.closePath(); bat.fillPath();
         bat.setPosition(x, y);
-
-        // Slight float motion
-        this.tweens.add({
-            targets: bat,
-            x: x + Phaser.Math.Between(-40, 40),
-            y: y + Phaser.Math.Between(-20, 20),
-            duration: Phaser.Math.Between(3000, 5000),
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
     }
 
     drawGround(W, H) {
         const gfx = this.add.graphics();
-        const groundTop = H - 160;
-        // Foreground ground
+        const groundTop = H - 200;
         gfx.fillStyle(0x2a1240, 1);
         gfx.fillRect(0, groundTop, W, H - groundTop);
-        // Highlight strip
         gfx.fillStyle(0x4a2060, 1);
         gfx.fillRect(0, groundTop, W, 6);
-        // Gravestones (decorative)
         this.drawGravestone(W * 0.07, groundTop);
         this.drawGravestone(W * 0.95, groundTop);
-        // Small mushrooms
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 8; i++) {
             const mx = Phaser.Math.Between(40, W - 40);
-            const my = groundTop + Phaser.Math.Between(40, 120);
+            const my = groundTop + Phaser.Math.Between(30, 100);
             this.drawMushroom(mx, my);
         }
     }
@@ -252,11 +668,8 @@ export class TransylvaniaScene extends Phaser.Scene {
         gfx.lineStyle(3, 0x1a1024, 1);
         gfx.fillRoundedRect(x - 22, topY - 60, 44, 70, { tl: 22, tr: 22, bl: 0, br: 0 });
         gfx.strokeRoundedRect(x - 22, topY - 60, 44, 70, { tl: 22, tr: 22, bl: 0, br: 0 });
-        // RIP text
         this.add.text(x, topY - 35, 'RIP', {
-            fontFamily: 'Arial Black, sans-serif',
-            fontSize: '14px',
-            color: '#1a1024'
+            fontFamily: 'Arial Black, sans-serif', fontSize: '14px', color: '#1a1024'
         }).setOrigin(0.5);
     }
 
@@ -273,154 +686,501 @@ export class TransylvaniaScene extends Phaser.Scene {
         gfx.fillCircle(x + 2, y - 5, 1);
     }
 
-    // ---------- Characters ----------
-
     placeCharacter(key, label, x, y, scale, animMode) {
         const sprite = this.add.image(x, y, key).setOrigin(0.5, 1).setScale(scale);
-
-        // Drop shadow
-        const shadow = this.add.ellipse(x, y + 4, sprite.displayWidth * 0.55, 14, 0x000000, 0.45);
+        // Single soft elliptical shadow
+        const shadow = this.add.ellipse(x, y + 4, sprite.displayWidth * 0.55, 12, 0x000000, 0.5);
         shadow.setDepth(sprite.depth - 1);
 
-        // Label plaque
-        const labelBg = this.add.rectangle(x, y + 36, 0, 32, 0x2a0a3a, 0.85)
-            .setStrokeStyle(2, 0x9a6cc4);
-        const labelText = this.add.text(x, y + 36, label, {
-            fontFamily: 'Arial Black, sans-serif',
-            fontSize: '20px',
-            color: '#f0d8ff'
+        // Compact pill label
+        const labelText = this.add.text(x, y + 32, label, {
+            fontFamily: FONT.body,
+            fontSize: '12px',
+            color: hex(C.textPrimary),
+            fontStyle: '700',
         }).setOrigin(0.5);
-        labelBg.width = labelText.width + 24;
+        const pillW = labelText.width + 18;
+        const pillG = this.add.graphics();
+        pillG.fillStyle(C.bgDeep, 0.88);
+        pillG.fillRoundedRect(x - pillW/2, y + 32 - 11, pillW, 22, R.pill);
+        pillG.lineStyle(STROKE.hairline, C.accent, 0.45);
+        pillG.strokeRoundedRect(x - pillW/2, y + 32 - 11, pillW, 22, R.pill);
+        pillG.setDepth(labelText.depth - 1);
 
-        // Animation
-        this.applyIdleAnim(sprite, shadow, animMode);
+        // Single idle animation (one tween per character only)
+        this.applyIdleAnim(sprite, shadow, animMode, scale);
     }
 
-    applyIdleAnim(sprite, shadow, mode) {
-        const baseScaleX = sprite.scaleX;
-        const baseScaleY = sprite.scaleY;
+    applyIdleAnim(sprite, shadow, mode, baseScale) {
         const baseY = sprite.y;
-        const baseShadowW = shadow.width;
-
         if (mode === 'idle') {
-            // Mousie: light bounce + ear wiggle
             this.tweens.add({
-                targets: sprite,
-                y: baseY - 6,
-                scaleY: baseScaleY * 0.97,
-                scaleX: baseScaleX * 1.03,
-                duration: 600,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-            this.tweens.add({
-                targets: shadow,
-                scaleX: 0.85,
-                alpha: 0.5,
-                duration: 600,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
+                targets: sprite, y: baseY - 6,
+                scaleY: baseScale * 0.97, scaleX: baseScale * 1.03,
+                duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
         } else if (mode === 'sway') {
-            // Zombie: tilt side to side (T-pose scarecrow swaying)
             sprite.setOrigin(0.5, 0.95);
             this.tweens.add({
-                targets: sprite,
-                angle: -4,
-                duration: 1400,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
+                targets: sprite, angle: -4, duration: 1400,
+                yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
             this.tweens.add({
-                targets: sprite,
-                y: baseY - 2,
-                duration: 700,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
+                targets: sprite, y: baseY - 2, duration: 700,
+                yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
         } else if (mode === 'breathe') {
-            // Cat: slow breathing scale pulse
             this.tweens.add({
-                targets: sprite,
-                scaleX: baseScaleX * 1.04,
-                scaleY: baseScaleY * 0.96,
-                duration: 1100,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
+                targets: sprite, scaleX: baseScale * 1.04, scaleY: baseScale * 0.96,
+                duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
         } else if (mode === 'wobble') {
-            // Slime: jiggle wobble (heavy squash & stretch)
             this.tweens.add({
-                targets: sprite,
-                scaleX: baseScaleX * 1.08,
-                scaleY: baseScaleY * 0.88,
-                duration: 800,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-            this.tweens.add({
-                targets: shadow,
-                scaleX: 1.1,
-                duration: 800,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
+                targets: sprite, scaleX: baseScale * 1.10, scaleY: baseScale * 0.86,
+                duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
         }
     }
 
-    // ---------- Atmosphere ----------
-
     spawnStars(W, maxY) {
-        for (let i = 0; i < 60; i++) {
+        // Static stars — no tweens. 24 small dots, looks like a sky.
+        for (let i = 0; i < 24; i++) {
             const x = Phaser.Math.Between(0, W);
             const y = Phaser.Math.Between(0, maxY);
-            const size = Phaser.Math.FloatBetween(0.8, 2.2);
-            const star = this.add.circle(x, y, size, 0xffffff, Phaser.Math.FloatBetween(0.4, 1));
-            this.tweens.add({
-                targets: star,
-                alpha: 0.1,
-                duration: Phaser.Math.Between(1500, 3500),
-                yoyo: true,
-                repeat: -1,
-                delay: Phaser.Math.Between(0, 2000)
-            });
+            const size = Phaser.Math.FloatBetween(0.8, 1.8);
+            this.add.circle(x, y, size, 0xffffff, Phaser.Math.FloatBetween(0.5, 0.95));
         }
+    }
+
+    // ---------- SHOP ----------
+    openCodex() {
+        if (this.codexOpen) return;
+        this.codexOpen = true;
+        const W = this.scale.width, H = this.scale.height;
+        const D = 2600;
+        const els = [];
+        const addEl = (el, dep) => { el.setDepth(dep || D); els.push(el); return el; };
+        const close = () => {
+            els.forEach(e => e.destroy());
+            this.codexOpen = false;
+        };
+        // Backdrop — tap-outside dismisses, with soft blur shadow
+        const backdrop = this.add.rectangle(0, 0, W, H, C.bgVoid, 0).setOrigin(0)
+            .setInteractive().on('pointerdown', close);
+        addEl(backdrop);
+        this.tweens.add({ targets: backdrop, fillAlpha: 0.88, duration: DUR.base });
+        // Panel — premium theme styling
+        const panelW = Math.min(W * 0.94, 920);
+        const panelH = Math.min(H * 0.94, 640);
+        const panelEls = drawPanel(this, W/2, H/2, panelW, panelH, {
+            bgTop: 0x1d2a22, bgBot: 0x0a1610,
+            accent: C.success, depth: D, shadow: SHADOW.lg,
+        });
+        panelEls.forEach(e => { e.setDepth(D); els.push(e); });
+        // Entrance — panel scales up
+        panelEls.forEach(e => e.setScale(0.95).setAlpha(0));
+        this.tweens.add({ targets: panelEls, scale: 1, alpha: 1, duration: DUR.slow, ease: EASE.back });
+        // Title with green accent
+        const title = addEl(this.add.text(W/2, H/2 - panelH/2 + 34, 'КОДЕКС', {
+            fontFamily: FONT.display, fontSize: '34px',
+            color: hex(C.success), stroke: hex(C.bgVoid), strokeThickness: 5,
+            fontStyle: '900',
+        }).setOrigin(0.5));
+        addEl(this.add.text(W/2, H/2 - panelH/2 + 62, 'летопись подземелья', {
+            fontFamily: FONT.body, fontSize: '12px',
+            color: hex(C.textSecond), fontStyle: 'italic',
+        }).setOrigin(0.5));
+        // Close button — top-right, proper styled
+        const closeBtn = makeButton(this, W/2 + panelW/2 - 32, H/2 - panelH/2 + 32, 40, 40, '✕', {
+            variant: 'ghost', textSize: '22px', depth: D + 5,
+            clickEvent: 'ui.button.back', onClick: close,
+        });
+        els.push(closeBtn.container);
+
+        // Two columns: Bestiary (kills) + Achievements
+        const colGap = 24;
+        const colW = (panelW - 60 - colGap) / 2;
+        const leftX = W/2 - panelW/2 + 30;
+        const rightX = leftX + colW + colGap;
+        const topY = H/2 - panelH/2 + 78;
+
+        // LEFT: Bestiary — section header
+        addEl(this.add.text(leftX + colW/2, topY, '👁  БЕСТИАРИЙ', {
+            fontFamily: FONT.display, fontSize: '20px',
+            color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
+            fontStyle: '700',
+        }).setOrigin(0.5));
+        // Subtle divider under header
+        const bdivL = this.add.graphics(); bdivL.lineStyle(STROKE.hairline, C.success, 0.45);
+        bdivL.lineBetween(leftX + 8, topY + 22, leftX + colW - 8, topY + 22);
+        bdivL.setDepth(D); els.push(bdivL);
+        const allKills = Progress.getAllKills();
+        const enemyList = [
+            { kind: 'zombie',    name: 'Зомби',           emoji: '🧟' },
+            { kind: 'cat',       name: 'Демон-кот',       emoji: '😈' },
+            { kind: 'slime',     name: 'Слайм',           emoji: '🟢' },
+            { kind: 'bat',       name: 'Летучая мышь',    emoji: '🦇' },
+            { kind: 'skeleton',  name: 'Скелет',          emoji: '💀' },
+            { kind: 'ghost',     name: 'Призрак',         emoji: '👻' },
+            { kind: 'mimic',     name: 'Мимик',           emoji: '📦' },
+            { kind: 'guard',     name: 'Часовой',         emoji: '🛡️' },
+            { kind: 'librarian', name: 'Библиотекарь',    emoji: '📕' },
+            { kind: 'chef',      name: 'Шеф-кот',         emoji: '🍳' },
+            { kind: 'snapdragon', name: 'Львиный зев',    emoji: '🌺' },
+            { kind: 'boss',      name: 'Граф Ратула',     emoji: '🦇' }
+        ];
+        const rowH = 28;
+        for (let i = 0; i < enemyList.length; i++) {
+            const e = enemyList[i];
+            const y = topY + 36 + i * rowH;
+            if (y + rowH > H/2 + panelH/2 - 16) break;
+            const kills = allKills[e.kind] || 0;
+            const discovered = kills > 0;
+            const txt = discovered
+                ? `${e.emoji}  ${e.name}  —  ×${kills}`
+                : `❓  ???  —  не встречен`;
+            addEl(this.add.text(leftX + 12, y, txt, {
+                fontFamily: FONT.body, fontSize: '14px',
+                color: discovered ? hex(C.textPrimary) : hex(C.textMuted),
+                fontStyle: discovered ? '500' : '400',
+            }).setOrigin(0, 0));
+        }
+
+        // RIGHT: Stats + Achievements
+        addEl(this.add.text(rightX + colW/2, topY, '🏆  ЛЕТОПИСЬ', {
+            fontFamily: FONT.display, fontSize: '20px',
+            color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
+            fontStyle: '700',
+        }).setOrigin(0.5));
+        const bdivR = this.add.graphics(); bdivR.lineStyle(STROKE.hairline, C.success, 0.45);
+        bdivR.lineBetween(rightX + 8, topY + 22, rightX + colW - 8, topY + 22);
+        bdivR.setDepth(D); els.push(bdivR);
+        const sStat = Progress.getStoryStats();
+        const eStat = Progress.getEndlessStats();
+        const ghostRuns = Progress.getGhostRuns();
+        const stats = [
+            `📖 Сюжетных побед:  ${sStat.wins}`,
+            `📏 Глубочайший этаж: ${eStat.bestFloor}`,
+            `🥷 Тихих забегов:   ${ghostRuns}`,
+            `🧀 Сыра всего:      ${Progress.state.cheeseEarnedAllTime || 0}`
+        ];
+        for (let i = 0; i < stats.length; i++) {
+            addEl(this.add.text(rightX + 12, topY + 36 + i * 26, stats[i], {
+                fontFamily: FONT.body, fontSize: '14px',
+                color: hex(C.textPrimary), fontStyle: '500',
+            }).setOrigin(0, 0));
+        }
+        // Skin unlocks
+        const skinsUnlocked = (Progress.state.skinsUnlocked || ['blue']).length;
+        const skinsTotal = Progress.getAllSkins().length;
+        addEl(this.add.text(rightX + 12, topY + 36 + stats.length * 26 + 12,
+            `🐭  Скинов открыто: ${skinsUnlocked}/${skinsTotal}`, {
+                fontFamily: FONT.display, fontSize: '15px',
+                color: hex(C.accent), stroke: hex(C.bgVoid), strokeThickness: 3,
+                fontStyle: '700',
+            }).setOrigin(0, 0));
+
+        // === ACHIEVEMENTS section (under right column) ===
+        const achY = topY + 36 + stats.length * 26 + 50;
+        if (achY + 100 < H/2 + panelH/2 - 16) {
+            addEl(this.add.text(rightX + colW/2, achY, '🏆  ДОСТИЖЕНИЯ', {
+                fontFamily: FONT.display, fontSize: '15px',
+                color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
+                fontStyle: '700',
+            }).setOrigin(0.5));
+            const ACHIEVEMENTS = [
+                { id: 'first_win',     name: 'Первое спасение бабушки',  emoji: '👵' },
+                { id: 'five_wins',     name: '5 спасений',                emoji: '⭐' },
+                { id: 'speed_win',     name: 'Спасение < 10 мин',         emoji: '⚡' },
+                { id: 'boss_defeated', name: 'Граф Ратула повержен',      emoji: '💀' },
+                { id: 'boss_no_hit',   name: 'Без единого удара',         emoji: '🛡' },
+                { id: 'combo_25',      name: 'Комбо ×25',                 emoji: '🎯' },
+                { id: 'endless_10',    name: '∞ Этаж 10',                 emoji: '🔟' },
+                { id: 'endless_20',    name: '∞ Этаж 20',                 emoji: '🏆' },
+                { id: 'endless_30',    name: '∞ Этаж 30',                 emoji: '👑' }
+            ];
+            for (let i = 0; i < ACHIEVEMENTS.length; i++) {
+                const a = ACHIEVEMENTS[i];
+                const unlocked = Progress.hasAchievement && Progress.hasAchievement(a.id);
+                const y = achY + 28 + i * 22;
+                if (y + 22 > H/2 + panelH/2 - 12) break;
+                addEl(this.add.text(rightX + 12, y,
+                    unlocked ? `${a.emoji}  ${a.name}` : `🔒  ???`, {
+                        fontFamily: FONT.body, fontSize: '13px',
+                        color: unlocked ? hex(C.success) : hex(C.textMuted),
+                        fontStyle: unlocked ? '600' : '400',
+                    }).setOrigin(0, 0));
+            }
+        }
+    }
+
+    openShop() {
+        if (this.shopOpen) return;
+        this.shopOpen = true;
+        const W = this.scale.width;
+        const H = this.scale.height;
+        const D = 2500;
+        const els = [];
+        const addEl = (el, dep) => { el.setDepth(dep || D); els.push(el); return el; };
+
+        // Backdrop — interactive so a tap outside dismisses, and blocks pass-through to menu buttons
+        const closeModal = () => {
+            els.forEach(e => e.destroy());
+            this.shopOpen = false;
+        };
+        const backdrop = this.add.rectangle(0, 0, W, H, C.bgVoid, 0)
+            .setOrigin(0)
+            .setInteractive()
+            .on('pointerdown', closeModal);
+        addEl(backdrop);
+        this.tweens.add({ targets: backdrop, fillAlpha: 0.88, duration: DUR.base });
+
+        const panelW = Math.min(W * 0.94, 920);
+        const panelH = Math.min(H * 0.94, 620);
+        const panelEls = drawPanel(this, W/2, H/2, panelW, panelH, {
+            bgTop: 0x3a1d10, bgBot: 0x1a0808,
+            accent: C.accent, depth: D, shadow: SHADOW.lg,
+        });
+        panelEls.forEach(e => { e.setDepth(D); els.push(e); });
+        panelEls.forEach(e => e.setScale(0.95).setAlpha(0));
+        this.tweens.add({ targets: panelEls, scale: 1, alpha: 1, duration: DUR.slow, ease: EASE.back });
+
+        addEl(this.add.text(W/2, H/2 - panelH/2 + 34, 'ЛАВКА ДЯДЮШКИ', {
+            fontFamily: FONT.display, fontSize: '32px',
+            color: hex(C.accent), stroke: hex(C.bgVoid), strokeThickness: 5,
+            fontStyle: '900',
+        }).setOrigin(0.5));
+        addEl(this.add.text(W/2, H/2 - panelH/2 + 62, 'скины · апгрейды',  {
+            fontFamily: FONT.body, fontSize: '12px',
+            color: hex(C.textSecond), fontStyle: 'italic',
+        }).setOrigin(0.5));
+
+        // Balance — premium pill in top right of panel
+        const bal = Progress.getCheese();
+        const balPillW = Math.min(140, 70 + String(bal).length * 12);
+        const balPillX = W/2 + panelW/2 - balPillW/2 - 16;
+        const balPillY = H/2 - panelH/2 + 32;
+        const balG = this.add.graphics().setDepth(D + 2);
+        balG.fillStyle(C.bgDeep, 0.95);
+        balG.fillRoundedRect(balPillX - balPillW/2, balPillY - 18, balPillW, 36, R.pill);
+        balG.lineStyle(STROKE.thin, C.accent, 0.85);
+        balG.strokeRoundedRect(balPillX - balPillW/2, balPillY - 18, balPillW, 36, R.pill);
+        els.push(balG);
+        addEl(this.add.text(balPillX - balPillW/2 + 20, balPillY, '🧀',
+            { fontSize: '20px' }).setOrigin(0.5), D + 3);
+        addEl(this.add.text(balPillX + 12, balPillY, String(bal), {
+            fontFamily: FONT.display, fontSize: '18px',
+            color: hex(C.accentSoft), fontStyle: '700',
+        }).setOrigin(0.5), D + 3);
+
+        // Close — top-left ghost button
+        const closeBtnObj = makeButton(this, W/2 - panelW/2 + 32, H/2 - panelH/2 + 32, 40, 40, '✕', {
+            variant: 'ghost', textSize: '22px', depth: D + 5,
+            clickEvent: 'ui.button.back', onClick: closeModal,
+        });
+        els.push(closeBtnObj.container);
+
+        // Two tabs: Hats and Upgrades. Show both stacked.
+        const colGap = 20;
+        const colW = (panelW - 60) / 2;
+        const leftX = W/2 - panelW/2 + 30;
+        const rightX = leftX + colW + colGap;
+        const topY = H/2 - panelH/2 + 80;
+
+        // === LEFT COLUMN: SKINS (responsive grid) ===
+        addEl(this.add.text(leftX + colW/2, topY, '🐭  СКИНЫ', {
+            fontFamily: FONT.display, fontSize: '20px',
+            color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
+            fontStyle: '700',
+        }).setOrigin(0.5));
+        const skDivL = this.add.graphics(); skDivL.lineStyle(STROKE.hairline, C.accent, 0.45);
+        skDivL.lineBetween(leftX + 8, topY + 22, leftX + colW - 8, topY + 22);
+        skDivL.setDepth(D); els.push(skDivL);
+
+        const isMobile = W < 700;
+        const skinCols = isMobile ? 2 : 3;
+        const skinGap = 10;
+        const cardW = (colW - skinGap * (skinCols - 1)) / skinCols;
+        const cardH = isMobile ? Math.max(120, cardW * 1.0) : Math.max(140, cardW * 1.1);
+        const gridStartY = topY + 36;
+
+        const skinList = Progress.getAllSkins();
+        skinList.forEach((skin, i) => {
+            const col = i % skinCols;
+            const row = Math.floor(i / skinCols);
+            const cx = leftX + col * (cardW + skinGap) + cardW / 2;
+            const cy = gridStartY + row * (cardH + skinGap) + cardH / 2;
+            if (cy + cardH / 2 > H/2 + panelH/2 - 16) return;
+
+            const unlocked = Progress.isSkinUnlocked(skin.id);
+            const current = Progress.getCurrentSkin();
+            const equipped = current.id === skin.id;
+            const bg = unlocked ? (equipped ? 0x1a4030 : C.bgPanelHi) : 0x2a1414;
+            const accentColor = unlocked ? (equipped ? C.success : C.accent) : C.dangerDeep;
+
+            // Card body — rounded with theme styling
+            const cardG = this.add.graphics().setDepth(D + 1);
+            const drawCardBg = (a) => {
+                cardG.clear();
+                cardG.fillStyle(bg, 0.95);
+                cardG.fillRoundedRect(cx - cardW/2 + 1, cy - cardH/2 + 1, cardW - 2, cardH - 2, R.md);
+                cardG.fillStyle(C.surfaceLightTint, 0.05);
+                cardG.fillRoundedRect(cx - cardW/2 + 3, cy - cardH/2 + 3, cardW - 6, (cardH - 6) * 0.45, R.md - 2);
+                cardG.lineStyle(STROKE.thin, accentColor, a);
+                cardG.strokeRoundedRect(cx - cardW/2 + 1, cy - cardH/2 + 1, cardW - 2, cardH - 2, R.md);
+            };
+            drawCardBg(0.85);
+            els.push(cardG);
+            const cardHit = this.add.zone(cx, cy, cardW - 2, cardH - 2)
+                .setInteractive({ useHandCursor: true }).setDepth(D + 4);
+            els.push(cardHit);
+
+            // Name top
+            addEl(this.add.text(cx, cy - cardH/2 + 14, skin.name, {
+                fontFamily: FONT.display, fontSize: '11px',
+                color: hex(C.textPrimary), align: 'center', fontStyle: '700',
+                wordWrap: { width: cardW - 8 }
+            }).setOrigin(0.5, 0), D + 2);
+            // Real skin sprite preview using actual SVG
+            const previewY = cy - cardH * 0.05;
+            const previewKey = (skin.menuKey && this.textures.exists(skin.menuKey)) ? skin.menuKey : 'm_pi';
+            const piPreview = addEl(this.add.image(cx, previewY, previewKey)
+                .setOrigin(0.5, 0.5).setScale(0.32), D + 2);
+            if (skin.id === 'shadow') piPreview.setAlpha(0.85);
+            if (skin.id === 'angel') piPreview.setAlpha(0.95);
+            // Floor of card: pill price/state badge
+            const subText = unlocked ? (equipped ? '✓ НАДЕТ' : 'НАДЕТЬ') : `🧀 ${skin.price}`;
+            const subColor = unlocked ? (equipped ? C.success : C.textPrimary) : C.accent;
+            addEl(this.add.text(cx, cy + cardH/2 - 12, subText, {
+                fontFamily: FONT.body, fontSize: '11px',
+                color: hex(subColor), fontStyle: '700', letterSpacing: 0.5,
+            }).setOrigin(0.5, 1), D + 3);
+
+            cardHit.on('pointerover', () => {
+                drawCardBg(1);
+                this.tweens.add({ targets: piPreview, scale: 0.36, duration: DUR.fast, ease: EASE.out });
+            });
+            cardHit.on('pointerout', () => {
+                drawCardBg(0.85);
+                this.tweens.add({ targets: piPreview, scale: 0.32, duration: DUR.fast, ease: EASE.out });
+            });
+            const card = cardHit;
+
+            card.on('pointerdown', () => {
+                if (!unlocked) {
+                    if (!Progress.spendCheese(skin.price)) {
+                        this.flashNoCheese(W/2, H/2);
+                        return;
+                    }
+                    Progress.unlockSkin(skin.id);
+                }
+                Progress.setSkin(skin.id);
+                els.forEach(e => e.destroy());
+                this.shopOpen = false;
+                this.openShop();
+            });
+        });
+
+        // === RIGHT COLUMN: PERMANENT UPGRADES ===
+        addEl(this.add.text(rightX + colW/2, topY, '💪  АПГРЕЙДЫ', {
+            fontFamily: FONT.display, fontSize: '20px',
+            color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
+            fontStyle: '700',
+        }).setOrigin(0.5));
+        const upDivR = this.add.graphics(); upDivR.lineStyle(STROKE.hairline, C.accent, 0.45);
+        upDivR.lineBetween(rightX + 8, topY + 22, rightX + colW - 8, topY + 22);
+        upDivR.setDepth(D); els.push(upDivR);
+
+        const upgItemH = 70;
+        PERMANENT_UPGRADES.forEach((upg, i) => {
+            const y = topY + 40 + i * (upgItemH + 8);
+            if (y + upgItemH > H/2 + panelH/2 - 20) return;
+            const lvl = Progress.getUpgradeLevel(upg.id);
+            const maxed = lvl >= upg.maxLevel;
+            const bg = maxed ? 0x1a4030 : C.bgPanelHi;
+            const accent = maxed ? C.success : C.accent;
+            // Card body
+            const upCardG = this.add.graphics().setDepth(D + 1);
+            const drawUp = (a) => {
+                upCardG.clear();
+                upCardG.fillStyle(bg, 0.94);
+                upCardG.fillRoundedRect(rightX, y - upgItemH/2, colW, upgItemH, R.md);
+                upCardG.fillStyle(C.surfaceLightTint, 0.05);
+                upCardG.fillRoundedRect(rightX + 2, y - upgItemH/2 + 2, colW - 4, upgItemH * 0.45, R.md - 2);
+                upCardG.lineStyle(STROKE.thin, accent, a);
+                upCardG.strokeRoundedRect(rightX, y - upgItemH/2, colW, upgItemH, R.md);
+            };
+            drawUp(0.85); els.push(upCardG);
+            const card = this.add.zone(rightX + colW/2, y, colW, upgItemH)
+                .setInteractive({ useHandCursor: true }).setDepth(D + 5);
+            els.push(card);
+            card.on('pointerover', () => drawUp(1));
+            card.on('pointerout', () => drawUp(0.85));
+
+            addEl(this.add.text(rightX + 18, y, upg.emoji,
+                { fontSize: '30px' }).setOrigin(0, 0.5), D + 2);
+            addEl(this.add.text(rightX + 60, y - 14, `${upg.name}  (${lvl}/${upg.maxLevel})`, {
+                fontFamily: FONT.display, fontSize: '14px',
+                color: hex(C.textPrimary), fontStyle: '700',
+            }).setOrigin(0, 0.5), D + 2);
+            addEl(this.add.text(rightX + 60, y + 4, upg.desc, {
+                fontFamily: FONT.body, fontSize: '11.5px',
+                color: hex(C.textSecond),
+                wordWrap: { width: colW - 80 }
+            }).setOrigin(0, 0.5), D + 2);
+            const price = maxed ? 'МАКС' : `🧀 ${upg.price}`;
+            addEl(this.add.text(rightX + 60, y + 22, price, {
+                fontFamily: FONT.body, fontSize: '12px',
+                color: maxed ? hex(C.success) : hex(C.accent), fontStyle: '700',
+            }).setOrigin(0, 0.5), D + 2);
+
+            card.on('pointerdown', () => {
+                if (maxed) return;
+                if (Progress.buyUpgrade(upg.id)) {
+                    els.forEach(e => e.destroy());
+                    this.shopOpen = false;
+                    this.openShop();
+                } else {
+                    this.flashNoCheese(W/2, H/2);
+                }
+            });
+        });
+    }
+
+    flashNoCheese(x, y) {
+        const t = this.add.text(x, y, 'Не хватает сыра!', {
+            fontFamily: FONT.display, fontSize: '26px',
+            color: hex(C.danger), stroke: hex(C.bgVoid), strokeThickness: 5,
+            fontStyle: '700',
+        }).setOrigin(0.5).setDepth(3000);
+        try { window.audio?.emit?.('ui.shop.deny'); } catch (e) {}
+        this.tweens.add({
+            targets: t, y: y - 60, alpha: 0, scale: 1.15,
+            duration: 1100, ease: EASE.out, onComplete: () => t.destroy()
+        });
     }
 
     spawnFireflies(W, H) {
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 10; i++) {
             const x = Phaser.Math.Between(100, W - 100);
             const y = Phaser.Math.Between(H * 0.55, H - 200);
             const fly = this.add.circle(x, y, 3, 0xb4ff70, 0.9);
             const glow = this.add.circle(x, y, 8, 0xb4ff70, 0.2);
-
-            const path = () => {
-                const nx = x + Phaser.Math.Between(-150, 150);
-                const ny = y + Phaser.Math.Between(-80, 80);
+            const move = () => {
                 this.tweens.add({
                     targets: [fly, glow],
-                    x: nx,
-                    y: ny,
+                    x: x + Phaser.Math.Between(-150, 150),
+                    y: y + Phaser.Math.Between(-80, 80),
                     duration: Phaser.Math.Between(2500, 4500),
                     ease: 'Sine.easeInOut',
-                    onComplete: path
+                    onComplete: move
                 });
             };
-            path();
-
+            move();
             this.tweens.add({
-                targets: [fly, glow],
-                alpha: 0.2,
+                targets: [fly, glow], alpha: 0.2,
                 duration: Phaser.Math.Between(800, 1400),
-                yoyo: true,
-                repeat: -1
+                yoyo: true, repeat: -1
             });
         }
     }

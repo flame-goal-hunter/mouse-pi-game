@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <style>.outline { stroke: #4a1010; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }</style>
+  </defs>
+  <!-- Devil tail with arrow tip -->
+  <path d="M 152 168 Q 180 165 190 145 Q 195 130 188 115" fill="none" stroke="#c0392b" stroke-width="6" stroke-linecap="round"/>
+  <path d="M 188 115 L 178 105 L 182 118 L 192 108 Z" fill="#c0392b" stroke="#4a1010" stroke-width="2"/>
+  <!-- Feet -->
+  <ellipse cx="78" cy="205" rx="16" ry="9" fill="#a02020" class="outline"/>
+  <ellipse cx="122" cy="205" rx="16" ry="9" fill="#a02020" class="outline"/>
+  <!-- Body (red) -->
+  <ellipse cx="100" cy="160" rx="48" ry="42" fill="#d04030" class="outline"/>
+  <ellipse cx="100" cy="170" rx="28" ry="22" fill="#ff6050"/>
+  <!-- Arms -->
+  <ellipse cx="52" cy="158" rx="11" ry="18" fill="#d04030" class="outline" transform="rotate(-18 52 158)"/>
+  <ellipse cx="148" cy="158" rx="11" ry="18" fill="#d04030" class="outline" transform="rotate(18 148 158)"/>
+  <!-- Ears -->
+  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#d04030" class="outline"/>
+  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#d04030" class="outline"/>
+  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#ff7060"/>
+  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#ff7060"/>
+  <!-- Head -->
+  <circle cx="100" cy="102" r="43" fill="#d04030" class="outline"/>
+  <!-- BIG DEVIL HORNS (curved, pointed) -->
+  <path d="M 76 70 Q 65 45 60 25 Q 70 30 78 50 Q 82 60 84 70 Z" fill="#4a1010" class="outline"/>
+  <path d="M 124 70 Q 135 45 140 25 Q 130 30 122 50 Q 118 60 116 70 Z" fill="#4a1010" class="outline"/>
+  <!-- Horn shines -->
+  <path d="M 64 35 Q 70 40 74 50" stroke="#a04040" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M 136 35 Q 130 40 126 50" stroke="#a04040" stroke-width="2" fill="none" opacity="0.5"/>
+  <!-- Mischievous angled eyebrows -->
+  <path d="M 78 100 L 92 96" stroke="#4a1010" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 122 100 L 108 96" stroke="#4a1010" stroke-width="3" stroke-linecap="round"/>
+  <!-- Cheeks (devilish blush) -->
+  <circle cx="76" cy="118" r="6" fill="#ff8060" opacity="0.7"/>
+  <circle cx="124" cy="118" r="6" fill="#ff8060" opacity="0.7"/>
+  <!-- Eyes (yellow glow) -->
+  <circle cx="86" cy="110" r="6" fill="#ffd040"/>
+  <circle cx="114" cy="110" r="6" fill="#ffd040"/>
+  <circle cx="86" cy="110" r="3" fill="#1a1a1a"/>
+  <circle cx="114" cy="110" r="3" fill="#1a1a1a"/>
+  <circle cx="88" cy="108" r="1" fill="#ffffff"/>
+  <circle cx="116" cy="108" r="1" fill="#ffffff"/>
+  <!-- Nose -->
+  <ellipse cx="100" cy="124" rx="5" ry="4" fill="#4a1010" class="outline" stroke-width="2"/>
+  <!-- Smirk -->
+  <path d="M 90 134 Q 100 142 110 132" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Tiny fangs -->
+  <path d="M 95 138 L 94 144 L 96 138" fill="#ffffff" stroke="#1a1a1a" stroke-width="1"/>
+  <path d="M 105 138 L 106 144 L 104 138" fill="#ffffff" stroke="#1a1a1a" stroke-width="1"/>
+</svg>

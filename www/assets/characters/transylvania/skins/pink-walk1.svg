@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <style>.outline { stroke: #5a1a3a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }</style>
+  </defs>
+  <!-- Tail -->
+  <path d="M 152 152 Q 178 148 182 125 Q 184 110 175 105" fill="none" stroke="#e060a0" stroke-width="5" stroke-linecap="round"/>
+  <!-- Feet -->
+  <ellipse cx="72" cy="198" rx="16" ry="9" fill="#ff70b0" class="outline"/>
+  <ellipse cx="128" cy="212" rx="16" ry="9" fill="#e15292" class="outline"/>
+  <!-- Body (pink) -->
+  <ellipse cx="100" cy="160" rx="48" ry="42" fill="#ff9ec7" class="outline"/>
+  <ellipse cx="100" cy="170" rx="28" ry="22" fill="#ffd8ec"/>
+  <!-- Arms -->
+  <ellipse cx="50" cy="160" rx="11" ry="18" fill="#ff9ec7" class="outline" transform="rotate(-26 50 160)"/>
+  <ellipse cx="150" cy="156" rx="11" ry="18" fill="#ff9ec7" class="outline" transform="rotate(10 150 156)"/>
+  <!-- Ears -->
+  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#ff9ec7" class="outline"/>
+  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#ff9ec7" class="outline"/>
+  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#ffc5dc"/>
+  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#ffc5dc"/>
+  <!-- Head -->
+  <circle cx="100" cy="102" r="43" fill="#ff9ec7" class="outline"/>
+  <!-- Big pink bow on top of head -->
+  <path d="M 100 56 Q 70 40 64 56 Q 60 70 88 64 Z" fill="#ff4080" class="outline"/>
+  <path d="M 100 56 Q 130 40 136 56 Q 140 70 112 64 Z" fill="#ff4080" class="outline"/>
+  <circle cx="100" cy="60" r="7" fill="#ff4080" class="outline"/>
+  <circle cx="100" cy="60" r="3" fill="#ffe0e0"/>
+  <!-- Pink hearts decoration on cheeks -->
+  <path d="M 70 116 L 67 113 Q 64 110 67 108 Q 70 108 70 110 Q 70 108 73 108 Q 76 110 73 113 Z" fill="#ff4080"/>
+  <path d="M 130 116 L 127 113 Q 124 110 127 108 Q 130 108 130 110 Q 130 108 133 108 Q 136 110 133 113 Z" fill="#ff4080"/>
+  <!-- Eyes (sparkly) -->
+  <circle cx="86" cy="108" r="6" fill="#1a1a1a"/>
+  <circle cx="114" cy="108" r="6" fill="#1a1a1a"/>
+  <circle cx="88" cy="106" r="2.5" fill="#ffffff"/>
+  <circle cx="116" cy="106" r="2.5" fill="#ffffff"/>
+  <circle cx="83" cy="110" r="1" fill="#ffffff"/>
+  <circle cx="111" cy="110" r="1" fill="#ffffff"/>
+  <!-- Nose -->
+  <ellipse cx="100" cy="124" rx="5" ry="4" fill="#ff4080" class="outline" stroke-width="2"/>
+  <!-- Mouth (smile) -->
+  <path d="M 90 132 Q 100 140 110 132" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Whiskers -->
+  <path d="M 78 127 L 56 124" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 78 131 L 56 133" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 122 127 L 144 124" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M 122 131 L 144 133" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

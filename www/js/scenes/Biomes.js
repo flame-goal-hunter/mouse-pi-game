@@ -1,0 +1,196 @@
+// ============================================
+// BIOMES — visuals, mechanics, decorations, particles per floor
+// Each biome should *feel* different — colors, atmosphere, enemy types,
+// what hurts you, what you can interact with.
+// ============================================
+
+export const BIOMES = [
+    // Floor 1 — Подземелье (baseline)
+    {
+        id: 'dungeon',
+        name: 'Подземелье',
+        icon: '🏰',
+        ambient: 'Тёмное каменное подземелье графа',
+        floorColorA: 0x181020, floorColorB: 0x1c1428,
+        gridColor:   0x080410,
+        wallFill:    0x2a182a, wallShadow: 0x100410, wallHighlight: 0x3d2440,
+        // Unified moderate darkness — lantern always matters; color varies per biome
+        darknessColor: 0x080418, darknessAlpha: 0.76,
+        decorWeights: [
+            { type: 'mushroom', w: 3 },
+            { type: 'bone',     w: 3 },
+            { type: 'cobweb',   w: 1 },
+            { type: 'skull',    w: 2 },
+            { type: 'chain',    w: 1 }
+        ],
+        enemyWeights: { zombie: 2, cat: 1, slime: 1, bat: 0 },
+        mechanic: null,
+        hazardTile: null,
+        particles: { type: 'drip', color: 0x80a0c0, count: 6, riseSpeed: -50 },
+        roomConfig: { targetCount: 14, minSize: 280, maxSize: 480, pad: 90 },
+        // Stealth: gentle intro on floor 1+. Only sleeping zombies have cones.
+        coneEnemyKinds: ['zombie'],
+        stealthRoomsPerFloor: 1,
+        stealthFlavor: 'sleeper',
+        enemyDensityMul: 1.0,
+        ambientCloud: null,
+        bgm: 'bgm:dungeon'
+    },
+    // Floor 2 — Кухня графа (cherry warm tile + chef shenanigans)
+    {
+        id: 'kitchen',
+        name: 'Кухня графа',
+        icon: '🍳',
+        ambient: 'Жаркая кухня — пар, плиты, разбитая посуда',
+        floorColorA: 0x2a1810, floorColorB: 0x301c10,
+        gridColor:   0x180a04,
+        wallFill:    0x4a3020, wallShadow: 0x1a0c04, wallHighlight: 0x6a4828,
+        // Warm orange tinted darkness — kitchen feel
+        darknessColor: 0x3a1808, darknessAlpha: 0.76,
+        decorWeights: [
+            { type: 'pot',     w: 3 },
+            { type: 'plate',   w: 3 },
+            { type: 'knife',   w: 1 },
+            { type: 'sack',    w: 3 },   // shootable flour sack — kitchen rebuild
+            { type: 'flourCloud', w: 0 } // dynamic spawn from sack hit, not random decor
+        ],
+        enemyWeights: { zombie: 0, cat: 1, chef: 3, slime: 0, bat: 1 },  // signature Chef-cat
+        mechanic: 'butter',
+        hazardTile: 'hotpan',
+        particles: { type: 'steam', color: 0xe8d8c0, count: 14, riseSpeed: 32 },
+        roomConfig: { targetCount: 10, minSize: 320, maxSize: 540, pad: 110 },
+        // Stealth: chef turns periodically — timed window
+        coneEnemyKinds: ['chef'],
+        stealthRoomsPerFloor: 1,
+        stealthFlavor: 'chef-timed',
+        enemyDensityMul: 0.95,
+        ambientCloud: { type: 'steam', color: 0xe0e0e0, slowFactor: 0.85, intervalMs: [3500, 5500] },
+        bgm: 'bgm:kitchen'
+    },
+    // Floor 3 — Библиотека (dedicated stealth floor, but BALANCED)
+    {
+        id: 'library',
+        name: 'Библиотека',
+        icon: '📚',
+        ambient: 'Полки до потолка, шёпот призраков, парящие свитки',
+        floorColorA: 0x0c0a1a, floorColorB: 0x10102a,
+        gridColor:   0x040408,
+        wallFill:    0x4a2a14, wallShadow: 0x1a0a02, wallHighlight: 0x6a3a1c,
+        // Cool blue-black tinted darkness — library feel
+        darknessColor: 0x0a0a20, darknessAlpha: 0.76,
+        decorWeights: [
+            { type: 'book',      w: 5 },
+            { type: 'scroll',    w: 3 },
+            { type: 'inkwell',   w: 2 },
+            { type: 'bookshelf', w: 4 },  // cover prop
+            { type: 'forbiddenBook', w: 0 } // dynamic spawn — 3 per floor in stealth rooms
+        ],
+        enemyWeights: { librarian: 3, bat: 1 },  // Librarian has cone, bat does NOT
+        mechanic: null,
+        hazardTile: null,
+        particles: { type: 'dust', color: 0xc0c0e0, count: 18, riseSpeed: 12 },
+        // Smaller library: 1 wide nave + 4-6 alcoves
+        roomConfig: { targetCount: 11, minSize: 260, maxSize: 420, pad: 80 },
+        // Library = dedicated stealth biome — multiple rooms, librarian gets cones
+        coneEnemyKinds: ['librarian'],
+        stealthRoomsPerFloor: 4,
+        stealthFlavor: 'reader-patrol',
+        enemyDensityMul: 0.55,
+        ambientCloud: null,
+        bgm: 'bgm:library'
+    },
+    // Floor 4 — Зимний сад
+    {
+        id: 'garden',
+        name: 'Зимний сад',
+        icon: '🌿',
+        ambient: 'Лунный сад с лозами и хищными цветами',
+        floorColorA: 0x0e2230, floorColorB: 0x142838,
+        gridColor:   0x040c08,
+        wallFill:    0x1a4438, wallShadow: 0x0a1c14, wallHighlight: 0x305840,
+        // Green-tinted moonlit darkness — garden feel
+        darknessColor: 0x081810, darknessAlpha: 0.76,
+        decorWeights: [
+            { type: 'moonflower', w: 3 },
+            { type: 'glowpod',    w: 2 },
+            { type: 'hedge_tuft', w: 3 },
+            { type: 'lilypad',    w: 1 }
+        ],
+        enemyWeights: { cat: 1, slime: 1, bat: 1, snapdragon: 3 },  // signature snapdragon
+        mechanic: 'vines',
+        hazardTile: 'thorn',
+        particles: { type: 'pollen', color: 0xffb0e0, count: 14, riseSpeed: 6 },
+        roomConfig: { targetCount: 12, minSize: 320, maxSize: 500, pad: 100 },
+        // Garden stealth: snapdragons have arc-sweep cone
+        coneEnemyKinds: ['snapdragon'],
+        stealthRoomsPerFloor: 2,
+        stealthFlavor: 'flower-arc',
+        enemyDensityMul: 0.7,
+        ambientCloud: { type: 'pollen', color: 0xd0ff80, slowFactor: 0.85, intervalMs: [4000, 7000] },
+        bgm: 'bgm:garden'
+    },
+    // Floor 5 — Тронный зал
+    {
+        id: 'throne',
+        name: 'Тронный зал',
+        icon: '👑',
+        ambient: 'Тронный зал графа Ратулы. Бабушка здесь!',
+        floorColorA: 0x1a0814, floorColorB: 0x200a18,
+        gridColor:   0xffd060,
+        wallFill:    0x4a0a18, wallShadow: 0x180408, wallHighlight: 0x7a1830,
+        // Crimson-tinted darkness — throne feel
+        darknessColor: 0x180408, darknessAlpha: 0.76,
+        decorWeights: [
+            { type: 'goblet',     w: 3 },
+            { type: 'bone',       w: 2 },
+            { type: 'redCarpet',  w: 2 },
+            { type: 'chain',      w: 1 },
+            { type: 'candelabra', w: 0 }  // 4 placed explicitly in arena
+        ],
+        enemyWeights: { bat: 3, skeleton: 2 },  // boss arena: bats + skeletons
+        mechanic: null,
+        hazardTile: null,
+        particles: { type: 'embers', color: 0xff6020, count: 12, riseSpeed: 25 },
+        roomConfig: { targetCount: 7, minSize: 360, maxSize: 600, pad: 130 },
+        // Throne is boss focus, optional one stealth room
+        coneEnemyKinds: ['skeleton'],
+        stealthRoomsPerFloor: 0,
+        stealthFlavor: 'bat-patrol',
+        enemyDensityMul: 0.6,
+        ambientCloud: null,
+        bgm: 'bgm:throne'
+    }
+];
+
+export function biomeForFloor(floor) {
+    return BIOMES[(floor - 1) % BIOMES.length] || BIOMES[0];
+}
+
+// Pick weighted random key from {key: weight} map
+export function weightedPick(weights) {
+    const entries = Object.entries(weights).filter(([_, w]) => w > 0);
+    if (entries.length === 0) return null;
+    let total = 0;
+    for (const [, w] of entries) total += w;
+    let roll = Math.random() * total;
+    for (const [key, w] of entries) {
+        roll -= w;
+        if (roll <= 0) return key;
+    }
+    return entries[entries.length - 1][0];
+}
+
+// Pick a weighted decoration type from list of {type, w}
+export function pickDecor(list) {
+    if (!list || list.length === 0) return null;
+    const filtered = list.filter(d => d.w > 0);
+    if (filtered.length === 0) return null;
+    let total = 0;
+    for (const d of filtered) total += d.w;
+    let roll = Math.random() * total;
+    for (const d of filtered) {
+        roll -= d.w;
+        if (roll <= 0) return d.type;
+    }
+    return filtered[filtered.length - 1].type;
+}

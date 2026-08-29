@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#1d0b2e">
+    <title>Замок Теней — Мышонок Пи</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="transylvania-menu.css">
+</head>
+<body>
+    <div id="sky"></div>
+    <div id="moon"></div>
+    <div id="moon-glow"></div>
+    <div id="fog"></div>
+
+    <main id="app">
+        <!-- HEADER -->
+        <header id="header">
+            <button id="btn-back" class="btn btn-ghost" type="button" aria-label="Назад в меню">
+                <span class="icon">&#8249;</span>
+                <span class="label">Меню</span>
+            </button>
+            <div id="balance-pill" class="pill" aria-label="Баланс сыра">
+                <span class="cheese-icon" aria-hidden="true">&#129472;</span>
+                <span id="balance-value">0</span>
+            </div>
+        </header>
+
+        <!-- TITLE BLOCK -->
+        <section id="title-block">
+            <h1 id="title">ЗАМОК ТЕНЕЙ</h1>
+            <div class="divider">
+                <span class="line"></span>
+                <span class="diamond"></span>
+                <span class="line"></span>
+            </div>
+            <p id="subtitle">мрачное приключение</p>
+        </section>
+
+        <!-- HERO -->
+        <section id="hero">
+            <div id="hero-shadow"></div>
+            <img id="hero-sprite" alt="Текущий скин" src="assets/characters/transylvania/pi.svg">
+            <div id="hero-pill" class="pill">
+                <span id="hero-accent" aria-hidden="true"></span>
+                <span id="hero-name">Мышонок Пи</span>
+            </div>
+        </section>
+
+        <!-- MODE CARDS -->
+        <section id="mode-cards">
+            <button id="card-story" class="mode-card mode-card-story" type="button">
+                <span class="card-stripe"></span>
+                <span class="card-icon" aria-hidden="true">&#128117;</span>
+                <span class="card-text">
+                    <span class="card-title">СПАСТИ БАБУШКУ</span>
+                    <span class="card-hint" id="story-hint">5 этажей &middot; босс &middot; спасение</span>
+                </span>
+                <span class="card-chevron" aria-hidden="true">&#8250;</span>
+            </button>
+
+            <button id="card-endless" class="mode-card mode-card-endless" type="button">
+                <span class="card-stripe"></span>
+                <span class="card-icon" aria-hidden="true">&#8734;</span>
+                <span class="card-text">
+                    <span class="card-title">БЕСКОНЕЧНЫЙ СПУСК</span>
+                    <span class="card-hint" id="endless-hint">Спускайся вечно &middot; растущая сложность</span>
+                </span>
+                <span class="card-chevron" aria-hidden="true">&#8250;</span>
+            </button>
+        </section>
+
+        <!-- FOOTER -->
+        <footer id="footer">
+            <button id="btn-shop" class="footer-btn" type="button">
+                <span class="icon" aria-hidden="true">&#127978;</span>
+                <span class="label">ЛАВКА</span>
+            </button>
+            <button id="btn-codex" class="footer-btn" type="button">
+                <span class="icon" aria-hidden="true">&#128220;</span>
+                <span class="label">КОДЕКС</span>
+            </button>
+        </footer>
+    </main>
+
+    <!-- SHOP MODAL -->
+    <div id="shop-modal" class="modal" style="display:none;" aria-hidden="true">
+        <div class="modal-backdrop" data-close="shop"></div>
+        <div class="modal-panel modal-panel-shop" role="dialog" aria-labelledby="shop-title">
+            <header class="modal-header">
+                <div class="modal-title-block">
+                    <h2 id="shop-title" class="modal-title shop-title">ЛАВКА ДЯДЮШКИ</h2>
+                    <p class="modal-subtitle">скины &middot; апгрейды</p>
+                </div>
+                <div class="pill modal-balance">
+                    <span class="cheese-icon" aria-hidden="true">&#129472;</span>
+                    <span id="shop-balance-value">0</span>
+                </div>
+                <button class="btn-close" type="button" data-close="shop" aria-label="Закрыть">&#10005;</button>
+            </header>
+            <div class="modal-body modal-body-two-col">
+                <section class="modal-col">
+                    <h3 class="col-header"><span aria-hidden="true">&#128045;</span> СКИНЫ</h3>
+                    <div class="col-divider"></div>
+                    <div id="skin-grid" class="skin-grid"></div>
+                </section>
+                <section class="modal-col">
+                    <h3 class="col-header"><span aria-hidden="true">&#128170;</span> АПГРЕЙДЫ</h3>
+                    <div class="col-divider"></div>
+                    <div id="upgrade-list" class="upgrade-list"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- CODEX MODAL -->
+    <div id="codex-modal" class="modal" style="display:none;" aria-hidden="true">
+        <div class="modal-backdrop" data-close="codex"></div>
+        <div class="modal-panel modal-panel-codex" role="dialog" aria-labelledby="codex-title">
+            <header class="modal-header">
+                <div class="modal-title-block">
+                    <h2 id="codex-title" class="modal-title codex-title">КОДЕКС</h2>
+                    <p class="modal-subtitle">летопись подземелья</p>
+                </div>
+                <button class="btn-close" type="button" data-close="codex" aria-label="Закрыть">&#10005;</button>
+            </header>
+            <div class="modal-body modal-body-two-col">
+                <section class="modal-col">
+                    <h3 class="col-header"><span aria-hidden="true">&#128065;</span> БЕСТИАРИЙ</h3>
+                    <div class="col-divider"></div>
+                    <div id="bestiary-list" class="bestiary-list"></div>
+                </section>
+                <section class="modal-col">
+                    <h3 class="col-header"><span aria-hidden="true">&#127942;</span> ЛЕТОПИСЬ</h3>
+                    <div class="col-divider"></div>
+                    <div id="stats-block" class="stats-block"></div>
+                    <h3 class="col-header col-header-sub"><span aria-hidden="true">&#127942;</span> ДОСТИЖЕНИЯ</h3>
+                    <div class="col-divider"></div>
+                    <div id="achievements-list" class="achievements-list"></div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script type="module" src="transylvania-menu.js"></script>
+</body>
+</html>

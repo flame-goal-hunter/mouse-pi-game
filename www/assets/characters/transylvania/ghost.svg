@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" width="200" height="240">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <radialGradient id="ghBody" cx="50%" cy="30%" r="80%">
+      <stop offset="0%"  stop-color="#f0e8ff" stop-opacity="0.92"/>
+      <stop offset="60%" stop-color="#c0b0e0" stop-opacity="0.78"/>
+      <stop offset="100%" stop-color="#8060a0" stop-opacity="0.55"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Wispy bottom tendrils -->
+  <path d="M 28 200 Q 22 220 36 232 Q 50 222 56 240
+           Q 70 222 80 232 Q 94 218 102 238
+           Q 112 218 124 232 Q 138 220 148 240
+           Q 162 222 172 232 Q 178 218 172 200 Z"
+        fill="url(#ghBody)" class="outline"/>
+
+  <!-- Main ghost body -->
+  <path d="M 38 110 Q 30 50 100 30 Q 170 50 162 110 L 172 210 Q 100 200 28 210 Z"
+        fill="url(#ghBody)" class="outline"/>
+
+  <!-- Arms (wispy) -->
+  <ellipse cx="40" cy="130" rx="14" ry="22" fill="url(#ghBody)" class="outline" transform="rotate(-15 40 130)"/>
+  <ellipse cx="160" cy="130" rx="14" ry="22" fill="url(#ghBody)" class="outline" transform="rotate(15 160 130)"/>
+
+  <!-- Inner glow swirl -->
+  <ellipse cx="100" cy="120" rx="48" ry="60" fill="#ffffff" opacity="0.15"/>
+
+  <!-- Eyes — hollow with glow -->
+  <ellipse cx="78" cy="100" rx="11" ry="14" fill="#1a0820" class="outline"/>
+  <ellipse cx="122" cy="100" rx="11" ry="14" fill="#1a0820" class="outline"/>
+  <ellipse cx="78" cy="104" rx="6" ry="8" fill="#a0e0ff" opacity="0.9"/>
+  <ellipse cx="122" cy="104" rx="6" ry="8" fill="#a0e0ff" opacity="0.9"/>
+  <circle cx="78" cy="100" r="2" fill="#1a1a1a"/>
+  <circle cx="122" cy="100" r="2" fill="#1a1a1a"/>
+
+  <!-- Mouth — Halloween-style 'O' moan -->
+  <ellipse cx="100" cy="140" rx="14" ry="20" fill="#1a0820" class="outline"/>
+  <ellipse cx="100" cy="145" rx="8" ry="12" fill="#3a1840"/>
+
+  <!-- Spectral wisps around the body -->
+  <circle cx="20" cy="80" r="3" fill="#a0e0ff" opacity="0.6"/>
+  <circle cx="180" cy="75" r="2.5" fill="#a0e0ff" opacity="0.6"/>
+  <circle cx="15" cy="130" r="2" fill="#a0e0ff" opacity="0.5"/>
+  <circle cx="185" cy="135" r="2.5" fill="#a0e0ff" opacity="0.55"/>
+</svg>

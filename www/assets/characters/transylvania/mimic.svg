@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a0a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <linearGradient id="mimicWood" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#8a5028"/>
+      <stop offset="100%" stop-color="#4a2810"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Wood texture lines -->
+  <rect x="22" y="60" width="156" height="120" fill="url(#mimicWood)" class="outline"/>
+  <line x1="30" y1="80" x2="170" y2="80" stroke="#3a2008" stroke-width="2"/>
+  <line x1="30" y1="100" x2="170" y2="100" stroke="#3a2008" stroke-width="2"/>
+  <line x1="30" y1="140" x2="170" y2="140" stroke="#3a2008" stroke-width="2"/>
+  <line x1="30" y1="160" x2="170" y2="160" stroke="#3a2008" stroke-width="2"/>
+
+  <!-- Lid (open as mouth) -->
+  <path d="M 22 60 Q 22 30 50 28 L 150 28 Q 178 30 178 60 L 178 70 Q 178 56 168 56 Q 32 56 32 56 Q 22 56 22 70 Z"
+        fill="url(#mimicWood)" class="outline"/>
+
+  <!-- Open mouth interior -->
+  <path d="M 32 56 Q 100 86 168 56 L 168 78 Q 100 100 32 78 Z"
+        fill="#1a0408" class="outline"/>
+
+  <!-- Top fangs (lid teeth) -->
+  <path d="M 40 56 L 44 70 L 48 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 60 56 L 64 72 L 68 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 80 56 L 84 70 L 88 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 100 56 L 104 74 L 108 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 120 56 L 124 70 L 128 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 140 56 L 144 72 L 148 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 160 56 L 164 68 L 168 56 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+
+  <!-- Bottom fangs -->
+  <path d="M 40 78 L 44 64 L 48 78 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 60 80 L 64 64 L 68 80 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 100 82 L 104 64 L 108 82 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+  <path d="M 140 80 L 144 64 L 148 80 Z" fill="#f0e0c0" class="outline" stroke-width="1.5"/>
+
+  <!-- Long pink tongue inside -->
+  <path d="M 80 80 Q 100 110 120 80 Q 110 96 105 80 Q 100 90 95 80 Q 90 96 80 80"
+        fill="#d04060" stroke="#5a1020" stroke-width="1.5"/>
+
+  <!-- Two glowing eyes inside the mouth -->
+  <circle cx="68" cy="68" r="5" fill="#ffd040"/>
+  <circle cx="68" cy="68" r="2.5" fill="#1a1a1a"/>
+  <circle cx="132" cy="68" r="5" fill="#ffd040"/>
+  <circle cx="132" cy="68" r="2.5" fill="#1a1a1a"/>
+
+  <!-- Gold lock (broken in half — disguise) -->
+  <rect x="92" y="98" width="16" height="14" fill="#d4a830" class="outline" stroke-width="2"/>
+  <circle cx="100" cy="96" r="6" fill="none" stroke="#d4a830" stroke-width="2"/>
+
+  <!-- Metal corners -->
+  <rect x="22" y="58" width="14" height="14" fill="#4a4a4a" class="outline" stroke-width="2"/>
+  <rect x="164" y="58" width="14" height="14" fill="#4a4a4a" class="outline" stroke-width="2"/>
+  <rect x="22" y="166" width="14" height="14" fill="#4a4a4a" class="outline" stroke-width="2"/>
+  <rect x="164" y="166" width="14" height="14" fill="#4a4a4a" class="outline" stroke-width="2"/>
+</svg>

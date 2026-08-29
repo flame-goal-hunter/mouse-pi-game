@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160">
+  <defs>
+    <style>
+      .outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+    <radialGradient id="batBody" cx="50%" cy="40%" r="60%">
+      <stop offset="0%"  stop-color="#6a4080"/>
+      <stop offset="100%" stop-color="#3a2050"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Left wing (zigzag bat wing) -->
+  <path d="M 60 80 Q 30 50 8 60 L 18 75 L 4 82 L 22 90 L 14 102 L 36 96 L 48 110 L 60 90 Z"
+        fill="url(#batBody)" class="outline"/>
+
+  <!-- Right wing -->
+  <path d="M 140 80 Q 170 50 192 60 L 182 75 L 196 82 L 178 90 L 186 102 L 164 96 L 152 110 L 140 90 Z"
+        fill="url(#batBody)" class="outline"/>
+
+  <!-- Body (round) -->
+  <ellipse cx="100" cy="90" rx="28" ry="34" fill="url(#batBody)" class="outline"/>
+
+  <!-- Ears (pointy) -->
+  <path d="M 76 58 L 70 30 L 86 50 Z" fill="#5a3070" class="outline"/>
+  <path d="M 124 58 L 130 30 L 114 50 Z" fill="#5a3070" class="outline"/>
+
+  <!-- Head -->
+  <ellipse cx="100" cy="64" rx="26" ry="22" fill="url(#batBody)" class="outline"/>
+
+  <!-- Big glowing red eyes -->
+  <circle cx="88" cy="62" r="9" fill="#ffffff" class="outline" stroke-width="2"/>
+  <circle cx="112" cy="62" r="9" fill="#ffffff" class="outline" stroke-width="2"/>
+  <circle cx="89" cy="63" r="5" fill="#ff3030"/>
+  <circle cx="113" cy="63" r="5" fill="#ff3030"/>
+  <circle cx="90" cy="61" r="2" fill="#ffffff"/>
+  <circle cx="114" cy="61" r="2" fill="#ffffff"/>
+
+  <!-- Fangs -->
+  <path d="M 92 78 L 95 78 L 93.5 86 Z" fill="#ffffff" class="outline" stroke-width="2"/>
+  <path d="M 105 78 L 108 78 L 106.5 86 Z" fill="#ffffff" class="outline" stroke-width="2"/>
+
+  <!-- Tiny nose -->
+  <ellipse cx="100" cy="74" rx="2" ry="1.5" fill="#1a1a1a"/>
+
+  <!-- Body fur shading -->
+  <path d="M 86 95 Q 100 110 114 95" fill="none" stroke="#1a1a1a" stroke-width="1.5" opacity="0.5"/>
+</svg>
