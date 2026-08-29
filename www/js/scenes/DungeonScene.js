@@ -309,6 +309,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         // Crosshair tracks mouse only when mouse was actually used (not on pure-touch sessions)
         this.updateCrosshair();
+        this.updateLighting();
         if (this.state !== 'play') return;
         // Substep physics so low FPS doesn't make Pi crawl
         const totalDt = Math.min(dtMs, 200) / 1000;
@@ -330,8 +331,6 @@ export class DungeonScene extends Phaser.Scene {
         this.updateSnapdragons(totalDt);
         this.updateCandelabras(totalDt);
         this.updateSpookyEyes();
-        this._lightFrameTick = (this._lightFrameTick || 0) + 1;
-        if (this._lightFrameTick % 2 === 0) this.updateLighting();
         if (this.dashBtnBase && this.dashBtnBase.visible) this.updateDashButton();
         this.updateHUD();
         if (this.player.hp <= 0) this.lose();
@@ -343,26 +342,22 @@ export class DungeonScene extends Phaser.Scene {
     setupLighting() {
         this.createLightTextures();
 
-        // Reusable sprites for drawing lights to the RenderTexture
+        // Reusable sprites for stamping lights into the RT
         this._radialLight = this.add.image(-9999, -9999, 'lightRadial')
             .setOrigin(0.5).setVisible(false);
         this._coneLight = this.add.image(-9999, -9999, 'lightCone')
             .setOrigin(0, 0.5).setVisible(false);
 
-        // Dark overlay — colored by biome, alpha by biome
+        // Camera-sized darkness RT (screen space). We fill it with the biome
+        // darkness color and ERASE light shapes out of it each frame.
+        // Replaces: world-sized 2600×1900 RT (~20 MB) + inverted BitmapMask
+        // (2 extra full-screen passes per frame).
         const b = this.biome || { darknessColor: 0x080418, darknessAlpha: 0.78 };
-        this.darkness = this.add.graphics();
-        this.darkness.fillStyle(b.darknessColor, 1);
-        this.darkness.fillRect(-200, -200, WORLD_W + 400, WORLD_H + 400);
-        this.darkness.setDepth(700);
-        this.darkness.setAlpha(b.darknessAlpha != null ? b.darknessAlpha : 0.78);
-
-        // RenderTexture for all light sprites — used as bitmap mask source
-        this.lightRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H);
-        this.lightRT.setOrigin(0).setVisible(false);
-        const mask = this.lightRT.createBitmapMask();
-        mask.invertAlpha = true;
-        this.darkness.setMask(mask);
+        const cam = this.cameras.main;
+        this._darknessColor = b.darknessColor;
+        this.lightRT = this.add.renderTexture(0, 0, cam.width, cam.height)
+            .setOrigin(0).setScrollFactor(0).setDepth(700);
+        this.lightRT.setAlpha(b.darknessAlpha != null ? b.darknessAlpha : 0.78);
 
         // Player's aim angle (for cone direction) - initialized to right
         this.player.aimAngle = 0;
@@ -409,54 +404,61 @@ export class DungeonScene extends Phaser.Scene {
 
     updateLighting() {
         if (!this.lightRT) return;
-        this.lightRT.clear();
-
         const cam = this.cameras.main;
-        const margin = 130;  // tightened from 200 — torch baseRadius max ~125, this saves off-screen draws
+        const rt = this.lightRT;
+        // Scale.RESIZE can change the canvas at any time (Android URL bar)
+        if (rt.width !== cam.width || rt.height !== cam.height) {
+            rt.resize(cam.width, cam.height);
+        }
+        rt.fill(this._darknessColor, 1);
+        // NOTE: screen-space math assumes cam.zoom === 1 (this scene never zooms)
+        const ox = cam.scrollX, oy = cam.scrollY;
+        const margin = 130;
         const inView = (x, y, r) =>
-            x + r + margin >= cam.scrollX &&
-            x - r - margin <= cam.scrollX + cam.width &&
-            y + r + margin >= cam.scrollY &&
-            y - r - margin <= cam.scrollY + cam.height;
+            x + r + margin >= ox && x - r - margin <= ox + cam.width &&
+            y + r + margin >= oy && y - r - margin <= oy + cam.height;
 
-        // 1. Pi's directional flashlight cone — bigger so daytime play is comfortable
+        rt.beginDraw();
+
+        // 1. Pi's directional flashlight cone
         const flicker = 1 + Math.sin(this.time.now * 0.012) * 0.04 + (Math.random() - 0.5) * 0.03;
         const coneLen = 620 * flicker;
         const coneH = 480 * (coneLen / 512);
-        this._coneLight.setPosition(this.player.x, this.player.y);
+        this._coneLight.setPosition(this.player.x - ox, this.player.y - oy);
         this._coneLight.setRotation(this.player.aimAngle || 0);
         this._coneLight.setScale(coneLen / 512, coneH / 480);
-        this.lightRT.draw(this._coneLight);
+        rt.batchDraw(this._coneLight);
 
-        // 2. Ambient halo around Pi — bigger, so he can always see his immediate vicinity
+        // 2. Ambient halo around Pi
         const haloFlicker = 1 + Math.sin(this.time.now * 0.015 + 1.3) * 0.06;
-        this._radialLight.setPosition(this.player.x, this.player.y);
+        this._radialLight.setPosition(this.player.x - ox, this.player.y - oy);
         this._radialLight.setScale((220 * haloFlicker) / 256);
-        this.lightRT.draw(this._radialLight);
+        rt.batchDraw(this._radialLight);
 
-        // 3. Torches in view — strong warm pools with individual flicker
+        // 3. Torches in view
         for (const t of this.torches) {
             if (!t.lit) continue;
             if (!inView(t.x, t.y, t.baseRadius)) continue;
-            // Each torch flickers independently
             const tf = 1 + Math.sin(this.time.now * 0.014 + t.flickerPhase) * 0.10
                          + Math.cos(this.time.now * 0.022 + t.flickerPhase) * 0.05;
             const r = t.baseRadius * tf;
-            this._radialLight.setPosition(t.x, t.y);
+            this._radialLight.setPosition(t.x - ox, t.y - oy);
             this._radialLight.setScale((r * 2) / 256);
-            this.lightRT.draw(this._radialLight);
+            rt.batchDraw(this._radialLight);
         }
 
-        // 4. Exit door + key (quest markers, smaller glow)
+        // 4. Exit door + key quest markers
         if (this.exit && inView(this.exit.x, this.exit.y, 90)) {
-            this._radialLight.setPosition(this.exit.x, this.exit.y).setScale(180 / 256);
-            this.lightRT.draw(this._radialLight);
+            this._radialLight.setPosition(this.exit.x - ox, this.exit.y - oy).setScale(180 / 256);
+            rt.batchDraw(this._radialLight);
         }
         if (this.keyPickup && !this.keyPickup.taken &&
             inView(this.keyPickup.x, this.keyPickup.y, 85)) {
-            this._radialLight.setPosition(this.keyPickup.x, this.keyPickup.y).setScale(170 / 256);
-            this.lightRT.draw(this._radialLight);
+            this._radialLight.setPosition(this.keyPickup.x - ox, this.keyPickup.y - oy).setScale(170 / 256);
+            rt.batchDraw(this._radialLight);
         }
+
+        rt.endDraw(true);
     }
 
     updateTorches(dt) {
