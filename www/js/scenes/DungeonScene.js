@@ -24,9 +24,10 @@ const SHAKE_CFG = {
     huge:{ dur: 380, amt: 0.026 },
 };
 const POWERUP_EMOJI = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' };
+const POWERUP_ICON = { triple: 'ui_target', speed: 'ui_bolt', shield: 'ui_shield', fire: 'ui_flame' };
+const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close'];
 
-// Render-depth bands for level visuals. Values are the historical magic numbers —
-// this table only names them. UI bands (989+) are named in the HUD rework.
+// Depth bands. World/level visuals below, UI band (989+) at the end.
 const LAYER = {
     WORLD:  -100,   // baked RenderTexture: floor + decor + walls + sconces
     TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
@@ -216,6 +217,7 @@ export class DungeonScene extends Phaser.Scene {
         this.load.svg('d_skeleton', base + 'skeleton.svg', { width: 150, height: 180 });
         this.load.svg('d_ghost',    base + 'ghost.svg',    { width: 150, height: 180 });
         this.load.svg('d_mimic',    base + 'mimic.svg',    { width: 150, height: 150 });
+        for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: 64, height: 64 });
     }
 
     create() {
@@ -323,6 +325,12 @@ export class DungeonScene extends Phaser.Scene {
 
         // CROSSHAIR — always set up; only updates when mouse is the active input
         this.setupCrosshair();
+
+        // Vector-sourced textures (characters, skins, HUD icons) are drawn well below their source size —
+        // bilinear filter for them only; the game-wide antialias:false stays for everything else
+        for (const k of Object.keys(this.textures.list)) {
+            if (/^(d_|skin_|ui_)/.test(k)) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
+        }
 
         // HUD
         this.buildHUD();
