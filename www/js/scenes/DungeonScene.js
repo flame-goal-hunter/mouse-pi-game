@@ -27,6 +27,7 @@ const SHAKE_CFG = {
 };
 const POWERUP_EMOJI = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' };
 const POWERUP_ICON = { triple: 'ui_target', speed: 'ui_bolt', shield: 'ui_shield', fire: 'ui_flame' };
+const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };   // texture, w/h factors of labelSize
 const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close'];
 
 // Depth bands. World/level visuals below, UI band (989+) at the end.
@@ -5728,7 +5729,7 @@ export class DungeonScene extends Phaser.Scene {
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(D).setVisible(false);
         // COMPASS arrow toward current objective (key → grandma / stairs)
         this.compass = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_COMPASS);
-        this.compassLabel = this.add.image(0, 0, 'd_key').setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL);
+        this.compassLabel = this.add.image(0, 0, 'd_key').setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL).setVisible(false);
         this._compassKey = null; this._compassAngle = undefined;  // fresh Graphics — force first redraw
         // Active power-up: icon + remaining seconds
         this.powerupIcon = this.add.image(0, 0, 'ui_bolt').setOrigin(0.5).setScrollFactor(0).setDepth(D).setVisible(false);
@@ -6022,18 +6023,6 @@ export class DungeonScene extends Phaser.Scene {
         }
     }
 
-    isTouchUiPointer(p) {
-        if (!this.joy) return false;
-        // With floating joysticks, ANY touch in left/right halves is a stick touch,
-        // EXCEPT the exit X area in the top-right corner.
-        const cam = this.cameras.main;
-        const onExit  = (p.x > cam.width - 60 && p.y < 60);
-        if (onExit) return true;
-        const onDash = this.dashBtn && Math.hypot(p.x - this.dashBtn.x, p.y - this.dashBtn.y) < this.dashBtn.R + 14;
-        if (onDash) return true;
-        // Touch zones: left half = movement, right half = aim
-        return p.x < cam.width / 2 || p.x >= cam.width / 2;
-    }
 
     touchDown(p) {
         // Hybrid touch laptops: ignore mouse pointer so a left-click doesn't spawn a joystick
@@ -6304,12 +6293,12 @@ export class DungeonScene extends Phaser.Scene {
         this._compassKey = key;
         this._compassAngle = angle;
         // Position arrow on a ring near screen edge
-        const ringR = this._hudLayout ? this._hudLayout.compass.ringR : Math.min(cam.width, cam.height) * 0.40;
+        const ringR = this._hudLayout.compass.ringR;
         const ax = cx + Math.cos(angle) * ringR;
         const ay = cy + Math.sin(angle) * ringR;
         this.compass.clear();
         // Arrow triangle pointing in `angle` direction
-        const size = this._hudLayout ? this._hudLayout.compass.arrowSize : 18;
+        const size = this._hudLayout.compass.arrowSize;
         const tipX = ax + Math.cos(angle) * size;
         const tipY = ay + Math.sin(angle) * size;
         const leftX  = ax + Math.cos(angle + 2.5) * size;
@@ -6327,9 +6316,8 @@ export class DungeonScene extends Phaser.Scene {
         this.compass.fillPath();
         this.compass.strokePath();
         // Icon slightly back from the arrow
-        const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };
         const [tex, wf, hf] = COMPASS_ICON[icon];
-        const ls = this._hudLayout ? this._hudLayout.compass.labelSize : 26;
+        const ls = this._hudLayout.compass.labelSize;
         if (this.compassLabel.texture.key !== tex) this.compassLabel.setTexture(tex);
         this.compassLabel.setDisplaySize(ls * wf, ls * hf);
         this.compassLabel.setPosition(ax - Math.cos(angle) * ls, ay - Math.sin(angle) * ls);
