@@ -179,6 +179,10 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     create() {
+        // Pools must not survive scene restart — the Scene instance is reused
+        // and shutdown destroys all pooled display objects.
+        this._circlePool = [];
+        this._textPool = [];
         this.state = 'intro';
         this.score = 0;
         this.hasKey = false;
@@ -4947,21 +4951,18 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     showFloatingText(x, y, text, color, size) {
-        // No setShadow here — Phaser docs: every shadow change forces full text re-render.
-        // Stroke alone reads as premium for damage popups.
-        const t = this.add.text(x, y, text, {
+        const t = this._getPooledText(x, y, text, {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif',
             fontSize: size + 'px', color,
             fontStyle: '900',
             stroke: '#0a0410', strokeThickness: 4,
-        }).setOrigin(0.5).setDepth(800);
-        // Premium pop: scale up + drift up + fade
-        t.setScale(0.7);
+        });
+        t.setOrigin(0.5).setDepth(800).setScale(0.7);
         this.tweens.add({
             targets: t, scale: 1.05, duration: 140, ease: 'Back.easeOut',
         });
         this.tweens.add({ targets: t, y: y - 56, alpha: 0, duration: 1100, ease: 'Cubic.easeOut',
-            onComplete: () => t.destroy() });
+            onComplete: () => this._releaseText(t) });
     }
 
     // =================================================================
@@ -5204,24 +5205,72 @@ export class DungeonScene extends Phaser.Scene {
         return false;
     }
 
+    // === Object pools — combat spawns these every hit; create/destroy churn
+    // causes GC stalls and (for Text) GPU texture uploads on Android ===
+    _getPooledCircle(x, y, r, color, alpha) {
+        if (!this._circlePool) this._circlePool = [];
+        let c = this._circlePool.pop();
+        if (!c) {
+            c = this.add.circle(x, y, r, color, alpha);
+        } else {
+            c.setPosition(x, y).setRadius(r).setFillStyle(color, alpha)
+             .setScale(1).setAlpha(1).setActive(true).setVisible(true);
+        }
+        return c;
+    }
+
+    _releaseCircle(c) {
+        this.tweens.killTweensOf(c);
+        c.setActive(false).setVisible(false);
+        if (this._circlePool.length < 64) this._circlePool.push(c);
+        else c.destroy();
+    }
+
+    _getPooledText(x, y, text, style) {
+        if (!this._textPool) this._textPool = [];
+        let t = this._textPool.pop();
+        const styleKey = style.fontSize + '|' + style.color;
+        if (!t) {
+            t = this.add.text(x, y, text, style);
+            t._styleKey = styleKey;
+        } else {
+            // Only re-apply style when it actually changed — setStyle forces a
+            // full canvas re-render + GPU upload even for identical styles.
+            if (t._styleKey !== styleKey) {
+                t.setStyle(style);
+                t._styleKey = styleKey;
+            }
+            t.setText(text);
+            t.setPosition(x, y).setAlpha(1).setActive(true).setVisible(true);
+        }
+        return t;
+    }
+
+    _releaseText(t) {
+        this.tweens.killTweensOf(t);
+        t.setActive(false).setVisible(false);
+        if (this._textPool.length < 24) this._textPool.push(t);
+        else t.destroy();
+    }
+
     poofAt(x, y, color) {
-        // Bigger, juicier explosion: 12 particles in larger range
+        // Bigger, juicier explosion: 12 particles in larger range (pooled)
         for (let i = 0; i < 12; i++) {
             const angle = Math.random() * Math.PI * 2;
             const dist = Phaser.Math.Between(20, 50);
-            const p = this.add.circle(x, y, Phaser.Math.Between(4, 8), color, 0.95).setDepth(600);
+            const p = this._getPooledCircle(x, y, Phaser.Math.Between(4, 8), color, 0.95).setDepth(600);
             this.tweens.add({
                 targets: p, x: x + Math.cos(angle) * dist, y: y + Math.sin(angle) * dist,
                 alpha: 0, scale: 0.2, duration: 450, ease: 'Quad.easeOut',
-                onComplete: () => p.destroy()
+                onComplete: () => this._releaseCircle(p)
             });
         }
         // Flash ring
-        const ring = this.add.circle(x, y, 20, color, 0.6).setDepth(601);
+        const ring = this._getPooledCircle(x, y, 20, color, 0.6).setDepth(601);
         this.tweens.add({
             targets: ring, scale: 2.2, alpha: 0,
             duration: 300, ease: 'Quad.easeOut',
-            onComplete: () => ring.destroy()
+            onComplete: () => this._releaseCircle(ring)
         });
     }
 
