@@ -64,3 +64,18 @@ for (const [W, H] of [[320, 568], [568, 320]]) for (const safe of safesFor(W, H)
         for (let i = 0; i < L.rects.length; i++) for (let j = i + 1; j < L.rects.length; j++) assert.ok(!overlaps(L.rects[i], L.rects[j]), `${L.rects[i].name} overlaps ${L.rects[j].name}`);
     });
 }
+
+for (const [W, H] of VIEWPORTS) {
+    test(`compass arrow tip stays below the cheese counter at ${W}x${H}`, () => {
+        const L = computeHudLayout({ W, H, maxHp: 5 });
+        const tipY = H / 2 - L.compass.ringR - L.compass.arrowSize;
+        assert.ok(tipY >= L.cheese.iconY + L.cheese.iconH, `tip ${tipY} vs cheese bottom ${L.cheese.iconY + L.cheese.iconH}`);
+        assert.ok(L.compass.ringR > Math.min(W, H) * 0.25, 'ring still reasonably large');
+    });
+}
+test('stick labels keep a positive offset that fits inside the pad', () => {
+    for (const [W, H] of VIEWPORTS) {
+        const t = computeHudLayout({ W, H, maxHp: 5 }).touch;
+        assert.ok(t.labelOff > 0 && t.labelOff <= 18 * 1.3 + 1, `labelOff ${t.labelOff}`);
+    }
+});

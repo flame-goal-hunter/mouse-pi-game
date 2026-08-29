@@ -25,7 +25,6 @@ const SHAKE_CFG = {
     big: { dur: 220, amt: 0.018 },
     huge:{ dur: 380, amt: 0.026 },
 };
-const POWERUP_EMOJI = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' };
 const POWERUP_ICON = { triple: 'ui_target', speed: 'ui_bolt', shield: 'ui_shield', fire: 'ui_flame' };
 const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };   // texture, w/h factors of labelSize
 const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close'];
@@ -229,6 +228,7 @@ export class DungeonScene extends Phaser.Scene {
         this.time.timeScale = 1;
         this.tweens.timeScale = 1;
         this._hitStopUntil = 0;
+        this._hudLayout = null;
         // Pools must not survive scene restart — the Scene instance is reused
         // and shutdown destroys all pooled display objects.
         this._circlePool = [];
@@ -5751,7 +5751,7 @@ export class DungeonScene extends Phaser.Scene {
         // Exit button — disc drawn in repositionHUD (radius scales), icon doubles as the hit area
         this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
-            .setInteractive({ useHandCursor: true })
+            .setInteractive(new Phaser.Geom.Circle(32, 32, 44), Phaser.Geom.Circle.Contains)
             .on('pointerdown', () => this.exitToMenu());
         this.repositionHUD();
     }
@@ -5774,7 +5774,7 @@ export class DungeonScene extends Phaser.Scene {
         this.scoreText.setVisible(false);
         this.chapterText.setVisible(false);
         this.upgradeIconsText.setVisible(false);
-        this.comboText.setVisible(false);       // (re-enabled per-frame in updateHUD if active)
+        this.comboText.setVisible(false);
         // Status row
         this.suspicionMeter.setPosition(L.meter.cx, L.meter.cy);
         this.suspicionLabel.setPosition(L.eye.cx, L.eye.cy).setDisplaySize(L.eye.size, L.eye.size);
@@ -5881,9 +5881,9 @@ export class DungeonScene extends Phaser.Scene {
     // TOUCH
     // =================================================================
     setupTouchControls() {
-        // Scale touch UI down on small phones so it doesn't eat the gameplay area
+        // Sizes from the shared HUD layout (uiScale + safe-area); radii are fixed for the run, offsets follow resize
         const cam = this.cameras.main;
-        const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
         const JOY_R = L.touch.joyR;
         const DASH_R = L.touch.dashR;
         const LABEL_FONT = `${L.touch.labelFont}px`;
@@ -6030,7 +6030,12 @@ export class DungeonScene extends Phaser.Scene {
         if (this.dashBtn && Math.hypot(p.x - this.dashBtn.x, p.y - this.dashBtn.y) < this.dashBtn.R + 14) {
             this.tryDash();
             this.tweens.add({
-                targets: [this.dashBtnBase, this.dashBtnLabel], scale: 0.85,
+                targets: this.dashBtnBase, scale: 0.85,
+                duration: 80, yoyo: true, ease: 'Quad.easeOut'
+            });
+            this.tweens.add({
+                targets: this.dashBtnLabel,
+                scaleX: this.dashBtnLabel.scaleX * 0.85, scaleY: this.dashBtnLabel.scaleY * 0.85,
                 duration: 80, yoyo: true, ease: 'Quad.easeOut'
             });
             return;
@@ -6070,7 +6075,7 @@ export class DungeonScene extends Phaser.Scene {
         this.joyOuter.setPosition(x, y);
         this.joyHints.setPosition(x, y);
         this.joyKnob.setPosition(x, y);
-        if (this.joyLabel) this.joyLabel.setPosition(x, y + this.joy.R + 18);
+        if (this.joyLabel) this.joyLabel.setPosition(x, y + this.joy.R + (this._hudLayout ? this._hudLayout.touch.labelOff : 18));
     }
 
     moveAimStickTo(x, y) {
@@ -6079,7 +6084,7 @@ export class DungeonScene extends Phaser.Scene {
         this.aimStickOuter.setPosition(x, y);
         this.aimStickHint.setPosition(x, y);
         this.aimStickKnob.setPosition(x, y);
-        if (this.aimLabel) this.aimLabel.setPosition(x, y + this.aimStick.R + 18);
+        if (this.aimLabel) this.aimLabel.setPosition(x, y + this.aimStick.R + (this._hudLayout ? this._hudLayout.touch.labelOff : 18));
     }
 
     setJoyAlpha(a) {

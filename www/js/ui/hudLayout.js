@@ -12,7 +12,7 @@ const BASE = {
     powerIcon: 22, powerFont: 18,
     cheeseW: 24, cheeseH: 20, cheeseGap: 6, cheeseFont: 22, cheeseTextW: 72, comboFont: 26, comboGap: 4, comboTextW: 110,
     exitR: 22, exitIcon: 44, compassLabel: 26, compassArrow: 18,
-    joyR: 76, dashR: 52, touchPad: 18, touchOuter: 10, dashGap: 26, touchFont: 11,
+    joyR: 76, dashR: 52, touchPad: 18, touchOuter: 10, dashGap: 32, touchFont: 11,
 };
 
 export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, left: 0 }, maxHp = 5, uiScale }) {
@@ -82,17 +82,22 @@ export function computeHudLayout({ W, H, safe = { top: 0, right: 0, bottom: 0, l
     rect('exit', exit.cx - exitR, exit.cy - exitR, exitR * 2, exitR * 2);
 
     // --- Compass ring around the screen centre (radius rule unchanged from before)
-    const compass = { ringR: Math.min(W, H) * 0.40, labelSize: px(BASE.compassLabel), arrowSize: px(BASE.compassArrow) };
+    const ringR = Math.min(Math.min(W, H) * 0.40, H / 2 - (top + heart + px(BASE.compassArrow) + px(4)));
+    const compass = { ringR, labelSize: px(BASE.compassLabel), arrowSize: px(BASE.compassArrow) };
 
     // --- Touch controls (radii are applied once at setup; offsets every reposition)
-    const joyR = px(BASE.joyR), dashR = px(BASE.dashR), pad = px(BASE.touchPad) + px(BASE.touchOuter);
+    const joyR = px(BASE.joyR), dashR = px(BASE.dashR), pad = px(BASE.touchPad) + BASE.touchOuter;
+    const labelFont = Math.max(10, px(BASE.touchFont));
+    // Clamp so the dash button (stacked above the move stick) can't creep above the exit button on short landscape screens with big safe-area insets
+    const dashGap = Math.min(px(BASE.dashGap), Math.max(px(6), H - 2 * joyR - pad - safe.bottom - 2 * dashR - (exit.cy + exit.r) - px(4)));
     const touch = {
         joyR, dashR,
         bottomOff: joyR + pad + safe.bottom,
         sideOffLeft: joyR + pad + safe.left,
         sideOffRight: joyR + pad + safe.right,
-        dashGap: px(BASE.dashGap),
-        labelFont: Math.max(10, px(BASE.touchFont)),
+        dashGap,
+        labelFont,
+        labelOff: Math.min(px(18), pad - Math.ceil(labelFont * 0.7)),
     };
 
     return { s, safe, hearts, key, meter, eye, book, bookText, paw, powerup, cheese, combo, exit, compass, touch, rects };
