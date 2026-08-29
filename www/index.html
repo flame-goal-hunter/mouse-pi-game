@@ -479,9 +479,9 @@
                 <button class="play-btn" id="startNewyearBtn">Играть!</button>
             </div>
             <div id="transylvaniaOptions" style="display: none;">
-                <p class="small">🦇 Превью персонажей замка</p>
-                <p class="small" style="opacity: 0.7;">Мышонок Пи, зомби-дворецкий, демон-кот и слайм</p>
-                <button class="play-btn" id="startTransylvaniaBtn" style="background: linear-gradient(135deg, #5a2080, #7a30a0); color: #fff;">🦇 Смотреть</button>
+                <p class="small">🦇 Подземелье графа Ратулы — спаси бабушку!</p>
+                <p class="small" style="opacity: 0.7;">5 этажей · новые враги · лавка со шляпами и улучшениями</p>
+                <button class="play-btn" id="startTransylvaniaBtn" style="background: linear-gradient(135deg, #5a2080, #7a30a0); color: #fff;">🦇 Играть!</button>
             </div>
             <div id="snowballOptions" style="display: none;">
                 <p class="small">❄️ Битва снежками! ❄️</p>
@@ -10489,6 +10489,10 @@
         }
 
         function stopPhaserSnowball() {
+            // Remember which mode the user was playing — closing the iframe must NOT
+            // dump them back into "Огненная долина" (adventure mode) when they came
+            // from Transylvania / Snowball.
+            const previousMode = currentGameMode;
             const frame = document.getElementById('phaserFrame');
             frame.src = '';
             frame.style.display = 'none';
@@ -10530,6 +10534,17 @@
                     b.querySelector('p').style.color = '#aaa';
                 }
             });
+            // === Restore the mode the user was actually in (not adventure) ===
+            if (previousMode && previousMode !== 'adventure') {
+                currentGameMode = previousMode;
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+                const targetBtn = document.querySelector(`.mode-btn[data-mode="${previousMode}"]`);
+                if (targetBtn) targetBtn.classList.add('selected');
+                document.getElementById('adventureOptions').style.display = previousMode === 'adventure' ? 'flex' : 'none';
+                document.getElementById('newyearOptions').style.display = previousMode === 'newyear' ? 'flex' : 'none';
+                document.getElementById('snowballOptions').style.display = previousMode === 'snowball' ? 'flex' : 'none';
+                document.getElementById('transylvaniaOptions').style.display = previousMode === 'transylvania' ? 'flex' : 'none';
+            }
         }
 
         // Start solo snowball game with bots and selected character
