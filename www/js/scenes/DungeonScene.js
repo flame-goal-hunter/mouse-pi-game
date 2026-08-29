@@ -1702,7 +1702,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillStyle(b.wallFill, 1);
         g.fillRect(x, y, w, h);
         // Running-bond brickwork: two courses, the lower one offset by half a brick
-        const brickW = 30, courseH = h / 2;
+        const brickW = NAV_CELL, courseH = h / 2;   // 40×20 bricks align with the cell grid at every corner
         g.lineStyle(1.2, b.wallShadow, 0.75);
         g.lineBetween(x, y + courseH, x + w, y + courseH);
         for (let course = 0; course < 2; course++) {
@@ -1712,16 +1712,21 @@ export class DungeonScene extends Phaser.Scene {
                 g.lineBetween(bx, cy, bx, cy + courseH);
             }
         }
-        // Dark recessed cant along the top edge, thin highlight under it
-        g.fillStyle(b.wallShadow, 0.85);
-        g.fillRect(x, y, w, 4);
-        g.fillStyle(b.wallHighlight, 0.9);
-        g.fillRect(x, y + 4, w, 2);
-        // Gilded skirting where the wall meets the floor
-        g.fillStyle(WALL_TRIM_GOLD, 0.55);
-        g.fillRect(x, y + h - 2, w, 2);
-        g.lineStyle(1, b.wallShadow, 0.9);
-        g.lineBetween(x, y + h - 2, x + w, y + h - 2);
+        // Per cell: dark recessed cant + highlight only on the top edge of a wall mass,
+        // gilded skirting only where floor lies directly below
+        const grid = this.navGrid, r = y / NAV_CELL, c0 = x / NAV_CELL;
+        for (let c = c0; c < c0 + w / NAV_CELL; c++) {
+            const cx = c * NAV_CELL;
+            const wallAbove = grid[r - 1]?.[c] === 'wall' && this.isBorderWall(r - 1, c);
+            if (!wallAbove) {
+                g.fillStyle(b.wallShadow, 0.85);   g.fillRect(cx, y, NAV_CELL, 4);
+                g.fillStyle(b.wallHighlight, 0.9); g.fillRect(cx, y + 4, NAV_CELL, 2);
+            }
+            if (grid[r + 1]?.[c] === 'floor') {
+                g.fillStyle(b.wallShadow, 0.9);    g.fillRect(cx, y + h - 3, NAV_CELL, 1);
+                g.fillStyle(WALL_TRIM_GOLD, 0.55); g.fillRect(cx, y + h - 2, NAV_CELL, 2);
+            }
+        }
     }
 
     // === BIOME DECORATIONS — dispatcher draws the right type ===
