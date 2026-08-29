@@ -32,9 +32,9 @@ const LAYER = {
     TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
     DECOR:   -50,   // decor layer before baking
     WALL:     50,   // wall Graphics before baking (and weak-wall overlays 51-52)
-    SCONCE:   70,
+    SCONCE:   70,   // torchSconceGfx before baking
     FLAME:    81,
-    EYES:     82,
+    EYES:     82,   // also used numerically by torch smoke/spark FX
 };
 const WALL_TRIM_GOLD = 0xd8a850;   // gilded skirting where walls meet the floor
 
@@ -799,6 +799,7 @@ export class DungeonScene extends Phaser.Scene {
         this.wallGfx = this.add.graphics().setDepth(LAYER.WALL);
         this.torchSconceGfx = this.add.graphics().setDepth(LAYER.SCONCE);
         this.flameGfx = this.add.graphics().setDepth(LAYER.FLAME);  // ALL torch flames, one clear per frame
+        this.decorGfx = this.add.graphics().setDepth(LAYER.DECOR);   // all props; baked under walls
         // Build nav grid FIRST: 'wall' everywhere, then carve floor for rooms + corridors
         const grid = Array.from({ length: NAV_H }, () => Array(NAV_W).fill('wall'));
 
@@ -899,15 +900,17 @@ export class DungeonScene extends Phaser.Scene {
         this.placeSpookyEyes();
 
         // === BAKE static geometry ===
-        // floor (~7k cmds) + walls (~3.5k cmds) + sconces were Graphics command
+        // floor (~7k cmds) + decor (~80 objects) + walls (~3.5k cmds) + sconces were Graphics command
         // buffers re-tessellated EVERY frame. Draw them once into a RenderTexture
         // and destroy the sources: per-frame cost becomes one textured quad.
         const worldRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H)
             .setOrigin(0).setDepth(LAYER.WORLD);
         worldRT.draw(this.floorGfx);
+        worldRT.draw(this.decorGfx);      // props sit ON the floor, UNDER wall bricks
         worldRT.draw(this.wallGfx);
         worldRT.draw(this.torchSconceGfx);
         this.floorGfx.destroy();        this.floorGfx = null;
+        this.decorGfx.destroy();        this.decorGfx = null;
         this.wallGfx.destroy();         this.wallGfx = null;
         this.torchSconceGfx.destroy();  this.torchSconceGfx = null;
         this.worldRT = worldRT;
@@ -1689,6 +1692,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // === BIOME DECORATIONS — dispatcher draws the right type ===
     drawDecor(x, y, type) {
+        if (!this.decorGfx) { console.warn('[DungeonScene] drawDecor after bake:', type); return; }
         switch (type) {
             case 'mushroom': return this.drawMushroom(x, y);
             case 'bone':     return this.drawBone(x, y);
@@ -1711,7 +1715,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // ----- Kitchen: pot, plate, knife, sack -----
     drawPot(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0x4a4a4a, 1);
         g.lineStyle(2, 0x1a1a1a, 1);
         g.fillEllipse(x, y - 2, 18, 14);
@@ -1727,7 +1731,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x - 3, y - 4, 5, 2);
     }
     drawPlate(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0xeae0d4, 1);
         g.lineStyle(1.5, 0x1a1a1a, 1);
         g.fillEllipse(x, y, 14, 4);
@@ -1736,7 +1740,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x, y, 10, 2.5);
     }
     drawKnife(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.lineStyle(1.5, 0x1a1a1a, 1);
         // Blade
         g.fillStyle(0xb0b8c0, 1);
@@ -1748,7 +1752,7 @@ export class DungeonScene extends Phaser.Scene {
         g.strokeRect(x + 6, y - 2, 6, 4);
     }
     drawSack(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0xa08060, 1);
         g.lineStyle(1.5, 0x1a1a1a, 1);
         g.fillRoundedRect(x - 7, y - 4, 14, 12, 3);
@@ -1765,7 +1769,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // ----- Library: book, candle, scroll, inkwell -----
     drawBook(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         const colors = [0x7a3030, 0x2a5078, 0x4a6028, 0x7a4a10];
         const col = colors[Math.floor(Math.random() * colors.length)];
         g.fillStyle(col, 1);
@@ -1780,7 +1784,7 @@ export class DungeonScene extends Phaser.Scene {
         g.lineBetween(x + 8, y - 4, x + 8, y + 4);
     }
     drawCandle(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         // Candleholder
         g.fillStyle(0xb0a080, 1);
         g.lineStyle(1.5, 0x1a1a1a, 1);
@@ -1799,7 +1803,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x, y - 13, 1.2, 2.5);
     }
     drawScroll(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0xe8d8a8, 1);
         g.lineStyle(1.5, 0x6a4a20, 1);
         g.fillRoundedRect(x - 8, y - 3, 16, 6, 2);
@@ -1816,7 +1820,7 @@ export class DungeonScene extends Phaser.Scene {
         g.lineBetween(x - 5, y + 1, x + 5, y + 1);
     }
     drawInkwell(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0x1a1a3a, 1);
         g.lineStyle(1.5, 0x080820, 1);
         g.fillRoundedRect(x - 5, y - 4, 10, 8, 2);
@@ -1831,7 +1835,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // ----- Garden: flower, vine prop, broken glass -----
     drawFlower(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         // Stem
         g.lineStyle(2, 0x305828, 1);
         g.lineBetween(x, y, x, y - 10);
@@ -1851,7 +1855,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillCircle(x, y - 12, 2.5);
     }
     drawVineProp(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.lineStyle(2, 0x305828, 1);
         // Curling vine
         g.beginPath();
@@ -1868,7 +1872,7 @@ export class DungeonScene extends Phaser.Scene {
         g.fillEllipse(x, y - 3, 4, 2.5);
     }
     drawBrokenGlass(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0xa0e8ff, 0.6);
         g.lineStyle(1, 0x6080a0, 0.9);
         // Triangle shards
@@ -1889,7 +1893,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // ----- Throne: goblet -----
     drawGoblet(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.fillStyle(0xd4a830, 1);
         g.lineStyle(1.5, 0x6a5010, 1);
         // Base
@@ -1908,7 +1912,7 @@ export class DungeonScene extends Phaser.Scene {
 
     // ----- Universal cobweb (dungeon) -----
     drawCobweb(x, y) {
-        const g = this.add.graphics().setDepth(-50);
+        const g = this.decorGfx;
         g.lineStyle(1, 0xc0c0d0, 0.5);
         const r = 12;
         for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
@@ -2056,7 +2060,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     drawMushroom(x, y) {
-        const g = this.add.graphics();
+        const g = this.decorGfx;
         g.fillStyle(0xf0e8d4, 1);
         g.lineStyle(1.5, 0x1a1024, 1);
         g.fillRect(x - 3, y - 4, 6, 10);
@@ -2067,11 +2071,10 @@ export class DungeonScene extends Phaser.Scene {
         g.fillStyle(0xfff0f0, 1);
         g.fillCircle(x - 3, y - 7, 1.5);
         g.fillCircle(x + 2, y - 5, 1);
-        g.setDepth(-50);
     }
 
     drawBone(x, y) {
-        const g = this.add.graphics();
+        const g = this.decorGfx;
         g.fillStyle(0xeae0c8, 1);
         g.lineStyle(1.5, 0x1a1024, 1);
         const len = 16;
@@ -2081,7 +2084,6 @@ export class DungeonScene extends Phaser.Scene {
             g.fillCircle(x + dx, y + dy, 3);
             g.strokeCircle(x + dx, y + dy, 3);
         }
-        g.setDepth(-50);
     }
 
     // =================================================================
