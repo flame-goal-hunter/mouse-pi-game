@@ -80,16 +80,28 @@ const config = {
     scene: scenes
 };
 
-// Create Phaser game immediately (DOM and scripts are already loaded
-// by the time this module is imported after Rapier WASM init)
-const game = new Phaser.Game(config);
+// Wait for Nunito so the first Text textures don't bake a fallback font (bounded to 1.5 s).
+let game = null;
+const _boot = () => {
+    if (game) return;
+    game = new Phaser.Game(config);
 
-// Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
-window.audio = initAudioManager(game);
+    // Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
+    window.audio = initAudioManager(game);
+};
+if (document.fonts && document.fonts.load) {
+    Promise.race([
+        Promise.all([document.fonts.load('400 16px Nunito'), document.fonts.load('700 16px Nunito'), document.fonts.load('900 16px Nunito')]),
+        new Promise((r) => setTimeout(r, 1500)),
+    ]).then(_boot, _boot);
+} else {
+    _boot();
+}
 
 // Suppress DAC pop + resume both AudioContexts (Phaser + ProceduralSfx) on first gesture.
 // Capture phase + document so Phaser canvas handlers can't stop propagation.
 function _unlockAllAudio() {
+    if (!game) return;
     document.removeEventListener('touchstart', _unlockAllAudio, true);
     document.removeEventListener('pointerdown', _unlockAllAudio, true);
     document.removeEventListener('mousedown', _unlockAllAudio, true);
@@ -112,11 +124,12 @@ document.addEventListener('keydown', _unlockAllAudio, { capture: true });
 let _resizeRefreshTimer = null;
 window.addEventListener('resize', () => {
     if (_resizeRefreshTimer) clearTimeout(_resizeRefreshTimer);
-    _resizeRefreshTimer = setTimeout(() => { try { game.scale.refresh(); } catch (e) {} }, 200);
+    _resizeRefreshTimer = setTimeout(() => { if (game) game.scale.refresh(); }, 200);
 });
 
 // Pause/resume with mute trick to suppress DAC pop on app restore
 document.addEventListener('visibilitychange', () => {
+    if (!game) return;
     if (document.hidden) {
         game.sound.pauseAll();
     } else {
