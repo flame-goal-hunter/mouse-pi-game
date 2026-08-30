@@ -18,7 +18,9 @@ const urlParams = new URLSearchParams(window.location.search);
 const mode = urlParams.get('mode') || 'menu';
 // Device-pixel rendering for the Transylvania mode only (other modes keep RESIZE at 1×).
 // Fractional DPR is fine (e.g. Pixel 9a → 2.625): roundPixels is simply inactive for non-integer zoom.
-const _dprParam = parseFloat(urlParams.get('dpr'));
+let _dprStored = null;
+try { _dprStored = localStorage.getItem('dpr'); } catch (e) {}   // device A/B without a rebuild: localStorage.setItem('dpr', '2')
+const _dprParam = parseFloat(urlParams.get('dpr') ?? _dprStored);
 const DPR = (mode === 'transylvania')
     ? Math.max(1, Math.min(3, Number.isFinite(_dprParam) ? _dprParam : (window.devicePixelRatio || 1)))
     : 1;
@@ -93,6 +95,8 @@ const config = {
 let game = null;
 const _boot = () => {
     if (game) return;
+    // The fonts wait can take up to 1.5 s; re-read the CSS size right before boot (Android bars/iframe may have settled).
+    if (mode === 'transylvania') { const s = _cssSize(); config.scale.width = Math.round(s.w * DPR); config.scale.height = Math.round(s.h * DPR); }
     game = new Phaser.Game(config);
 
     // Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
