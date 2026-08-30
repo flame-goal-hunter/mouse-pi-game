@@ -310,8 +310,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // Track whether user is currently using mouse vs touch + last mouse-move timestamp
         this._mouseMovedAt = 0;
-        this.input.on('pointermove', (rawP) => {
-            const p = this._cssPointer(rawP);
+        this.input.on('pointermove', (p) => {
             if (p.pointerType === 'touch' || p.event?.type === 'touchmove' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
                 if (this.joy) this.setTouchUIVisible(true);
@@ -319,8 +318,7 @@ export class DungeonScene extends Phaser.Scene {
                 this._mouseMovedAt = this.time.now;
             }
         });
-        this.input.on('pointerdown', (rawP) => {
-            const p = this._cssPointer(rawP);
+        this.input.on('pointerdown', (p) => {
             if (p.pointerType === 'touch' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
                 if (this.joy) this.setTouchUIVisible(true);
@@ -333,6 +331,11 @@ export class DungeonScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
         this._createFixedLayers();
         this.cameras.main.setZoom(this.dpr);
+        // Phaser 3.70 Shake scales its offset by camera.width·zoom and the matrix scales it by zoom again → dpr² too strong.
+        {
+            const cam = this.cameras.main, k = 1 / (this.dpr * this.dpr), origShake = cam.shake;
+            cam.shake = (duration, intensity, ...rest) => origShake.call(cam, duration, (intensity == null ? 0.05 : intensity) * k, ...rest);
+        }
         this.cameras.main.setBackgroundColor(0x000000);
         this.cameras.main.startFollow(this.player.sprite, true, 0.10, 0.10);
         this.cameras.main.fadeIn(400, 0, 0, 0);
@@ -485,7 +488,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         rt.fill(this._darknessColor, 1);
         // Light positions are world − worldView = CSS px; the camera zoom (dpr) maps them to device px via fxLayer
-        const ox = cam.worldView.x, oy = cam.worldView.y;
+        const ox = cam.midPoint.x - this.viewW / 2, oy = cam.midPoint.y - this.viewH / 2;
         const margin = 130;
         const inView = (x, y, r) =>
             x + r + margin >= ox && x - r - margin <= ox + this.viewW &&
@@ -6449,6 +6452,8 @@ export class DungeonScene extends Phaser.Scene {
         const els = [];
         const addEl = (e, dep) => { e.setScrollFactor(0).setDepth(dep || D); els.push(e); return e; };
         addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.86).setOrigin(0).setInteractive());
+        if (this.aimIndicator) this.aimIndicator.setVisible(false);
+        if (this.aimLine) this.aimLine.setVisible(false);
         // Panel
         const panelW = Math.min(W * 0.92, 760);
         const panelH = Math.min(H * 0.88, 460);
@@ -6479,6 +6484,8 @@ export class DungeonScene extends Phaser.Scene {
                 relic.apply(this);
                 bus.emit(SFX.COLLECT_POWERUP);
                 this.showFloatingText(this.player.x, this.player.y - 60, `${relic.emoji} ${relic.name}!`, '#ffd040', 22);
+                if (this.aimIndicator) this.aimIndicator.setVisible(true);
+                if (this.aimLine) this.aimLine.setVisible(true);
                 els.forEach(e => e.destroy());
             };
             const cardObj = this.drawGothicCard(cx, cardCy, cardW, cardH, {

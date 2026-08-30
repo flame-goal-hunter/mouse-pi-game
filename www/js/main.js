@@ -17,9 +17,10 @@ import { initAudioManager } from './audio/AudioManager.js';
 const urlParams = new URLSearchParams(window.location.search);
 const mode = urlParams.get('mode') || 'menu';
 // Device-pixel rendering for the Transylvania mode only (other modes keep RESIZE at 1×).
+// Fractional DPR is fine (e.g. Pixel 9a → 2.625): roundPixels is simply inactive for non-integer zoom.
 const _dprParam = parseFloat(urlParams.get('dpr'));
 const DPR = (mode === 'transylvania')
-    ? Math.max(1, Math.min(3, Number.isFinite(_dprParam) ? Math.round(_dprParam) : Math.ceil(window.devicePixelRatio || 1)))
+    ? Math.max(1, Math.min(3, Number.isFinite(_dprParam) ? _dprParam : (window.devicePixelRatio || 1)))
     : 1;
 window.__GAME_DPR = DPR;
 const _cssSize = () => {
@@ -72,7 +73,6 @@ const config = {
         ? { mode: Phaser.Scale.NONE, parent: 'game-container', autoCenter: Phaser.Scale.NO_CENTER,
             width: _cssSize().w * DPR, height: _cssSize().h * DPR, zoom: 1 / DPR }
         : { mode: Phaser.Scale.RESIZE, parent: 'game-container', autoCenter: Phaser.Scale.CENTER_BOTH, width: '100%', height: '100%' },
-    resolution: DPR,
     render: {
         antialias: true,
         antialiasGL: true,
