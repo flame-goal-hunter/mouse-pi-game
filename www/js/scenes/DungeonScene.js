@@ -261,7 +261,7 @@ export class DungeonScene extends Phaser.Scene {
         this.tilePx = Math.round(NAV_CELL * this.dpr);
         // 3-frame flame sheet (loaded as one SVG) → frames f0..f2; global anim created once
         const fs = this.textures.get('flame_sheet');
-        const fw = Math.round(16 * this.dpr), fh = Math.round(28 * this.dpr);
+        const fw = Math.floor(fs.source[0].width / 3), fh = fs.source[0].height;   // from the real raster size (exact for any dpr)
         for (let i = 0; i < 3; i++) if (!fs.has('f' + i)) fs.add('f' + i, 0, i * fw, 0, fw, fh);
         if (!this.anims.exists('torch_flame')) {
             this.anims.create({ key: 'torch_flame', frames: [0, 1, 2, 1].map((i) => ({ key: 'flame_sheet', frame: 'f' + i })), frameRate: 9, repeat: -1 });
