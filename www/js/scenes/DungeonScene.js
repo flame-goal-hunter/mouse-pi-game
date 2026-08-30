@@ -244,6 +244,8 @@ export class DungeonScene extends Phaser.Scene {
         this._circlePool = [];
         this._textPool = [];
         this.state = 'intro';
+        this._hudHidden = false;
+        this._touchWanted = false;
         this.score = 0;
         this.hasKey = false;
         this.walls = [];
@@ -304,7 +306,8 @@ export class DungeonScene extends Phaser.Scene {
         if (IS_TOUCH) {
             this.setupTouchControls();
             const isMobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-            this.setTouchUIVisible(isMobileUA);
+            this.setTouchUIVisible(false);
+            this._touchWanted = isMobileUA;
             if (isMobileUA) this._touchUsed = true;
         }
 
@@ -313,7 +316,11 @@ export class DungeonScene extends Phaser.Scene {
         this.input.on('pointermove', (p) => {
             if (p.pointerType === 'touch' || p.event?.type === 'touchmove' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
-                if (this.joy) this.setTouchUIVisible(true);
+                if (this.state === 'play') {
+                    if (this.joy) this.setTouchUIVisible(true);
+                } else {
+                    this._touchWanted = true;
+                }
             } else {
                 this._mouseMovedAt = this.time.now;
             }
@@ -321,7 +328,11 @@ export class DungeonScene extends Phaser.Scene {
         this.input.on('pointerdown', (p) => {
             if (p.pointerType === 'touch' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
-                if (this.joy) this.setTouchUIVisible(true);
+                if (this.state === 'play') {
+                    if (this.joy) this.setTouchUIVisible(true);
+                } else {
+                    this._touchWanted = true;
+                }
             } else {
                 this._mouseMovedAt = this.time.now;
             }
@@ -348,6 +359,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // HUD
         this.buildHUD();
+        this._setHudVisible(false);
 
         // TEMP perf overlay — enabled with ?fps=1 (Phase 1 measurement)
         this._fpsDebug = new URLSearchParams(window.location.search).get('fps') === '1';
@@ -5672,8 +5684,8 @@ export class DungeonScene extends Phaser.Scene {
         const btnY = H - Math.round(40 * s) - btnH / 2;
         const hintY = btnY - btnH / 2 - hintSize - Math.round(6 * s);
         const hintLabel = IS_TOUCH
-            ? '◀ Левый — движение  ·  ▶ Правый — целься и стреляй  ·  💨 рывок'
-            : 'WASD — движение  ·  Мышь или ↑↓←→ — прицел  ·  Space / ЛКМ — огонь  ·  💨 SHIFT — рывок';
+            ? 'Левый стик — ходьба   ·   Правый — прицел и огонь   ·   Кнопка — рывок'
+            : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
         addEl(this.add.text(W/2, hintY, hintLabel, {
             fontFamily: 'Arial', fontSize: hintSize + 'px', color: '#9070b0',
             align: 'center', wordWrap: { width: W * 0.9 }
@@ -5685,13 +5697,16 @@ export class DungeonScene extends Phaser.Scene {
                 onComplete: () => {
                     elements.forEach(e => e.destroy());
                     this.state = 'play';
+                    this._setHudVisible(true);
+                    if (this.joy) this.setTouchUIVisible(!!(this._touchWanted || this._touchUsed));
+                    this._pinFixed();
                 }
             });
         };
         // Gothic Start button
         const btnW = Math.min(W * 0.5, 320);
         const gBtnH = btnH + 14;
-        const startBtnEls = this.drawGothicButton(W/2, btnY, btnW, gBtnH, '▶ НАЧАТЬ', {
+        const startBtnEls = this.drawGothicButton(W/2, btnY, btnW, gBtnH, 'НАЧАТЬ', {
             color: 0x7a30a0, colorTop: 0xb060e0, hover: 0x9a40c0, hoverTop: 0xd080f0,
             accent: 0xffd040, fontSize: btnSize, depth: D + 5,
             onClick: startGame
@@ -5885,8 +5900,10 @@ export class DungeonScene extends Phaser.Scene {
             }
         }
         if (maxSus > 0.05) {
-            this.suspicionMeter.setVisible(true);
-            this.suspicionLabel.setVisible(true);
+            if (!this._hudHidden) {
+                this.suspicionMeter.setVisible(true);
+                this.suspicionLabel.setVisible(true);
+            }
             this.suspicionMeter.clear();
             const color = maxSus < 0.5 ? 0xffd040 : (maxSus < 0.85 ? 0xff8040 : 0xff3030);
             const r = this._hudLayout.meter.r;
@@ -5921,8 +5938,10 @@ export class DungeonScene extends Phaser.Scene {
                 this.powerupText.setColor(this.activePowerup.colorStr);
                 this._powerupColorApplied = this.activePowerup.colorStr;
             }
-            this.powerupText.setVisible(true);
-            this.powerupIcon.setVisible(true);
+            if (!this._hudHidden) {
+                this.powerupText.setVisible(true);
+                this.powerupIcon.setVisible(true);
+            }
         } else {
             if (this.activePowerup) this.activePowerup = null;
             this._powerupColorApplied = null;
@@ -6377,9 +6396,19 @@ export class DungeonScene extends Phaser.Scene {
         if (this.compassLabel.texture.key !== tex) this.compassLabel.setTexture(tex);
         this.compassLabel.setDisplaySize(ls * wf, ls * hf);
         this.compassLabel.setPosition(ax - Math.cos(angle) * ls, ay - Math.sin(angle) * ls);
-        this.compassLabel.setVisible(true);
+        if (!this._hudHidden) this.compassLabel.setVisible(true);
         // Show distance below
         // (skip for clutter)
+    }
+
+    _setHudVisible(v) {
+        const objs = [
+            ...(this.heartIcons || []), this.cheeseIcon, this.cheeseText, this.keyIcon, this.compass, this.compassLabel,
+            this.powerupIcon, this.powerupText, this.suspicionMeter, this.suspicionLabel,
+            this.bookCounterIcon, this.bookCounterText, this.crouchIcon, this.exitBtnBg, this.exitBtn,
+        ];
+        for (const o of objs) if (o) o.setVisible(v);
+        this._hudHidden = !v;
     }
 
     setTouchUIVisible(visible) {
