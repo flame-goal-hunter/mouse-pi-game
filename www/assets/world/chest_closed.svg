@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 44">
+  <defs><linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a6034"/><stop offset="1" stop-color="#5a3418"/></linearGradient><linearGradient id="lid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b07040"/><stop offset="1" stop-color="#6a3e1c"/></linearGradient></defs>
+  <g stroke="#1a1a1a" stroke-linejoin="round" stroke-linecap="round">
+
+    <rect x="4" y="16" width="40" height="24" rx="3" fill="url(#wood)" stroke-width="2"/>
+    <path d="M4 20 V14 A20 12 0 0 1 44 14 V20 Z" fill="url(#lid)" stroke-width="2"/>
+    <rect x="4" y="18" width="40" height="3" fill="#2a1408" stroke="none" opacity="0.6"/>
+    <g fill="#e8b54a" stroke-width="1.4"><rect x="12" y="6.5" width="5" height="33" rx="1"/><rect x="31" y="6.5" width="5" height="33" rx="1"/></g>
+    <rect x="20" y="15" width="8" height="9" rx="2" fill="#e8b54a" stroke-width="1.5"/><circle cx="24" cy="19" r="1.6" fill="#1a1a1a" stroke="none"/>
+    <path d="M9 24 Q9 34 12 37" fill="none" stroke="#ffffff" stroke-width="1.6" opacity="0.25"/>
+  </g>
+</svg>

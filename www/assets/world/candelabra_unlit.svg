@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 60">
+  <defs><linearGradient id="brass" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c860"/><stop offset="1" stop-color="#9a6a1a"/></linearGradient><linearGradient id="wax" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4dc"/><stop offset="1" stop-color="#d8c39a"/></linearGradient><radialGradient id="fl" cx="50%" cy="75%" r="60%"><stop offset="0" stop-color="#ffe25a"/><stop offset="1" stop-color="#ff7a2a"/></radialGradient></defs>
+  <g stroke="#1a1a1a" stroke-linejoin="round" stroke-linecap="round">
+
+    <g fill="url(#wax)" stroke-width="1.4"><rect x="5.5" y="15" width="5" height="9" rx="1.2"/><rect x="19.5" y="12" width="5" height="12" rx="1.2"/><rect x="33.5" y="15" width="5" height="9" rx="1.2"/></g>
+    <g fill="url(#brass)" stroke-width="1.5"><ellipse cx="8" cy="24" rx="5" ry="2.2"/><ellipse cx="22" cy="24" rx="5" ry="2.2"/><ellipse cx="36" cy="24" rx="5" ry="2.2"/></g>
+    <path d="M8 26 C8 32 14 34 22 34 C30 34 36 32 36 26" fill="none" stroke="#c9962e" stroke-width="3.5"/>
+    <path d="M8 26 C8 32 14 34 22 34 C30 34 36 32 36 26" fill="none" stroke="#1a1a1a" stroke-width="1" opacity="0.5"/>
+    <rect x="19.5" y="26" width="5" height="26" fill="url(#brass)" stroke-width="1.5"/>
+    <ellipse cx="22" cy="54" rx="11" ry="4" fill="url(#brass)" stroke-width="1.6"/>
+    <path d="M20.5 30 V48" stroke="#ffffff" stroke-width="1.2" opacity="0.4"/>
+  </g>
+</svg>

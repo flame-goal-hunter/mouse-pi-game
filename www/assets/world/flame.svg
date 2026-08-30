@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 28">
+  <defs><radialGradient id="f1" cx="50%" cy="80%" r="70%"><stop offset="0" stop-color="#ff9a3a"/><stop offset="1" stop-color="#ff5a1a"/></radialGradient><radialGradient id="f2" cx="50%" cy="85%" r="70%"><stop offset="0" stop-color="#fff0a0"/><stop offset="1" stop-color="#ffc040"/></radialGradient></defs>
+  <g stroke="#1a1a1a" stroke-linejoin="round" stroke-linecap="round">
+
+    <g transform="translate(0,0)">
+      <path d="M8 26 C2 22 2 14 8 4 C14 14 14 22 8 26 Z" fill="url(#f1)" stroke-width="1.4"/>
+      <path d="M8 26 C5.0 22 5.0 17 8.0 12.36 C11.0 17 11.0 22 8 26 Z" fill="url(#f2)" stroke="none"/>
+      <ellipse cx="8.0" cy="19.84" rx="1.4" ry="2.2" fill="#fffbe0" stroke="none"/>
+    </g>
+    <g transform="translate(16,0)">
+      <path d="M8 26 C4 22 0 14 10 6 C16 14 16 22 8 26 Z" fill="url(#f1)" stroke-width="1.4"/>
+      <path d="M8 26 C6.2 22 4.4 17 9.2 13.6 C12.2 17 12.2 22 8 26 Z" fill="url(#f2)" stroke="none"/>
+      <ellipse cx="8.6" cy="20.4" rx="1.4" ry="2.2" fill="#fffbe0" stroke="none"/>
+    </g>
+    <g transform="translate(32,0)">
+      <path d="M8 26 C0 22 4 14 6 3 C12 14 12 22 8 26 Z" fill="url(#f1)" stroke-width="1.4"/>
+      <path d="M8 26 C3.8 22 5.6 17 6.8 11.74 C9.8 17 9.8 22 8 26 Z" fill="url(#f2)" stroke="none"/>
+      <ellipse cx="7.4" cy="19.56" rx="1.4" ry="2.2" fill="#fffbe0" stroke="none"/>
+    </g>
+  </g>
+</svg>

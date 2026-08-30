@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 44">
+  <defs><linearGradient id="wood" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a6034"/><stop offset="1" stop-color="#5a3418"/></linearGradient><linearGradient id="lid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b07040"/><stop offset="1" stop-color="#6a3e1c"/></linearGradient></defs>
+  <g stroke="#1a1a1a" stroke-linejoin="round" stroke-linecap="round">
+
+    <ellipse cx="24" cy="18" rx="20" ry="10" fill="#ffe27a" opacity="0.35" stroke="none"/>
+    <path d="M6 16 L6 3 A20 10 0 0 1 42 3 L42 16 Z" fill="url(#lid)" stroke-width="2"/>
+    <rect x="4" y="16" width="40" height="24" rx="3" fill="url(#wood)" stroke-width="2"/>
+    <rect x="6" y="16" width="36" height="6" fill="#2a1408" stroke="none" opacity="0.7"/>
+    <g fill="#e8b54a" stroke-width="1.4"><rect x="12" y="16" width="5" height="24" rx="1"/><rect x="31" y="16" width="5" height="24" rx="1"/><rect x="12" y="3" width="5" height="12" rx="1"/><rect x="31" y="3" width="5" height="12" rx="1"/></g>
+    <g fill="#ffd24a" stroke-width="1.2"><circle cx="18" cy="17" r="3.2"/><circle cx="25" cy="15" r="3.6"/><circle cx="32" cy="17" r="3.2"/></g>
+  </g>
+</svg>
