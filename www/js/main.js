@@ -98,6 +98,7 @@ const _boot = () => {
     // The fonts wait can take up to 1.5 s; re-read the CSS size right before boot (Android bars/iframe may have settled).
     if (mode === 'transylvania') { const s = _cssSize(); config.scale.width = Math.round(s.w * DPR); config.scale.height = Math.round(s.h * DPR); }
     game = new Phaser.Game(config);
+    window.__game = game;
 
     // Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
     window.audio = initAudioManager(game);

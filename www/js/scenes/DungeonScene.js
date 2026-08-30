@@ -59,6 +59,23 @@ const LAYER = {
     UI_DEBUG: 5000,       // fps overlay
 };
 const WALL_TRIM_GOLD = 0xd8a850;   // gilded skirting where walls meet the floor
+// Tile indices in www/assets/tiles/<biome>.svg (see tools/gen_tiles.py)
+const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10, WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13, EMPTY: 14, WEAK_CRACK: 15 };
+const TILES_PER_SHEET = 16;
+// World sprites: key → [file, cssW, cssH] (loaded at cssSize × dpr, displayed at 1/dpr)
+const WORLD_SVGS = {
+    prop_skull: ['skull', 24, 24], prop_bone: ['bone', 24, 16], prop_mushroom: ['mushroom', 24, 24], prop_cobweb: ['cobweb', 32, 32],
+    prop_pot: ['pot', 28, 24], prop_sack: ['sack', 26, 26], prop_book: ['book', 24, 16], prop_candle: ['candle', 20, 32],
+    prop_scroll: ['scroll', 24, 16], prop_goblet: ['goblet', 22, 28], prop_bookshelf: ['bookshelf', 34, 42], prop_redCarpet: ['redCarpet', 56, 28],
+    prop_moonflower: ['moonflower', 28, 34], prop_glowpod: ['glowpod', 24, 34], prop_hedge_tuft: ['hedge_tuft', 34, 22], prop_lilypad: ['lilypad', 26, 18],
+    torch_sconce: ['torch_sconce', 20, 26], flame_sheet: ['flame', 48, 28],
+    door_closed: ['door_closed', 80, 110], door_open: ['door_open', 80, 110], chest_closed: ['chest_closed', 48, 44], chest_open: ['chest_open', 48, 44],
+    relic_urn: ['relic_urn', 40, 48], book_forbidden: ['book_forbidden', 36, 40], candelabra_unlit: ['candelabra_unlit', 44, 60], candelabra_lit: ['candelabra_lit', 44, 60],
+    sack_flour: ['sack_flour', 40, 40], pot_hanging: ['pot_hanging', 40, 40], chain: ['chain', 8, 56], cage: ['cage', 128, 160], lock: ['lock', 24, 24], unlock: ['unlock', 24, 24],
+    tile_butter: ['tile_butter', 96, 56], tile_vine: ['tile_vine', 56, 56], tile_thorn: ['tile_thorn', 48, 48],
+    tile_hotpan_cold: ['tile_hotpan_cold', 56, 36], tile_hotpan_warn: ['tile_hotpan_warn', 56, 36], tile_hotpan_flame: ['tile_hotpan_flame', 56, 36],
+    badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
+};
 
 const PLAYER = {
     speed: 240,
@@ -191,6 +208,10 @@ export class DungeonScene extends Phaser.Scene {
         this.isSubBossFloor = (this.runMode === 'endless') && (this.chapter > 0) && (this.chapter % 5 === 0);
         // Pick the biome for this floor
         this.biome = biomeForFloor(this.chapter);
+        // Debug: ?biome=kitchen|library|garden|throne|dungeon renders that biome's art on any floor (screenshots)
+        const dbgBiome = new URLSearchParams(window.location.search).get('biome');
+        const dbgChapter = { dungeon: 1, kitchen: 2, library: 3, garden: 4, throne: 5 }[dbgBiome];
+        if (dbgChapter) this.biome = biomeForFloor(dbgChapter);
     }
 
     preload() {
@@ -220,6 +241,13 @@ export class DungeonScene extends Phaser.Scene {
         this.load.svg('d_ghost',    base + 'ghost.svg',    { width: 150, height: 180 });
         this.load.svg('d_mimic',    base + 'mimic.svg',    { width: 150, height: 150 });
         for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: 64, height: 64 });
+        // Level art kit — everything at css × dpr so it is crisp under the camera zoom
+        const dpr = window.__GAME_DPR || 1;
+        this.tilePx = Math.round(NAV_CELL * dpr);
+        this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
+        for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {
+            this.load.svg(key, `assets/world/${file}.svg`, { width: Math.round(w * dpr), height: Math.round(h * dpr) });
+        }
     }
 
     create() {
@@ -230,6 +258,14 @@ export class DungeonScene extends Phaser.Scene {
         this._hitStopUntil = 0;
         this._hudLayout = null;
         this.dpr = window.__GAME_DPR || 1;
+        this.tilePx = Math.round(NAV_CELL * this.dpr);
+        // 3-frame flame sheet (loaded as one SVG) → frames f0..f2; global anim created once
+        const fs = this.textures.get('flame_sheet');
+        const fw = Math.round(16 * this.dpr), fh = Math.round(28 * this.dpr);
+        for (let i = 0; i < 3; i++) if (!fs.has('f' + i)) fs.add('f' + i, 0, i * fw, 0, fw, fh);
+        if (!this.anims.exists('torch_flame')) {
+            this.anims.create({ key: 'torch_flame', frames: [0, 1, 2, 1].map((i) => ({ key: 'flame_sheet', frame: 'f' + i })), frameRate: 9, repeat: -1 });
+        }
         // Phaser 3.70 ignores a config-level `resolution`; inject it per Text so HUD/overlay text rasterises at device px.
         // The factory persists across restarts (Scene instance reuse) — stash the original once.
         if (!this.add._origText) this.add._origText = this.add.text;
@@ -5749,6 +5785,11 @@ export class DungeonScene extends Phaser.Scene {
             id: p.id, isDown: p.isDown, pointerType: p.pointerType, event: p.event,
             button: p.button, wasTouch: p.wasTouch, pointer: p
         };
+    }
+
+    // World sprite from the art kit: textures are loaded at css×dpr, so display at 1/dpr.
+    _worldImage(x, y, key, depth, originX = 0.5, originY = 0.5) {
+        return this.add.image(x, y, key).setOrigin(originX, originY).setScale(1 / this.dpr).setDepth(depth);
     }
 
     // =================================================================
