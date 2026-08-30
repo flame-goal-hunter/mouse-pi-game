@@ -33,7 +33,7 @@ const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', '
 const LAYER = {
     WORLD:  -100,   // tilemap floor layer (detail overlay at WORLD + 5)
     TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
-    DECOR:   -50,   // decor layer before baking
+    DECOR:   -50,   // decor prop sprites (under the wall tile layer)
     WALL_TILES: -40,   // tilemap wall layer (above decor sprites); cracks at WALL_TILES + 1
     SCONCE:   70,   // torch sconce sprites
     FLAME:    81,
@@ -76,6 +76,8 @@ const WORLD_SVGS = {
     tile_hotpan_cold: ['tile_hotpan_cold', 56, 36], tile_hotpan_warn: ['tile_hotpan_warn', 56, 36], tile_hotpan_flame: ['tile_hotpan_flame', 56, 36],
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
 };
+// Weighted decor types with no matching prop_* asset — reuse the closest existing sprite
+const DECOR_ALIAS = { flower: 'moonflower', vine: 'hedge_tuft', plate: 'pot', knife: 'goblet', inkwell: 'scroll', chain: 'bone' };
 
 const PLAYER = {
     speed: 240,
@@ -286,6 +288,7 @@ export class DungeonScene extends Phaser.Scene {
         this.hasKey = false;
         this.walls = [];
         this.map = this.floorLayer = this.detailLayer = this.wallLayer = this.crackLayer = null;
+        this.decorSprites = [];
         this.enemies = [];
         this.pickups = [];
         this.projectiles = [];
@@ -860,8 +863,6 @@ export class DungeonScene extends Phaser.Scene {
     // BUILD WORLD — carve grid, build wall rects, draw decorations
     // =================================================================
     buildWorld() {
-        // === SHARED GRAPHICS — consolidate static draw calls ===
-        this.decorGfx = this.add.graphics().setDepth(LAYER.DECOR);   // all props; baked under walls
         // Build nav grid FIRST: 'wall' everywhere, then carve floor for rooms + corridors
         const grid = Array.from({ length: NAV_H }, () => Array(NAV_W).fill('wall'));
 
@@ -1734,393 +1735,14 @@ export class DungeonScene extends Phaser.Scene {
         }
     }
 
-    // === BIOME DECORATIONS — dispatcher draws the right type ===
+    // === BIOME DECORATIONS — sprite from the art kit ===
     drawDecor(x, y, type) {
-        if (!this.decorGfx) { console.warn('[DungeonScene] drawDecor after bake:', type); return; }
-        switch (type) {
-            case 'mushroom': return this.drawMushroom(x, y);
-            case 'bone':     return this.drawBone(x, y);
-            case 'cobweb':   return this.drawCobweb(x, y);
-            case 'pot':      return this.drawPot(x, y);
-            case 'plate':    return this.drawPlate(x, y);
-            case 'knife':    return this.drawKnife(x, y);
-            case 'sack':     return this.drawSack(x, y);
-            case 'book':     return this.drawBook(x, y);
-            case 'candle':   return this.drawCandle(x, y);
-            case 'scroll':   return this.drawScroll(x, y);
-            case 'inkwell':  return this.drawInkwell(x, y);
-            case 'flower':   return this.drawFlower(x, y);
-            case 'vine':     return this.drawVineProp(x, y);
-            case 'goblet':   return this.drawGoblet(x, y);
-            case 'skull':    return this.drawSkull(x, y);
-            case 'chain':    return this.drawChain(x, y);
-            case 'bookshelf': return this.drawBookshelf(x, y);
-            case 'redCarpet': return this.drawRedCarpet(x, y);
-            case 'moonflower': return this.drawMoonflower(x, y);
-            case 'glowpod':    return this.drawGlowpod(x, y);
-            case 'hedge_tuft': return this.drawHedgeTuft(x, y);
-            case 'lilypad':    return this.drawLilypad(x, y);
-            default:
-                console.warn('[DungeonScene] unknown decor type', type);
-                return;
-        }
-    }
-
-    // ----- Kitchen: pot, plate, knife, sack -----
-    drawPot(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0x4a4a4a, 1);
-        g.lineStyle(2, 0x1a1a1a, 1);
-        g.fillEllipse(x, y - 2, 18, 14);
-        g.strokeEllipse(x, y - 2, 18, 14);
-        g.fillRoundedRect(x - 8, y - 4, 16, 8, 3);
-        g.strokeRoundedRect(x - 8, y - 4, 16, 8, 3);
-        // Handles
-        g.lineStyle(2, 0x2a2a2a, 1);
-        g.strokeCircle(x - 11, y, 4);
-        g.strokeCircle(x + 11, y, 4);
-        // Shine
-        g.fillStyle(0x808080, 0.8);
-        g.fillEllipse(x - 3, y - 4, 5, 2);
-    }
-    drawPlate(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xeae0d4, 1);
-        g.lineStyle(1.5, 0x1a1a1a, 1);
-        g.fillEllipse(x, y, 14, 4);
-        g.strokeEllipse(x, y, 14, 4);
-        g.fillStyle(0xc0a890, 1);
-        g.fillEllipse(x, y, 10, 2.5);
-    }
-    drawKnife(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(1.5, 0x1a1a1a, 1);
-        // Blade
-        g.fillStyle(0xb0b8c0, 1);
-        g.beginPath(); g.moveTo(x - 8, y); g.lineTo(x + 6, y - 2); g.lineTo(x + 6, y + 2); g.closePath();
-        g.fillPath(); g.strokePath();
-        // Handle
-        g.fillStyle(0x6a3a1a, 1);
-        g.fillRect(x + 6, y - 2, 6, 4);
-        g.strokeRect(x + 6, y - 2, 6, 4);
-    }
-    drawSack(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xa08060, 1);
-        g.lineStyle(1.5, 0x1a1a1a, 1);
-        g.fillRoundedRect(x - 7, y - 4, 14, 12, 3);
-        g.strokeRoundedRect(x - 7, y - 4, 14, 12, 3);
-        // Tied top
-        g.lineStyle(1.5, 0x604030, 1);
-        g.lineBetween(x - 4, y - 4, x + 4, y - 4);
-        // Flour dust spilling
-        g.fillStyle(0xf0e8d8, 0.7);
-        g.fillCircle(x - 4, y + 4, 1.5);
-        g.fillCircle(x + 5, y + 5, 1);
-        g.fillCircle(x, y + 7, 1.2);
-    }
-
-    // ----- Library: book, candle, scroll, inkwell -----
-    drawBook(x, y) {
-        const g = this.decorGfx;
-        const colors = [0x7a3030, 0x2a5078, 0x4a6028, 0x7a4a10];
-        const col = colors[Math.floor(Math.random() * colors.length)];
-        g.fillStyle(col, 1);
-        g.lineStyle(1.5, 0x1a1a1a, 1);
-        g.fillRect(x - 8, y - 5, 16, 10);
-        g.strokeRect(x - 8, y - 5, 16, 10);
-        // Spine
-        g.fillStyle(0xd4b870, 1);
-        g.fillRect(x - 8, y - 5, 2, 10);
-        // Pages line
-        g.lineStyle(1, 0xeae0c8, 0.8);
-        g.lineBetween(x + 8, y - 4, x + 8, y + 4);
-    }
-    drawCandle(x, y) {
-        const g = this.decorGfx;
-        // Candleholder
-        g.fillStyle(0xb0a080, 1);
-        g.lineStyle(1.5, 0x1a1a1a, 1);
-        g.fillEllipse(x, y + 2, 12, 4);
-        g.strokeEllipse(x, y + 2, 12, 4);
-        // Candle body
-        g.fillStyle(0xf0e8d4, 1);
-        g.fillRect(x - 2, y - 8, 4, 10);
-        g.strokeRect(x - 2, y - 8, 4, 10);
-        // Wick + tiny flame
-        g.lineStyle(1, 0x1a1a1a, 1);
-        g.lineBetween(x, y - 8, x, y - 10);
-        g.fillStyle(0xffc040, 0.9);
-        g.fillEllipse(x, y - 12, 3, 5);
-        g.fillStyle(0xffffe0, 1);
-        g.fillEllipse(x, y - 13, 1.2, 2.5);
-    }
-    drawScroll(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xe8d8a8, 1);
-        g.lineStyle(1.5, 0x6a4a20, 1);
-        g.fillRoundedRect(x - 8, y - 3, 16, 6, 2);
-        g.strokeRoundedRect(x - 8, y - 3, 16, 6, 2);
-        // Ends (rolled)
-        g.fillStyle(0xc8a880, 1);
-        g.fillCircle(x - 8, y, 3);
-        g.fillCircle(x + 8, y, 3);
-        g.strokeCircle(x - 8, y, 3);
-        g.strokeCircle(x + 8, y, 3);
-        // Squiggle text
-        g.lineStyle(1, 0x4a3010, 0.6);
-        g.lineBetween(x - 5, y - 1, x + 5, y - 1);
-        g.lineBetween(x - 5, y + 1, x + 5, y + 1);
-    }
-    drawInkwell(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0x1a1a3a, 1);
-        g.lineStyle(1.5, 0x080820, 1);
-        g.fillRoundedRect(x - 5, y - 4, 10, 8, 2);
-        g.strokeRoundedRect(x - 5, y - 4, 10, 8, 2);
-        // Feather quill
-        g.lineStyle(2, 0xe0c8a0, 1);
-        g.lineBetween(x + 4, y - 6, x + 9, y - 14);
-        // Ink puddle
-        g.fillStyle(0x0a0a20, 0.7);
-        g.fillEllipse(x - 1, y + 5, 5, 2);
-    }
-
-    // ----- Garden: flower, vine prop -----
-    drawFlower(x, y) {
-        const g = this.decorGfx;
-        // Stem
-        g.lineStyle(2, 0x305828, 1);
-        g.lineBetween(x, y, x, y - 10);
-        // Leaf
-        g.fillStyle(0x488040, 1);
-        g.fillEllipse(x + 4, y - 6, 5, 3);
-        // Petals
-        const colors = [0xff6090, 0xffd040, 0xc080ff, 0xff8050];
-        const c = colors[Math.floor(Math.random() * colors.length)];
-        g.fillStyle(c, 1);
-        g.lineStyle(1, 0x1a1a1a, 0.7);
-        for (let i = 0; i < 5; i++) {
-            const ang = (i / 5) * Math.PI * 2;
-            g.fillCircle(x + Math.cos(ang) * 4, y - 12 + Math.sin(ang) * 4, 3);
-        }
-        g.fillStyle(0xffd040, 1);
-        g.fillCircle(x, y - 12, 2.5);
-    }
-    drawVineProp(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(2, 0x305828, 1);
-        // Curling vine
-        g.beginPath();
-        g.moveTo(x - 8, y + 4);
-        g.lineTo(x - 5, y);
-        g.lineTo(x, y - 2);
-        g.lineTo(x + 5, y);
-        g.lineTo(x + 8, y + 4);
-        g.strokePath();
-        // Leaves
-        g.fillStyle(0x488040, 1);
-        g.fillEllipse(x - 5, y - 1, 4, 2.5);
-        g.fillEllipse(x + 5, y - 1, 4, 2.5);
-        g.fillEllipse(x, y - 3, 4, 2.5);
-    }
-    // ----- Garden: moonflower, glowpod, hedge tuft, lily pad -----
-    drawMoonflower(x, y) {
-        const g = this.decorGfx;
-        // Soft glow halo
-        g.fillStyle(0xbfd8ff, 0.18);
-        g.fillCircle(x, y - 10, 11);
-        // Stem + leaf
-        g.lineStyle(2, 0x2e5a3a, 1);
-        g.lineBetween(x, y + 2, x, y - 8);
-        g.fillStyle(0x3a7c46, 1);
-        g.fillEllipse(x - 4, y - 3, 6, 3);
-        // Six pale petals
-        g.fillStyle(0xdbe8ff, 1);
-        g.lineStyle(1, 0x1a1024, 0.6);
-        for (let i = 0; i < 6; i++) {
-            const a = (i / 6) * Math.PI * 2;
-            g.fillEllipse(x + Math.cos(a) * 4.5, y - 10 + Math.sin(a) * 4.5, 5, 3);
-            g.strokeEllipse(x + Math.cos(a) * 4.5, y - 10 + Math.sin(a) * 4.5, 5, 3);
-        }
-        // Glowing center
-        g.fillStyle(0xfff4c8, 1);
-        g.fillCircle(x, y - 10, 2.5);
-    }
-    drawGlowpod(x, y) {
-        const g = this.decorGfx;
-        // Outer glow
-        g.fillStyle(0x7ad0a0, 0.2);
-        g.fillCircle(x, y - 4, 11);
-        // Stem
-        g.lineStyle(2, 0x2e5a3a, 1);
-        g.lineBetween(x, y + 4, x, y - 2);
-        // Pod
-        g.fillStyle(0x5ab884, 1);
-        g.lineStyle(1.5, 0x1a1024, 1);
-        g.fillEllipse(x, y - 6, 9, 13);
-        g.strokeEllipse(x, y - 6, 9, 13);
-        // Bright core + highlight
-        g.fillStyle(0xd0ffe0, 0.95);
-        g.fillEllipse(x, y - 6, 4, 7);
-        g.fillStyle(0xffffff, 0.7);
-        g.fillEllipse(x - 2, y - 9, 1.5, 2.5);
-    }
-    drawHedgeTuft(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(1.5, 0x1a3a22, 1);
-        const blobs = [[-6, 2, 5], [0, -2, 6], [6, 2, 5], [-3, 4, 4], [3, 4, 4]];
-        for (const [dx, dy, r] of blobs) {
-            g.fillStyle(0x2e6a3a, 1);
-            g.fillCircle(x + dx, y + dy, r);
-            g.strokeCircle(x + dx, y + dy, r);
-        }
-        // Leaf highlights
-        g.fillStyle(0x4c9a58, 0.9);
-        g.fillCircle(x - 5, y, 2);
-        g.fillCircle(x + 1, y - 4, 2.2);
-        g.fillCircle(x + 6, y, 1.8);
-    }
-    drawLilypad(x, y) {
-        const g = this.decorGfx;
-        // Pad
-        g.fillStyle(0x3f8a4a, 1);
-        g.lineStyle(1.5, 0x1a3a22, 1);
-        g.fillEllipse(x, y, 18, 11);
-        g.strokeEllipse(x, y, 18, 11);
-        // Notch cut toward the center — dark wedge so it reads as a gap on any floor/tile
-        g.fillStyle(0x0a1a12, 0.7);
-        g.fillTriangle(x, y, x + 10, y - 3, x + 10, y + 3);
-        g.lineStyle(1.5, 0x1a3a22, 1);
-        g.lineBetween(x, y, x + 9, y - 3);
-        g.lineBetween(x, y, x + 9, y + 3);
-        // Pink bud
-        g.fillStyle(0xff8fb0, 1);
-        g.lineStyle(1, 0x1a1024, 0.7);
-        g.fillCircle(x - 4, y - 2, 2.5);
-        g.strokeCircle(x - 4, y - 2, 2.5);
-    }
-
-    // ----- Throne: goblet -----
-    drawGoblet(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xd4a830, 1);
-        g.lineStyle(1.5, 0x6a5010, 1);
-        // Base
-        g.fillEllipse(x, y + 4, 8, 3);
-        g.strokeEllipse(x, y + 4, 8, 3);
-        // Stem
-        g.fillRect(x - 1.5, y - 2, 3, 6);
-        g.strokeRect(x - 1.5, y - 2, 3, 6);
-        // Cup
-        g.fillStyle(0xd4a830, 1);
-        g.fillEllipse(x, y - 6, 8, 6);
-        g.strokeEllipse(x, y - 6, 8, 6);
-        g.fillStyle(0x7a1010, 1);
-        g.fillEllipse(x, y - 8, 6, 2);
-    }
-
-    // ----- Dungeon: skull, chain (chain also in throne) -----
-    drawSkull(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(1.5, 0x1a1024, 1);
-        // Cranium
-        g.fillStyle(0xe8e0d0, 1);
-        g.fillCircle(x, y - 3, 7);
-        g.strokeCircle(x, y - 3, 7);
-        // Jaw
-        g.fillStyle(0xe8e0d0, 1);
-        g.fillRoundedRect(x - 5, y + 1, 10, 5, 2);
-        g.strokeRoundedRect(x - 5, y + 1, 10, 5, 2);
-        // Eye sockets + nose
-        g.fillStyle(0x1a1024, 1);
-        g.fillCircle(x - 3, y - 4, 2);
-        g.fillCircle(x + 3, y - 4, 2);
-        g.fillTriangle(x, y - 1, x - 1.2, y + 1, x + 1.2, y + 1);
-        // Teeth
-        g.lineStyle(1, 0x1a1024, 0.8);
-        for (let i = -3; i <= 3; i += 2) g.lineBetween(x + i, y + 2, x + i, y + 5);
-    }
-    drawChain(x, y) {
-        const g = this.decorGfx;
-        // Four links lying diagonally on the floor, alternating orientation
-        for (let i = 0; i < 4; i++) {
-            const lx = x - 9 + i * 6, ly = y + 4 - i * 3;
-            const wide = (i & 1) === 0;
-            g.lineStyle(2, 0x1a1024, 1);
-            g.strokeEllipse(lx, ly, wide ? 8 : 5, wide ? 5 : 8);
-            g.lineStyle(1, 0x9a9aa4, 0.9);
-            g.strokeEllipse(lx, ly, wide ? 6 : 3.5, wide ? 3.5 : 6);
-        }
-        // Anchor ring at the end
-        g.lineStyle(2, 0x1a1024, 1);
-        g.strokeCircle(x + 12, y - 8, 3.5);
-        g.lineStyle(1, 0x9a9aa4, 0.9);
-        g.strokeCircle(x + 12, y - 8, 2);
-    }
-
-    // ----- Library: bookshelf -----
-    drawBookshelf(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(1.5, 0x1a1024, 1);
-        // Case
-        g.fillStyle(0x4a2a12, 1);
-        g.fillRect(x - 13, y - 30, 26, 34);
-        g.strokeRect(x - 13, y - 30, 26, 34);
-        // Cornice
-        g.fillStyle(0x6a3e1c, 1);
-        g.fillRect(x - 15, y - 33, 30, 4);
-        g.strokeRect(x - 15, y - 33, 30, 4);
-        // Three shelves of books
-        const colors = [0x7a3030, 0x2a5078, 0x4a6028, 0x7a4a10, 0x5a3a7a];
-        for (let s = 0; s < 3; s++) {
-            const sy = y - 27 + s * 10;
-            let bx = x - 11;
-            while (bx < x + 10) {
-                const bw = 3 + Math.floor(Math.random() * 3);   // 3..5
-                const bh = 7 + Math.floor(Math.random() * 3);   // 7..9
-                g.fillStyle(colors[Math.floor(Math.random() * colors.length)], 1);
-                g.fillRect(bx, sy + (9 - bh), bw, bh);
-                g.lineStyle(1, 0x1a1024, 0.8);
-                g.strokeRect(bx, sy + (9 - bh), bw, bh);
-                bx += bw + 1;
-            }
-            g.fillStyle(0x6a3e1c, 1);
-            g.fillRect(x - 13, sy + 9, 26, 2);
-        }
-    }
-
-    // ----- Throne: red carpet -----
-    drawRedCarpet(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0x7a1020, 1);
-        g.lineStyle(1.5, 0x1a1024, 1);
-        g.fillRoundedRect(x - 22, y - 11, 44, 22, 2);
-        g.strokeRoundedRect(x - 22, y - 11, 44, 22, 2);
-        // Gold border
-        g.lineStyle(1.5, WALL_TRIM_GOLD, 0.9);
-        g.strokeRect(x - 18, y - 7, 36, 14);
-        // Fringe on both short ends
-        g.lineStyle(1, WALL_TRIM_GOLD, 0.8);
-        for (let i = -9; i <= 9; i += 3) {
-            g.lineBetween(x - 22, y + i, x - 25, y + i);
-            g.lineBetween(x + 22, y + i, x + 25, y + i);
-        }
-    }
-
-    // ----- Universal cobweb (dungeon) -----
-    drawCobweb(x, y) {
-        const g = this.decorGfx;
-        g.lineStyle(1, 0xc0c0d0, 0.5);
-        const r = 12;
-        for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-            g.lineBetween(x, y, x + Math.cos(a) * r, y + Math.sin(a) * r);
-        }
-        for (let rad = 4; rad <= r; rad += 4) {
-            g.beginPath();
-            g.arc(x, y, rad, 0, Math.PI * 2);
-            g.strokePath();
-        }
+        const t = DECOR_ALIAS[type] || type;
+        const key = 'prop_' + t;
+        if (!this.textures.exists(key)) { console.warn('[DungeonScene] unknown decor type', type); return; }
+        // Anchor near the base so props read as standing on the floor; carpets/cobwebs/lilypads are flat
+        const flat = (t === 'redCarpet' || t === 'cobweb' || t === 'lilypad');
+        this.decorSprites.push(this._worldImage(x, y, key, LAYER.DECOR, 0.5, flat ? 0.5 : 0.8));
     }
 
     placeRandomTorches() {
@@ -2252,33 +1874,6 @@ export class DungeonScene extends Phaser.Scene {
                 duration: 500, ease: 'Quad.easeOut',
                 onComplete: () => p.destroy()
             });
-        }
-    }
-
-    drawMushroom(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xf0e8d4, 1);
-        g.lineStyle(1.5, 0x1a1024, 1);
-        g.fillRect(x - 3, y - 4, 6, 10);
-        g.strokeRect(x - 3, y - 4, 6, 10);
-        g.fillStyle(0xd03060, 1);
-        g.fillCircle(x, y - 6, 8);
-        g.strokeCircle(x, y - 6, 8);
-        g.fillStyle(0xfff0f0, 1);
-        g.fillCircle(x - 3, y - 7, 1.5);
-        g.fillCircle(x + 2, y - 5, 1);
-    }
-
-    drawBone(x, y) {
-        const g = this.decorGfx;
-        g.fillStyle(0xeae0c8, 1);
-        g.lineStyle(1.5, 0x1a1024, 1);
-        const len = 16;
-        g.fillRoundedRect(x - len/2, y - 3, len, 6, 2);
-        g.strokeRoundedRect(x - len/2, y - 3, len, 6, 2);
-        for (const dx of [-len/2, len/2]) for (const dy of [-2.5, 2.5]) {
-            g.fillCircle(x + dx, y + dy, 3);
-            g.strokeCircle(x + dx, y + dy, 3);
         }
     }
 
