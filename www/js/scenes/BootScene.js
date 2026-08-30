@@ -10,106 +10,164 @@ export class BootScene extends Phaser.Scene {
     }
 
     preload() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
+        const mode = new URLSearchParams(window.location.search).get('mode') || 'menu';
+        const isCastle = (mode === 'transylvania');
+
+        let width = this.cameras.main.width;
+        let height = this.cameras.main.height;
 
         // === BEAUTIFUL LOADING SCREEN ===
+        if (!isCastle) {
+            // Background gradient (ice blue)
+            const bg = this.add.graphics();
+            bg.fillGradientStyle(0x1a5276, 0x1a5276, 0x85c1e9, 0x85c1e9, 1);
+            bg.fillRect(0, 0, width, height);
 
-        // Background gradient (ice blue)
-        const bg = this.add.graphics();
-        bg.fillGradientStyle(0x1a5276, 0x1a5276, 0x85c1e9, 0x85c1e9, 1);
-        bg.fillRect(0, 0, width, height);
+            // Snowflakes decoration (static)
+            const snowflakes = [];
+            for (let i = 0; i < 30; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const size = 12 + Math.random() * 20;
+                const sf = this.add.text(x, y, '❄️', {
+                    fontSize: `${size}px`
+                }).setOrigin(0.5).setAlpha(0.3 + Math.random() * 0.4);
+                snowflakes.push(sf);
+            }
 
-        // Snowflakes decoration (static)
-        const snowflakes = [];
-        for (let i = 0; i < 30; i++) {
-            const x = Math.random() * width;
-            const y = Math.random() * height;
-            const size = 12 + Math.random() * 20;
-            const sf = this.add.text(x, y, '❄️', {
-                fontSize: `${size}px`
-            }).setOrigin(0.5).setAlpha(0.3 + Math.random() * 0.4);
-            snowflakes.push(sf);
+            // Game title
+            const titleEmoji = this.add.text(width / 2, height / 2 - 140, '🐭', {
+                fontSize: '80px'
+            }).setOrigin(0.5);
+
+            const titleText = this.add.text(width / 2, height / 2 - 60, 'МЫШОНОК ПИ', {
+                fontFamily: 'Arial Black, Arial',
+                fontSize: '48px',
+                color: '#ffffff',
+                stroke: '#1a5276',
+                strokeThickness: 8
+            }).setOrigin(0.5);
+
+            const subtitleText = this.add.text(width / 2, height / 2 - 10, '❄️ Снежные битвы ❄️', {
+                fontFamily: 'Arial',
+                fontSize: '24px',
+                color: '#d5f5e3',
+                stroke: '#1a5276',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            // Progress bar container (rounded style)
+            const barWidth = 350;
+            const barHeight = 30;
+            const barX = width / 2 - barWidth / 2;
+            const barY = height / 2 + 60;
+
+            const progressBox = this.add.graphics();
+            progressBox.fillStyle(0x0e3a5c, 0.9);
+            progressBox.fillRoundedRect(barX - 5, barY - 5, barWidth + 10, barHeight + 10, 10);
+
+            const progressBar = this.add.graphics();
+
+            // Loading text
+            const loadingText = this.add.text(width / 2, barY + barHeight + 30, 'Загрузка...', {
+                fontFamily: 'Arial',
+                fontSize: '18px',
+                color: '#ffffff'
+            }).setOrigin(0.5);
+
+            // Percentage text
+            const percentText = this.add.text(width / 2, barY + barHeight / 2, '0%', {
+                fontFamily: 'Arial Black',
+                fontSize: '16px',
+                color: '#ffffff',
+                stroke: '#0e3a5c',
+                strokeThickness: 2
+            }).setOrigin(0.5);
+
+            // Tips at bottom
+            const tips = [
+                '💡 Используй крюк (E) чтобы раскачиваться!',
+                '💡 Бей снежками в противников!',
+                '💡 Собирай бонусы для усиления!',
+                '💡 Прыгай с помощью ПРОБЕЛ или W'
+            ];
+            const tipText = this.add.text(width / 2, height - 50, tips[Math.floor(Math.random() * tips.length)], {
+                fontFamily: 'Arial',
+                fontSize: '16px',
+                color: '#aed6f1'
+            }).setOrigin(0.5);
+
+            // Progress event
+            this.load.on('progress', (value) => {
+                progressBar.clear();
+                progressBar.fillStyle(0x3498db, 1);
+                progressBar.fillRoundedRect(barX, barY, barWidth * value, barHeight, 8);
+
+                // Shine effect on progress bar
+                progressBar.fillStyle(0x5dade2, 0.5);
+                progressBar.fillRoundedRect(barX, barY, barWidth * value, barHeight / 3, 5);
+
+                percentText.setText(Math.floor(value * 100) + '%');
+            });
+
+            // Store all UI elements for cleanup
+            this.loadingUI = [bg, ...snowflakes, titleEmoji, titleText, subtitleText,
+                progressBox, progressBar, loadingText, percentText, tipText];
+        } else {
+            const dpr = window.__GAME_DPR || 1;
+            this.cameras.main.setOrigin(0, 0).setZoom(dpr);
+            width = this.cameras.main.width / dpr;
+            height = this.cameras.main.height / dpr;
+
+            const F = '"Nunito", "Roboto", system-ui, sans-serif';
+            const bg = this.add.graphics();
+            bg.fillGradientStyle(0x1a0c2e, 0x1a0c2e, 0x07030f, 0x07030f, 1);
+            bg.fillRect(0, 0, width, height);
+            // Moon + glow
+            const moon = this.add.graphics();
+            moon.fillStyle(0xfff4c8, 0.12); moon.fillCircle(width * 0.82, height * 0.22, 74);
+            moon.fillStyle(0xfff4c8, 1);    moon.fillCircle(width * 0.82, height * 0.22, 46);
+            moon.fillStyle(0x1a0c2e, 1);    moon.fillCircle(width * 0.85, height * 0.20, 40);
+            // Castle silhouette (three towers with battlements)
+            const castle = this.add.graphics();
+            castle.fillStyle(0x0b0616, 1);
+            castle.fillRect(0, height * 0.78, width, height * 0.22);
+            for (const [cx, w, h] of [[width * 0.18, 70, 150], [width * 0.5, 110, 210], [width * 0.8, 70, 150]]) {
+                castle.fillRect(cx - w / 2, height * 0.78 - h, w, h);
+                for (let i = -2; i <= 2; i++) castle.fillRect(cx + i * (w / 4) - 6, height * 0.78 - h - 16, 12, 16);
+            }
+            const titleText = this.add.text(width / 2, height * 0.30, 'МЫШОНОК ПИ', {
+                fontFamily: F, fontSize: '54px', fontStyle: '900', color: '#f3d27a', stroke: '#1a0a2e', strokeThickness: 8, resolution: dpr,
+            }).setOrigin(0.5);
+            const subtitleText = this.add.text(width / 2, height * 0.30 + 46, 'и Замок Теней', {
+                fontFamily: F, fontSize: '26px', fontStyle: '700', color: '#d8c0f0', stroke: '#1a0a2e', strokeThickness: 5, resolution: dpr,
+            }).setOrigin(0.5);
+            const barWidth = Math.min(420, width * 0.6), barHeight = 22, barX = width / 2 - barWidth / 2, barY = height * 0.58;
+            const progressBox = this.add.graphics();
+            progressBox.fillStyle(0x0d0618, 0.95); progressBox.fillRoundedRect(barX - 4, barY - 4, barWidth + 8, barHeight + 8, 12);
+            progressBox.lineStyle(2, 0xe8b54a, 0.8); progressBox.strokeRoundedRect(barX - 4, barY - 4, barWidth + 8, barHeight + 8, 12);
+            const progressBar = this.add.graphics();
+            const loadingText = this.add.text(width / 2, barY + barHeight + 28, 'Замок просыпается…', {
+                fontFamily: F, fontSize: '18px', fontStyle: '700', color: '#c8b0e8', resolution: dpr,
+            }).setOrigin(0.5);
+            const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+            const tips = isTouch
+                ? ['Левый стик — ходьба, правый — прицел и огонь', 'Кнопка рывка спасает от укуса', 'Крадись мимо спящих стражей', 'Сыр — это деньги лавки дядюшки']
+                : ['WASD — ходьба, мышь — прицел, ЛКМ — огонь', 'SHIFT — рывок, C — красться, B — бросить книгу', 'Сыр — это деньги лавки дядюшки'];
+            const tipText = this.add.text(width / 2, height - 44, tips[Math.floor(Math.random() * tips.length)], {
+                fontFamily: F, fontSize: '15px', color: '#8a70b0', resolution: dpr,
+            }).setOrigin(0.5);
+            this.load.on('progress', (value) => {
+                progressBar.clear();
+                progressBar.fillStyle(0xe8b54a, 1);
+                progressBar.fillRoundedRect(barX, barY, Math.max(8, barWidth * value), barHeight, 10);
+                progressBar.fillStyle(0xfff0c0, 0.35);
+                progressBar.fillRoundedRect(barX, barY, Math.max(8, barWidth * value), barHeight / 3, 6);
+            });
+
+            // Store all UI elements for cleanup
+            this.loadingUI = [bg, moon, castle, titleText, subtitleText, progressBox, progressBar, loadingText, tipText];
         }
-
-        // Game title
-        const titleEmoji = this.add.text(width / 2, height / 2 - 140, '🐭', {
-            fontSize: '80px'
-        }).setOrigin(0.5);
-
-        const titleText = this.add.text(width / 2, height / 2 - 60, 'МЫШОНОК ПИ', {
-            fontFamily: 'Arial Black, Arial',
-            fontSize: '48px',
-            color: '#ffffff',
-            stroke: '#1a5276',
-            strokeThickness: 8
-        }).setOrigin(0.5);
-
-        const subtitleText = this.add.text(width / 2, height / 2 - 10, '❄️ Снежные битвы ❄️', {
-            fontFamily: 'Arial',
-            fontSize: '24px',
-            color: '#d5f5e3',
-            stroke: '#1a5276',
-            strokeThickness: 3
-        }).setOrigin(0.5);
-
-        // Progress bar container (rounded style)
-        const barWidth = 350;
-        const barHeight = 30;
-        const barX = width / 2 - barWidth / 2;
-        const barY = height / 2 + 60;
-
-        const progressBox = this.add.graphics();
-        progressBox.fillStyle(0x0e3a5c, 0.9);
-        progressBox.fillRoundedRect(barX - 5, barY - 5, barWidth + 10, barHeight + 10, 10);
-
-        const progressBar = this.add.graphics();
-
-        // Loading text
-        const loadingText = this.add.text(width / 2, barY + barHeight + 30, 'Загрузка...', {
-            fontFamily: 'Arial',
-            fontSize: '18px',
-            color: '#ffffff'
-        }).setOrigin(0.5);
-
-        // Percentage text
-        const percentText = this.add.text(width / 2, barY + barHeight / 2, '0%', {
-            fontFamily: 'Arial Black',
-            fontSize: '16px',
-            color: '#ffffff',
-            stroke: '#0e3a5c',
-            strokeThickness: 2
-        }).setOrigin(0.5);
-
-        // Tips at bottom
-        const tips = [
-            '💡 Используй крюк (E) чтобы раскачиваться!',
-            '💡 Бей снежками в противников!',
-            '💡 Собирай бонусы для усиления!',
-            '💡 Прыгай с помощью ПРОБЕЛ или W'
-        ];
-        const tipText = this.add.text(width / 2, height - 50, tips[Math.floor(Math.random() * tips.length)], {
-            fontFamily: 'Arial',
-            fontSize: '16px',
-            color: '#aed6f1'
-        }).setOrigin(0.5);
-
-        // Progress event
-        this.load.on('progress', (value) => {
-            progressBar.clear();
-            progressBar.fillStyle(0x3498db, 1);
-            progressBar.fillRoundedRect(barX, barY, barWidth * value, barHeight, 8);
-
-            // Shine effect on progress bar
-            progressBar.fillStyle(0x5dade2, 0.5);
-            progressBar.fillRoundedRect(barX, barY, barWidth * value, barHeight / 3, 5);
-
-            percentText.setText(Math.floor(value * 100) + '%');
-        });
-
-        // Store all UI elements for cleanup
-        this.loadingUI = [bg, ...snowflakes, titleEmoji, titleText, subtitleText,
-            progressBox, progressBar, loadingText, percentText, tipText];
 
         this.load.on('complete', () => {
             // Fade out animation
