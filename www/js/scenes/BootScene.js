@@ -132,14 +132,16 @@ export class BootScene extends Phaser.Scene {
             const castle = this.add.graphics();
             castle.fillStyle(0x0b0616, 1);
             castle.fillRect(0, height * 0.78, width, height * 0.22);
-            for (const [cx, w, h] of [[width * 0.18, 70, 150], [width * 0.5, 110, 210], [width * 0.8, 70, 150]]) {
+            const tk = Math.min(1, height / 600);   // shorter towers on short (landscape) screens so they never reach the title
+            for (const [cx, w, h0] of [[width * 0.18, 70, 150], [width * 0.5, 110, 210], [width * 0.8, 70, 150]]) {
+                const h = Math.round(h0 * tk), m = Math.round(16 * tk);
                 castle.fillRect(cx - w / 2, height * 0.78 - h, w, h);
-                for (let i = -2; i <= 2; i++) castle.fillRect(cx + i * (w / 4) - 6, height * 0.78 - h - 16, 12, 16);
+                for (let i = -2; i <= 2; i++) castle.fillRect(cx + i * (w / 4) - 6, height * 0.78 - h - m, 12, m);
             }
-            const titleText = this.add.text(width / 2, height * 0.30, 'МЫШОНОК ПИ', {
+            const titleText = this.add.text(width / 2, height * 0.27, 'МЫШОНОК ПИ', {
                 fontFamily: F, fontSize: '54px', fontStyle: '900', color: '#f3d27a', stroke: '#1a0a2e', strokeThickness: 8, resolution: dpr,
             }).setOrigin(0.5);
-            const subtitleText = this.add.text(width / 2, height * 0.30 + 46, 'и Замок Теней', {
+            const subtitleText = this.add.text(width / 2, height * 0.27 + 46, 'и Замок Теней', {
                 fontFamily: F, fontSize: '26px', fontStyle: '700', color: '#d8c0f0', stroke: '#1a0a2e', strokeThickness: 5, resolution: dpr,
             }).setOrigin(0.5);
             const barWidth = Math.min(420, width * 0.6), barHeight = 22, barX = width / 2 - barWidth / 2, barY = height * 0.58;
