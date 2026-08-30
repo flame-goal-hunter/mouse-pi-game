@@ -590,7 +590,6 @@ export class DungeonScene extends Phaser.Scene {
     updateTorches(dt) {
         for (const t of this.torches) {
             if (!t.lit) continue;
-            t.flameH = Math.sin(this.time.now * 0.022 + t.flickerPhase) * 3;   // still read by lighting flicker
             if (Math.random() < 0.00004) this.extinguishTorch(t);
         }
     }
@@ -2200,7 +2199,7 @@ export class DungeonScene extends Phaser.Scene {
             baseRadius: 110 + Phaser.Math.Between(-15, 15),
             flameH: 0,
             sconce: this._worldImage(x, y + 12, 'torch_sconce', LAYER.SCONCE, 0.5, 1),
-            flame: this.add.sprite(x, y - 10, 'flame_sheet', 'f0').setOrigin(0.5, 0.93).setScale(1 / this.dpr).setDepth(LAYER.FLAME),
+            flame: this.add.sprite(x, y - 6, 'flame_sheet', 'f0').setOrigin(0.5, 0.93).setScale(1 / this.dpr).setDepth(LAYER.FLAME),
         };
         torch.flame.play({ key: 'torch_flame', startFrame: Phaser.Math.Between(0, 2) });
         torch.flame.anims.timeScale = 0.85 + Math.random() * 0.3;   // desync torches
