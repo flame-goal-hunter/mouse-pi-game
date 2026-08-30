@@ -35,8 +35,7 @@ const LAYER = {
     TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
     DECOR:   -50,   // decor layer before baking
     WALL_TILES: -40,   // tilemap wall layer (above decor sprites); cracks at WALL_TILES + 1
-    WALL:     50,   // wall Graphics before baking (and weak-wall overlays 51-52)
-    SCONCE:   70,   // torchSconceGfx before baking
+    SCONCE:   70,   // torch sconce sprites
     FLAME:    81,
     EYES:     82,   // also used numerically by torch smoke/spark FX
 
@@ -413,6 +412,7 @@ export class DungeonScene extends Phaser.Scene {
         this.events.once('shutdown', () => this.scale.off('resize', onResize));
         this.events.once('shutdown', () => {
             if (this._hitStopTimeout) { clearTimeout(this._hitStopTimeout); this._hitStopTimeout = null; }
+            if (this.map) { this.map.destroy(); this.map = null; }
         });
 
         // STORY INTRO
@@ -588,22 +588,9 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     updateTorches(dt) {
-        // ONE clear + redraw of every visible lit flame into the shared layer
-        if (!this.flameGfx) return;
-        this.flameGfx.clear();
-        const cam = this.cameras.main;
-        const margin = 100;
         for (const t of this.torches) {
             if (!t.lit) continue;
-            const visible =
-                t.x + 40 + margin >= cam.worldView.x &&
-                t.x - 40 - margin <= cam.worldView.x + this.viewW &&
-                t.y + 40 + margin >= cam.worldView.y &&
-                t.y - 40 - margin <= cam.worldView.y + this.viewH;
-            if (!visible) continue;
-            t.flameH = Math.sin(this.time.now * 0.022 + t.flickerPhase) * 3;
-            this.drawTorchFlame(t);
-            // Rare permanent extinction (atmosphere)
+            t.flameH = Math.sin(this.time.now * 0.022 + t.flickerPhase) * 3;   // still read by lighting flicker
             if (Math.random() < 0.00004) this.extinguishTorch(t);
         }
     }
@@ -640,22 +627,9 @@ export class DungeonScene extends Phaser.Scene {
         }
     }
 
-    drawTorchFlame(torch) {
-        // Appends into the shared flameGfx — caller clears once per frame
-        const f = this.flameGfx;
-        if (!f || !torch.lit) return;
-        const x = torch.x, y = torch.y;
-        const h = torch.flameH || 0;
-        f.fillStyle(0xff7020, 1);
-        f.fillEllipse(x, y - 8 - h * 0.4, 7, 12 + h);
-        f.fillStyle(0xffd040, 1);
-        f.fillEllipse(x, y - 10 - h * 0.6, 4, 8 + h * 0.6);
-        f.fillStyle(0xffffe0, 1);
-        f.fillEllipse(x, y - 12 - h * 0.7, 1.5, 3.5 + h * 0.3);
-    }
-
     extinguishTorch(torch) {
         torch.lit = false;
+        if (torch.flame) torch.flame.setVisible(false);
         // Smoke puff
         for (let i = 0; i < 8; i++) {
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
@@ -888,8 +862,6 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     buildWorld() {
         // === SHARED GRAPHICS — consolidate static draw calls ===
-        this.torchSconceGfx = this.add.graphics().setDepth(LAYER.SCONCE);
-        this.flameGfx = this.add.graphics().setDepth(LAYER.FLAME);  // ALL torch flames, one clear per frame
         this.decorGfx = this.add.graphics().setDepth(LAYER.DECOR);   // all props; baked under walls
         // Build nav grid FIRST: 'wall' everywhere, then carve floor for rooms + corridors
         const grid = Array.from({ length: NAV_H }, () => Array(NAV_W).fill('wall'));
@@ -989,7 +961,6 @@ export class DungeonScene extends Phaser.Scene {
 
         // Random torches per room (some lit, some unlit)
         this.placeRandomTorches();
-        for (const t of this.torches) this.drawTorchFlame(t);  // first-frame flames (drawTorchFlame skips unlit)
         // SPOOKY eyes in dark corners — they fade when Pi approaches
         this.placeSpookyEyes();
     }
@@ -1109,9 +1080,9 @@ export class DungeonScene extends Phaser.Scene {
             }
             floor.push(fr); detail.push(dr); walls.push(wr);
         }
-        this.floorLayer.putTilesAt(floor, 0, 0);
-        this.detailLayer.putTilesAt(detail, 0, 0);
-        this.wallLayer.putTilesAt(walls, 0, 0);
+        this.floorLayer.putTilesAt(floor, 0, 0, false);
+        this.detailLayer.putTilesAt(detail, 0, 0, false);
+        this.wallLayer.putTilesAt(walls, 0, 0, false);
     }
     plateTile(r, c) {
         return (((r >> 1) + (c >> 1)) & 1 ? TILE.PLATE_B : TILE.PLATE_A) + (r & 1) * 2 + (c & 1);
@@ -2227,18 +2198,13 @@ export class DungeonScene extends Phaser.Scene {
             x, y, lit,
             flickerPhase: Math.random() * Math.PI * 2,
             baseRadius: 110 + Phaser.Math.Between(-15, 15),
-            flameH: 0
+            flameH: 0,
+            sconce: this._worldImage(x, y + 12, 'torch_sconce', LAYER.SCONCE, 0.5, 1),
+            flame: this.add.sprite(x, y - 10, 'flame_sheet', 'f0').setOrigin(0.5, 0.93).setScale(1 / this.dpr).setDepth(LAYER.FLAME),
         };
-        // Sconce drawn on SHARED graphics (one draw call for all torches)
-        const g = this.torchSconceGfx;
-        g.fillStyle(0x6a3a1a, 1);
-        g.fillRect(x - 3, y, 6, 14);
-        g.lineStyle(1.2, 0x2a1a08, 1);
-        g.strokeRect(x - 3, y, 6, 14);
-        g.fillStyle(0x4a4a4a, 1);
-        g.fillRoundedRect(x - 7, y - 3, 14, 6, 2);
-        g.lineStyle(1.2, 0x1a1a1a, 1);
-        g.strokeRoundedRect(x - 7, y - 3, 14, 6, 2);
+        torch.flame.play({ key: 'torch_flame', startFrame: Phaser.Math.Between(0, 2) });
+        torch.flame.anims.timeScale = 0.85 + Math.random() * 0.3;   // desync torches
+        if (!lit) torch.flame.setVisible(false);
         this.torches.push(torch);
     }
 
@@ -2246,6 +2212,7 @@ export class DungeonScene extends Phaser.Scene {
     lightTorch(torch) {
         if (torch.lit) return;
         torch.lit = true;
+        if (torch.flame) torch.flame.setVisible(true);
         bus.emit(SFX.LIGHT_TORCH);
         this.score += 5;
         this.showFloatingText(torch.x, torch.y - 20, '+5 свет!', '#ffd060', 18);

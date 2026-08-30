@@ -17,7 +17,7 @@ import { initAudioManager } from './audio/AudioManager.js';
 const urlParams = new URLSearchParams(window.location.search);
 const mode = urlParams.get('mode') || 'menu';
 // Device-pixel rendering for the Transylvania mode only (other modes keep RESIZE at 1×).
-// Fractional DPR is fine (e.g. Pixel 9a → 2.625): roundPixels is simply inactive for non-integer zoom.
+// Fractional DPR is fine (e.g. Pixel 9a → 2.625): with roundPixels the vertex shader snaps to device pixels for any zoom, which keeps tile edges seam-free.
 let _dprStored = null;
 try { _dprStored = localStorage.getItem('dpr'); } catch (e) {}   // device A/B without a rebuild: localStorage.setItem('dpr', '2')
 const _dprParam = parseFloat(urlParams.get('dpr') ?? _dprStored);
