@@ -91,7 +91,7 @@ const _boot = () => {
 };
 if (document.fonts && document.fonts.load) {
     Promise.race([
-        Promise.all([document.fonts.load('400 16px Nunito'), document.fonts.load('700 16px Nunito'), document.fonts.load('900 16px Nunito')]),
+        Promise.all([document.fonts.load('400 16px Nunito', 'Aa0Пример'), document.fonts.load('700 16px Nunito', 'Aa0Пример'), document.fonts.load('900 16px Nunito', 'Aa0Пример')]),
         new Promise((r) => setTimeout(r, 1500)),
     ]).then(_boot, _boot);
 } else {
