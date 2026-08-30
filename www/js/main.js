@@ -71,7 +71,7 @@ const config = {
     },
     scale: (mode === 'transylvania')
         ? { mode: Phaser.Scale.NONE, parent: 'game-container', autoCenter: Phaser.Scale.NO_CENTER,
-            width: _cssSize().w * DPR, height: _cssSize().h * DPR, zoom: 1 / DPR }
+            width: Math.round(_cssSize().w * DPR), height: Math.round(_cssSize().h * DPR), zoom: 1 / DPR }
         : { mode: Phaser.Scale.RESIZE, parent: 'game-container', autoCenter: Phaser.Scale.CENTER_BOTH, width: '100%', height: '100%' },
     render: {
         antialias: true,
@@ -135,7 +135,7 @@ window.addEventListener('resize', () => {
     if (_resizeRefreshTimer) clearTimeout(_resizeRefreshTimer);
     _resizeRefreshTimer = setTimeout(() => {
         if (!game) return;
-        if (mode === 'transylvania') { const s = _cssSize(); game.scale.resize(s.w * DPR, s.h * DPR); }
+        if (mode === 'transylvania') { const s = _cssSize(); game.scale.resize(Math.round(s.w * DPR), Math.round(s.h * DPR)); }
         else game.scale.refresh();
     }, 200);
 });
