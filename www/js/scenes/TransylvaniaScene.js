@@ -40,6 +40,16 @@ export class TransylvaniaScene extends Phaser.Scene {
     }
 
     create() {
+        // Device-pixel canvas (main.js, transylvania mode): zoom about the origin so scene coords stay CSS px
+        // for both scrollFactor-0 and scrollFactor-1 objects; inject Text resolution (3.70 ignores the config value).
+        this.dpr = window.__GAME_DPR || 1;
+        this.cameras.main.setOrigin(0, 0);
+        this.cameras.main.setZoom(this.dpr);
+        if (!this.add._origText) this.add._origText = this.add.text;
+        const scene = this;
+        this.add.text = function (x, y, text, style) {
+            return scene.add._origText.call(this, x, y, text, Object.assign({}, style || {}, { resolution: scene.dpr }));
+        };
         // Diagnostic: disable input polling on move (research recommendation).
         try { this.input.setPollOnMove?.(false); } catch (e) {}
 
@@ -47,7 +57,7 @@ export class TransylvaniaScene extends Phaser.Scene {
 
         // === DIAGNOSTIC FPS COUNTER (top-center, big, visible) ===
         // Shows real-time fps. If this drops below 30, something is throttling Phaser.
-        this._fpsText = this.add.text(this.scale.width / 2, 4, 'fps ?', {
+        this._fpsText = this.add.text(this.viewW / 2, 4, 'fps ?', {
             fontFamily: 'monospace', fontSize: '12px',
             color: '#80ff80', backgroundColor: '#000000', padding: { x: 6, y: 2 },
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(10000);
@@ -56,15 +66,15 @@ export class TransylvaniaScene extends Phaser.Scene {
         // Debounce resize — Android URL-bar show/hide fires a storm of resize events
         // that would otherwise call rebuild() many times per second. We only rebuild
         // 250ms after the LAST resize, and skip rebuilds for tiny changes (<24px).
-        this._lastW = this.scale.width;
-        this._lastH = this.scale.height;
+        this._lastW = this.viewW;
+        this._lastH = this.viewH;
         const onResize = () => {
-            const W = this.scale.width, H = this.scale.height;
+            const W = this.viewW, H = this.viewH;
             if (Math.abs(W - this._lastW) < 24 && Math.abs(H - this._lastH) < 24) return;
             if (this._resizeTimer) clearTimeout(this._resizeTimer);
             this._resizeTimer = setTimeout(() => {
-                this._lastW = this.scale.width;
-                this._lastH = this.scale.height;
+                this._lastW = this.viewW;
+                this._lastH = this.viewH;
                 this.rebuild();
             }, 250);
         };
@@ -100,6 +110,9 @@ export class TransylvaniaScene extends Phaser.Scene {
             this._fpsFrames = 0;
         }
     }
+
+    get viewW() { return this.scale.width / (this.dpr || 1); }
+    get viewH() { return this.scale.height / (this.dpr || 1); }
 
     rebuild() {
         this.children.removeAll();
@@ -235,8 +248,8 @@ export class TransylvaniaScene extends Phaser.Scene {
     // No overlaps. Every block has guaranteed vertical space.
     // ============================================
     build() {
-        const W = this.scale.width;
-        const H = this.scale.height;
+        const W = this.viewW;
+        const H = this.viewH;
         const cx = W / 2;
 
         // === Layout constants — proportional to height, clamped sensibly ===
@@ -756,7 +769,7 @@ export class TransylvaniaScene extends Phaser.Scene {
     openCodex() {
         if (this.codexOpen) return;
         this.codexOpen = true;
-        const W = this.scale.width, H = this.scale.height;
+        const W = this.viewW, H = this.viewH;
         const D = 2600;
         const els = [];
         const addEl = (el, dep) => { el.setDepth(dep || D); els.push(el); return el; };
@@ -917,8 +930,8 @@ export class TransylvaniaScene extends Phaser.Scene {
     openShop() {
         if (this.shopOpen) return;
         this.shopOpen = true;
-        const W = this.scale.width;
-        const H = this.scale.height;
+        const W = this.viewW;
+        const H = this.viewH;
         const D = 2500;
         const els = [];
         const addEl = (el, dep) => { el.setDepth(dep || D); els.push(el); return el; };

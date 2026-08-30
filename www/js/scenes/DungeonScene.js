@@ -229,6 +229,16 @@ export class DungeonScene extends Phaser.Scene {
         this.tweens.timeScale = 1;
         this._hitStopUntil = 0;
         this._hudLayout = null;
+        this.dpr = window.__GAME_DPR || 1;
+        // Phaser 3.70 ignores a config-level `resolution`; inject it per Text so HUD/overlay text rasterises at device px.
+        // The factory persists across restarts (Scene instance reuse) — stash the original once.
+        if (!this.add._origText) this.add._origText = this.add.text;
+        const scene = this;
+        this.add.text = function (x, y, text, style) {
+            return scene.add._origText.call(this, x, y, text, Object.assign({}, style || {}, { resolution: scene.dpr }));
+        };
+        this.fxLayer = null;
+        this.uiLayer = null;
         // Pools must not survive scene restart — the Scene instance is reused
         // and shutdown destroys all pooled display objects.
         this._circlePool = [];
@@ -300,7 +310,8 @@ export class DungeonScene extends Phaser.Scene {
 
         // Track whether user is currently using mouse vs touch + last mouse-move timestamp
         this._mouseMovedAt = 0;
-        this.input.on('pointermove', (p) => {
+        this.input.on('pointermove', (rawP) => {
+            const p = this._cssPointer(rawP);
             if (p.pointerType === 'touch' || p.event?.type === 'touchmove' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
                 if (this.joy) this.setTouchUIVisible(true);
@@ -308,7 +319,8 @@ export class DungeonScene extends Phaser.Scene {
                 this._mouseMovedAt = this.time.now;
             }
         });
-        this.input.on('pointerdown', (p) => {
+        this.input.on('pointerdown', (rawP) => {
+            const p = this._cssPointer(rawP);
             if (p.pointerType === 'touch' || p.event?.type === 'touchstart') {
                 this._touchUsed = true;
                 if (this.joy) this.setTouchUIVisible(true);
@@ -319,6 +331,8 @@ export class DungeonScene extends Phaser.Scene {
 
         // CAMERA - pure black background (only carved dungeon visible)
         this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+        this._createFixedLayers();
+        this.cameras.main.setZoom(this.dpr);
         this.cameras.main.setBackgroundColor(0x000000);
         this.cameras.main.startFollow(this.player.sprite, true, 0.10, 0.10);
         this.cameras.main.fadeIn(400, 0, 0, 0);
@@ -350,6 +364,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // STORY INTRO
         this.showStoryIntro();
+        this._pinFixed();
     }
 
     update(_time, dtMs) {
@@ -413,7 +428,7 @@ export class DungeonScene extends Phaser.Scene {
         const b = this.biome || { darknessColor: 0x080418, darknessAlpha: 0.78 };
         const cam = this.cameras.main;
         this._darknessColor = b.darknessColor;
-        this.lightRT = this.add.renderTexture(0, 0, cam.width, cam.height)
+        this.lightRT = this.add.renderTexture(0, 0, this.viewW, this.viewH)
             .setOrigin(0).setScrollFactor(0).setDepth(700);
         this.lightRT.setAlpha(b.darknessAlpha != null ? b.darknessAlpha : 0.78);
 
@@ -465,16 +480,16 @@ export class DungeonScene extends Phaser.Scene {
         const cam = this.cameras.main;
         const rt = this.lightRT;
         // Scale.RESIZE can change the canvas at any time (Android URL bar)
-        if (rt.width !== cam.width || rt.height !== cam.height) {
-            rt.resize(cam.width, cam.height);
+        if (rt.width !== this.viewW || rt.height !== this.viewH) {
+            rt.resize(this.viewW, this.viewH);
         }
         rt.fill(this._darknessColor, 1);
-        // NOTE: screen-space math assumes cam.zoom === 1 (this scene never zooms)
-        const ox = cam.scrollX, oy = cam.scrollY;
+        // Light positions are world − worldView = CSS px; the camera zoom (dpr) maps them to device px via fxLayer
+        const ox = cam.worldView.x, oy = cam.worldView.y;
         const margin = 130;
         const inView = (x, y, r) =>
-            x + r + margin >= ox && x - r - margin <= ox + cam.width &&
-            y + r + margin >= oy && y - r - margin <= oy + cam.height;
+            x + r + margin >= ox && x - r - margin <= ox + this.viewW &&
+            y + r + margin >= oy && y - r - margin <= oy + this.viewH;
 
         rt.beginDraw();
 
@@ -528,10 +543,10 @@ export class DungeonScene extends Phaser.Scene {
         for (const t of this.torches) {
             if (!t.lit) continue;
             const visible =
-                t.x + 40 + margin >= cam.scrollX &&
-                t.x - 40 - margin <= cam.scrollX + cam.width &&
-                t.y + 40 + margin >= cam.scrollY &&
-                t.y - 40 - margin <= cam.scrollY + cam.height;
+                t.x + 40 + margin >= cam.worldView.x &&
+                t.x - 40 - margin <= cam.worldView.x + this.viewW &&
+                t.y + 40 + margin >= cam.worldView.y &&
+                t.y - 40 - margin <= cam.worldView.y + this.viewH;
             if (!visible) continue;
             t.flameH = Math.sin(this.time.now * 0.022 + t.flickerPhase) * 3;
             this.drawTorchFlame(t);
@@ -543,8 +558,8 @@ export class DungeonScene extends Phaser.Scene {
     updatePickupBob() {
         // Replaces per-pickup infinite tweens: one pass, view-culled, sin-driven
         const cam = this.cameras.main;
-        const L = cam.scrollX - 60, R = cam.scrollX + cam.width + 60;
-        const T = cam.scrollY - 60, B = cam.scrollY + cam.height + 60;
+        const L = cam.worldView.x - 60, R = cam.worldView.x + this.viewW + 60;
+        const T = cam.worldView.y - 60, B = cam.worldView.y + this.viewH + 60;
         const t = this.time.now;
         for (const pk of this.pickups) {
             if (pk.taken) continue;
@@ -1619,8 +1634,8 @@ export class DungeonScene extends Phaser.Scene {
             if (p.x < -50) p.x = WORLD_W + 50;
             if (p.x > WORLD_W + 50) p.x = -50;
             // Only update sprite if in camera view (perf)
-            if (p.x > cam.scrollX - margin && p.x < cam.scrollX + cam.width + margin &&
-                p.y > cam.scrollY - margin && p.y < cam.scrollY + cam.height + margin) {
+            if (p.x > cam.worldView.x - margin && p.x < cam.worldView.x + this.viewW + margin &&
+                p.y > cam.worldView.y - margin && p.y < cam.worldView.y + this.viewH + margin) {
                 p.sprite.setPosition(p.x, p.y);
                 p.sprite.setVisible(true);
             } else {
@@ -2861,8 +2876,8 @@ export class DungeonScene extends Phaser.Scene {
             const recentlyMoved = (this.time.now - this._mouseMovedAt) < 800;
             if (recentlyMoved && mouse && mouse.x !== undefined && (mouse.x !== 0 || mouse.y !== 0)) {
                 const cam = this.cameras.main;
-                const cdx = mouse.x - cam.width  / 2;
-                const cdy = mouse.y - cam.height / 2;
+                const cdx = mouse.x / this.dpr - this.viewW / 2;
+                const cdy = mouse.y / this.dpr - this.viewH / 2;
                 if (Math.hypot(cdx, cdy) > 2) {
                     this.player.aimAngle = Math.atan2(cdy, cdx);
                     aimed = true;
@@ -2908,7 +2923,7 @@ export class DungeonScene extends Phaser.Scene {
 
     _inExitBtnArea(p) {
         const e = this._hudLayout && this._hudLayout.exit;
-        return !!(p && e && Math.hypot(p.x - e.cx, p.y - e.cy) < e.r + 10);
+        return !!(p && e && Math.hypot(p.x / this.dpr - e.cx, p.y / this.dpr - e.cy) < e.r + 10);
     }
 
     updateEnemyBolts(dt) {
@@ -3845,8 +3860,8 @@ export class DungeonScene extends Phaser.Scene {
         // CULL: skip cone render if enemy is off-screen — biggest perf win for library
         const cam = this.cameras.main;
         const margin = 50;
-        if (e.x < cam.scrollX - margin || e.x > cam.scrollX + cam.width + margin ||
-            e.y < cam.scrollY - margin || e.y > cam.scrollY + cam.height + margin) {
+        if (e.x < cam.worldView.x - margin || e.x > cam.worldView.x + this.viewW + margin ||
+            e.y < cam.worldView.y - margin || e.y > cam.worldView.y + this.viewH + margin) {
             if (g.visible) { g.clear(); g.setVisible(false); }
             return;
         }
@@ -4025,10 +4040,10 @@ export class DungeonScene extends Phaser.Scene {
         this._updateDijkstraMaps();
         const cam = this.cameras.main;
         const margin = 600;            // distance from camera viewport beyond which we freeze enemies
-        const viewLeft   = cam.scrollX - margin;
-        const viewTop    = cam.scrollY - margin;
-        const viewRight  = cam.scrollX + cam.width  + margin;
-        const viewBottom = cam.scrollY + cam.height + margin;
+        const viewLeft   = cam.worldView.x - margin;
+        const viewTop    = cam.worldView.y - margin;
+        const viewRight  = cam.worldView.x + this.viewW  + margin;
+        const viewBottom = cam.worldView.y + this.viewH + margin;
         for (const e of this.enemies) {
             if (e.dead) continue;
             // Freeze far-away enemies (no AI, no path, no animation) — huge CPU saving
@@ -5573,7 +5588,7 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     showStoryIntro() {
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_INTRO;
 
         const elements = [];
@@ -5680,6 +5695,42 @@ export class DungeonScene extends Phaser.Scene {
         });
         startBtnEls.forEach(e => elements.push(e));
         this.input.keyboard.once('keydown-ENTER', startGame);
+        this._pinFixed();
+    }
+
+    // =================================================================
+    // DEVICE-PIXEL RENDERING — camera zoom = dpr; screen-space objects live in fixed layers in CSS px
+    // =================================================================
+    get viewW() { return this.cameras.main.width / this.dpr; }
+    get viewH() { return this.cameras.main.height / this.dpr; }
+    _layerOffset() { return { x: this.viewW * (this.dpr - 1) / 2, y: this.viewH * (this.dpr - 1) / 2 }; }
+    _createFixedLayers() {
+        const o = this._layerOffset();
+        this.fxLayer = this.add.container(o.x, o.y).setScrollFactor(0).setDepth(700);
+        this.uiLayer = this.add.container(o.x, o.y).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
+    }
+    // Move every top-level screen-space object into its fixed layer (call after creating HUD/overlays).
+    // Display-list order is kept so equal-depth objects (backdrop → text) stack as before.
+    _pinFixed() {
+        if (!this.uiLayer) return;
+        const list = this.sys.displayList.list;
+        const fixed = [];
+        for (let i = 0; i < list.length; i++) {
+            const o = list[i];
+            if (o === this.uiLayer || o === this.fxLayer || o.scrollFactorX !== 0 || o.parentContainer) continue;
+            fixed.push(o);
+        }
+        if (fixed.length === 0) return;
+        for (const o of fixed) (o.depth <= 800 ? this.fxLayer : this.uiLayer).add(o);
+        this.uiLayer.sort('depth');
+    }
+    _cssPointer(p) {
+        const d = this.dpr;
+        return {
+            x: p.x / d, y: p.y / d, worldX: p.worldX, worldY: p.worldY,
+            id: p.id, isDown: p.isDown, pointerType: p.pointerType, event: p.event,
+            button: p.button, wasTouch: p.wasTouch, pointer: p
+        };
     }
 
     // =================================================================
@@ -5751,9 +5802,14 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     repositionHUD() {
+        if (this.uiLayer) {
+            const o = this._layerOffset();
+            this.fxLayer.setPosition(o.x, o.y);
+            this.uiLayer.setPosition(o.x, o.y);
+        }
         if (!this.heartIcons) return;
         const cam = this.cameras.main;
-        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+        const L = computeHudLayout({ W: this.viewW, H: this.viewH, safe: readSafeArea(), maxHp: this.maxHp });
         this._hudLayout = L;
         for (let i = 0; i < this.heartIcons.length; i++) {
             const h = L.hearts[i];
@@ -5797,6 +5853,7 @@ export class DungeonScene extends Phaser.Scene {
                 this.heartIcons.push(this.add.image(0, 0, 'ui_heart').setOrigin(0, 0).setScrollFactor(0).setDepth(LAYER.UI_HUD));
             }
             this.repositionHUD();
+            this._pinFixed();
         }
         for (let i = 0; i < this.heartIcons.length; i++) {
             const key = i < this.player.hp ? 'ui_heart' : 'ui_heart_empty';
@@ -5819,8 +5876,8 @@ export class DungeonScene extends Phaser.Scene {
             const cam = this.cameras.main;
             for (const e of this.enemies) {
                 if (e.dead || !e.stealthPatrol) continue;
-                if (e.x < cam.scrollX - 50 || e.x > cam.scrollX + cam.width + 50) continue;
-                if (e.y < cam.scrollY - 50 || e.y > cam.scrollY + cam.height + 50) continue;
+                if (e.x < cam.worldView.x - 50 || e.x > cam.worldView.x + this.viewW + 50) continue;
+                if (e.y < cam.worldView.y - 50 || e.y > cam.worldView.y + this.viewH + 50) continue;
                 maxSus = Math.max(maxSus, e.suspicion || 0);
             }
         }
@@ -5877,7 +5934,7 @@ export class DungeonScene extends Phaser.Scene {
     setupTouchControls() {
         // Sizes from the shared HUD layout (uiScale + safe-area); radii are fixed for the run, offsets follow resize
         const cam = this.cameras.main;
-        const L = computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
+        const L = computeHudLayout({ W: this.viewW, H: this.viewH, safe: readSafeArea(), maxHp: this.maxHp });
         const JOY_R = L.touch.joyR;
         const DASH_R = L.touch.dashR;
         const LABEL_FONT = `${L.touch.labelFont}px`;
@@ -5931,10 +5988,10 @@ export class DungeonScene extends Phaser.Scene {
             color: '#a0d0ff'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.75);
 
-        this.input.on('pointerdown', (p) => this.touchDown(p));
-        this.input.on('pointermove', (p) => this.touchMove(p));
-        this.input.on('pointerup', (p) => this.touchUp(p));
-        this.input.on('pointerupoutside', (p) => this.touchUp(p));
+        this.input.on('pointerdown', (p) => this.touchDown(this._cssPointer(p)));
+        this.input.on('pointermove', (p) => this.touchMove(this._cssPointer(p)));
+        this.input.on('pointerup', (p) => this.touchUp(this._cssPointer(p)));
+        this.input.on('pointerupoutside', (p) => this.touchUp(this._cssPointer(p)));
         // Recover stuck stick state when the app is backgrounded / focus lost (Android home, notif shade, etc.)
         const releaseSticks = () => {
             if (this.joy && this.joy.active) this.touchUp({ id: this.joy.pointerId });
@@ -5953,7 +6010,7 @@ export class DungeonScene extends Phaser.Scene {
 
     positionJoystick() {
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
 
         const L = this._hudLayout || computeHudLayout({ W, H, safe: readSafeArea(), maxHp: this.maxHp });
         const bottomOff = L.touch.bottomOff;
@@ -6038,7 +6095,7 @@ export class DungeonScene extends Phaser.Scene {
         const eB = this._hudLayout && this._hudLayout.exit;
         if (eB && Math.hypot(p.x - eB.cx, p.y - eB.cy) < eB.r + 10) return;
 
-        const W = this.cameras.main.width;
+        const W = this.viewW;
         const half = W / 2;
 
         // === FLOATING JOYSTICKS — stick spawns where finger lands ===
@@ -6112,8 +6169,8 @@ export class DungeonScene extends Phaser.Scene {
             this.joy.dx = 0; this.joy.dy = 0;
             // Snap back to idle resting position in the bottom-left corner
             const cam = this.cameras.main;
-            const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
-            this.joy.baseX = L.touch.sideOffLeft; this.joy.baseY = cam.height - L.touch.bottomOff;
+            const L = this._hudLayout || computeHudLayout({ W: this.viewW, H: this.viewH, safe: readSafeArea(), maxHp: this.maxHp });
+            this.joy.baseX = L.touch.sideOffLeft; this.joy.baseY = this.viewH - L.touch.bottomOff;
             this.moveJoyTo(this.joy.baseX, this.joy.baseY);
             this.setJoyAlpha(0);
         }
@@ -6122,8 +6179,8 @@ export class DungeonScene extends Phaser.Scene {
             this.aimStick.pointerId = null;
             this.aimStick.dx = 0; this.aimStick.dy = 0;
             const cam = this.cameras.main;
-            const L = this._hudLayout || computeHudLayout({ W: cam.width, H: cam.height, safe: readSafeArea(), maxHp: this.maxHp });
-            this.aimStick.baseX = cam.width - L.touch.sideOffRight; this.aimStick.baseY = cam.height - L.touch.bottomOff;
+            const L = this._hudLayout || computeHudLayout({ W: this.viewW, H: this.viewH, safe: readSafeArea(), maxHp: this.maxHp });
+            this.aimStick.baseX = this.viewW - L.touch.sideOffRight; this.aimStick.baseY = this.viewH - L.touch.bottomOff;
             this.moveAimStickTo(this.aimStick.baseX, this.aimStick.baseY);
             this.setAimStickAlpha(0);
         }
@@ -6278,13 +6335,13 @@ export class DungeonScene extends Phaser.Scene {
             return;
         }
         const cam = this.cameras.main;
-        const cx = cam.width / 2, cy = cam.height / 2;
+        const cx = this.viewW / 2, cy = this.viewH / 2;
         const dx = target.x - this.player.x;
         const dy = target.y - this.player.y;
         const dist = Math.hypot(dx, dy);
         const angle = Math.atan2(dy, dx);
         // Skip the clear+retessellate when nothing moved meaningfully
-        const key = icon + '|' + this.cameras.main.width + '|' + this.cameras.main.height;
+        const key = icon + '|' + this.viewW + '|' + this.viewH;
         if (this._compassKey === key && Math.abs((this._compassAngle ?? 99) - angle) < 0.02) return;
         this._compassKey = key;
         this._compassAngle = angle;
@@ -6385,7 +6442,7 @@ export class DungeonScene extends Phaser.Scene {
     showRelicPicker() {
         // Pause input briefly
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
         if (choices.length === 0) return;
@@ -6451,6 +6508,7 @@ export class DungeonScene extends Phaser.Scene {
                 align: 'center', wordWrap: { width: cardW - 14 }
             }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8));
         });
+        this._pinFixed();
     }
 
     showUpgradePicker() {
@@ -6473,7 +6531,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this.compassLabel) this.compassLabel.setVisible(false);
 
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_OVERLAY;
         // Track every overlay element so we can hide them when shop opens
         this._pickerElements = [];
@@ -6579,13 +6637,14 @@ export class DungeonScene extends Phaser.Scene {
             }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
             this._pickerElements.push(ico, nm, ds);
         });
+        this._pinFixed();
     }
 
     // === IN-RUN SHOP — opens over the upgrade picker between floors ===
     openInRunShop() {
         if (this._pickerElements) this._pickerElements.forEach(e => e.setVisible(false));
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_SHOP;
 
         this._shopElements = [];
@@ -6760,6 +6819,7 @@ export class DungeonScene extends Phaser.Scene {
                 }
             });
         });
+        this._pinFixed();
     }
 
     closeInRunShop() {
@@ -6779,6 +6839,7 @@ export class DungeonScene extends Phaser.Scene {
             targets: t, y: y - 60, alpha: 0,
             duration: 1100, onComplete: () => t.destroy()
         });
+        this._pinFixed();
     }
     lose() {
         if (this.state !== 'play') return;
@@ -7003,7 +7064,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this.compassLabel) this.compassLabel.setVisible(false);
 
         const cam = this.cameras.main;
-        const W = cam.width, H = cam.height;
+        const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_OVERLAY;
         const addEl = (el, dep) => el.setScrollFactor(0).setDepth(dep || D);
 
@@ -7083,6 +7144,7 @@ export class DungeonScene extends Phaser.Scene {
         const onPrimary = () => action();
         this.input.keyboard.once('keydown-ENTER', onPrimary);
         this.input.keyboard.once('keydown-SPACE', onPrimary);
+        this._pinFixed();
     }
 
     exitToMenu() {

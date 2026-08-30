@@ -16,6 +16,17 @@ import { initAudioManager } from './audio/AudioManager.js';
 // Read URL parameters for direct game launch
 const urlParams = new URLSearchParams(window.location.search);
 const mode = urlParams.get('mode') || 'menu';
+// Device-pixel rendering for the Transylvania mode only (other modes keep RESIZE at 1×).
+const _dprParam = parseFloat(urlParams.get('dpr'));
+const DPR = (mode === 'transylvania')
+    ? Math.max(1, Math.min(3, Number.isFinite(_dprParam) ? Math.round(_dprParam) : Math.ceil(window.devicePixelRatio || 1)))
+    : 1;
+window.__GAME_DPR = DPR;
+const _cssSize = () => {
+    const el = document.getElementById('game-container');
+    const w = (el && el.clientWidth) || window.innerWidth, h = (el && el.clientHeight) || window.innerHeight;
+    return { w: Math.max(1, Math.floor(w)), h: Math.max(1, Math.floor(h)) };
+};
 const botCount = parseInt(urlParams.get('botCount')) || 2;
 const character = parseInt(urlParams.get('character')) || 1;
 const peerId = urlParams.get('peerId') || null;
@@ -57,13 +68,11 @@ const config = {
     input: {
         activePointers: 5  // Поддержка до 5 одновременных касаний для мультитач
     },
-    scale: {
-        mode: Phaser.Scale.RESIZE,
-        parent: 'game-container',
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: '100%',
-        height: '100%'
-    },
+    scale: (mode === 'transylvania')
+        ? { mode: Phaser.Scale.NONE, parent: 'game-container', autoCenter: Phaser.Scale.NO_CENTER,
+            width: _cssSize().w * DPR, height: _cssSize().h * DPR, zoom: 1 / DPR }
+        : { mode: Phaser.Scale.RESIZE, parent: 'game-container', autoCenter: Phaser.Scale.CENTER_BOTH, width: '100%', height: '100%' },
+    resolution: DPR,
     render: {
         antialias: true,
         antialiasGL: true,
@@ -124,7 +133,11 @@ document.addEventListener('keydown', _unlockAllAudio, { capture: true });
 let _resizeRefreshTimer = null;
 window.addEventListener('resize', () => {
     if (_resizeRefreshTimer) clearTimeout(_resizeRefreshTimer);
-    _resizeRefreshTimer = setTimeout(() => { if (game) game.scale.refresh(); }, 200);
+    _resizeRefreshTimer = setTimeout(() => {
+        if (!game) return;
+        if (mode === 'transylvania') { const s = _cssSize(); game.scale.resize(s.w * DPR, s.h * DPR); }
+        else game.scale.refresh();
+    }, 200);
 });
 
 // Pause/resume with mute trick to suppress DAC pop on app restore
