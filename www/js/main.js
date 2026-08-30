@@ -65,8 +65,8 @@ const config = {
         height: '100%'
     },
     render: {
-        antialias: false,
-        antialiasGL: false,
+        antialias: true,
+        antialiasGL: true,
         pixelArt: false,
         roundPixels: true,
         powerPreference: 'high-performance',

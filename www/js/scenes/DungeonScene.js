@@ -329,12 +329,6 @@ export class DungeonScene extends Phaser.Scene {
         // CROSSHAIR — always set up; only updates when mouse is the active input
         this.setupCrosshair();
 
-        // Vector-sourced textures (characters, skins, HUD icons) are drawn well below their source size —
-        // bilinear filter for them only; the game-wide antialias:false stays for everything else
-        for (const k of Object.keys(this.textures.list)) {
-            if (/^(d_|skin_|ui_)/.test(k)) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
-        }
-
         // HUD
         this.buildHUD();
 
