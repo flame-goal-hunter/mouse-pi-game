@@ -31,9 +31,10 @@ const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', '
 
 // Depth bands. World/level visuals below, UI band (989+) at the end.
 const LAYER = {
-    WORLD:  -100,   // baked RenderTexture: floor + decor + walls + sconces
+    WORLD:  -100,   // tilemap floor layer (detail overlay at WORLD + 5)
     TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
     DECOR:   -50,   // decor layer before baking
+    WALL_TILES: -40,   // tilemap wall layer (above decor sprites); cracks at WALL_TILES + 1
     WALL:     50,   // wall Graphics before baking (and weak-wall overlays 51-52)
     SCONCE:   70,   // torchSconceGfx before baking
     FLAME:    81,
@@ -285,6 +286,7 @@ export class DungeonScene extends Phaser.Scene {
         this.score = 0;
         this.hasKey = false;
         this.walls = [];
+        this.map = this.floorLayer = this.detailLayer = this.wallLayer = this.crackLayer = null;
         this.enemies = [];
         this.pickups = [];
         this.projectiles = [];
@@ -886,7 +888,6 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     buildWorld() {
         // === SHARED GRAPHICS — consolidate static draw calls ===
-        this.wallGfx = this.add.graphics().setDepth(LAYER.WALL);
         this.torchSconceGfx = this.add.graphics().setDepth(LAYER.SCONCE);
         this.flameGfx = this.add.graphics().setDepth(LAYER.FLAME);  // ALL torch flames, one clear per frame
         this.decorGfx = this.add.graphics().setDepth(LAYER.DECOR);   // all props; baked under walls
@@ -965,8 +966,8 @@ export class DungeonScene extends Phaser.Scene {
         this._hashCell = 120;
         this.spatialHash = new Map();
 
-        // Draw floor ONLY where carved (rest stays black void)
-        this.drawCarvedFloor();
+        // Floor + walls tilemap ONLY where carved (rest stays black void)
+        this.buildTilemap();
 
         // Add wall rectangles ONLY for border walls (touching at least one floor cell)
         for (let r = 0; r < NAV_H; r++) {
@@ -991,22 +992,6 @@ export class DungeonScene extends Phaser.Scene {
         for (const t of this.torches) this.drawTorchFlame(t);  // first-frame flames (drawTorchFlame skips unlit)
         // SPOOKY eyes in dark corners — they fade when Pi approaches
         this.placeSpookyEyes();
-
-        // === BAKE static geometry ===
-        // floor (~7k cmds) + decor (~80 objects) + walls (~3.5k cmds) + sconces were Graphics command
-        // buffers re-tessellated EVERY frame. Draw them once into a RenderTexture
-        // and destroy the sources: per-frame cost becomes one textured quad.
-        const worldRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H)
-            .setOrigin(0).setDepth(LAYER.WORLD);
-        worldRT.draw(this.floorGfx);
-        worldRT.draw(this.decorGfx);      // props sit ON the floor, UNDER wall bricks
-        worldRT.draw(this.wallGfx);
-        worldRT.draw(this.torchSconceGfx);
-        this.floorGfx.destroy();        this.floorGfx = null;
-        this.decorGfx.destroy();        this.decorGfx = null;
-        this.wallGfx.destroy();         this.wallGfx = null;
-        this.torchSconceGfx.destroy();  this.torchSconceGfx = null;
-        this.worldRT = worldRT;
     }
 
     placeSpookyEyes() {
@@ -1096,56 +1081,46 @@ export class DungeonScene extends Phaser.Scene {
         return d;
     }
 
-    drawCarvedFloor() {
-        const T = NAV_CELL;
-        const floor = this.add.graphics();
-        floor.setDepth(LAYER.WORLD);
-        this.floorGfx = floor;
-        const b = this.biome;
+    // Floor + walls as a Tilemap built from the biome tileset (see tools/gen_tiles.py for indices)
+    buildTilemap() {
+        const grid = this.navGrid, tp = this.tilePx;
+        const map = this.make.tilemap({ tileWidth: tp, tileHeight: tp, width: NAV_W, height: NAV_H });
+        const tileset = map.addTilesetImage('tiles', 'tiles_' + this.biome.id, tp, tp, 0, 0);
+        const sc = NAV_CELL / tp;
+        const mk = (name, depth) => map.createBlankLayer(name, tileset, 0, 0).setDepth(depth).setScale(sc);
+        this.map = map;
+        this.floorLayer = mk('floor', LAYER.WORLD);
+        this.detailLayer = mk('detail', LAYER.WORLD + 5);
+        this.wallLayer = mk('walls', LAYER.WALL_TILES);
+        this.crackLayer = mk('cracks', LAYER.WALL_TILES + 1);
+        const floor = [], detail = [], walls = [];
+        for (let r = 0; r < NAV_H; r++) {
+            const fr = [], dr = [], wr = [];
+            for (let c = 0; c < NAV_W; c++) {
+                if (grid[r][c] === 'floor') {
+                    fr.push(this.plateTile(r, c));
+                    const roll = Math.random();
+                    dr.push(roll < 0.04 ? TILE.CRACK : roll < 0.06 ? TILE.PEBBLES : -1);
+                    wr.push(-1);
+                } else if (grid[r][c] === 'wall' && this.isBorderWall(r, c)) {
+                    fr.push(-1); dr.push(-1);
+                    wr.push(this.wallTile(r, c));
+                } else { fr.push(-1); dr.push(-1); wr.push(-1); }
+            }
+            floor.push(fr); detail.push(dr); walls.push(wr);
+        }
+        this.floorLayer.putTilesAt(floor, 0, 0);
+        this.detailLayer.putTilesAt(detail, 0, 0);
+        this.wallLayer.putTilesAt(walls, 0, 0);
+    }
+    plateTile(r, c) {
+        return (((r >> 1) + (c >> 1)) & 1 ? TILE.PLATE_B : TILE.PLATE_A) + (r & 1) * 2 + (c & 1);
+    }
+    wallTile(r, c) {
         const grid = this.navGrid;
-        const isFloor = (r, c) => r >= 0 && r < NAV_H && c >= 0 && c < NAV_W && grid[r][c] === 'floor';
-
-        // 1. Stone plates: 80px (2×2 nav cells), two close tones in a checker of PLATES
-        for (let r = 0; r < NAV_H; r++) {
-            for (let c = 0; c < NAV_W; c++) {
-                if (grid[r][c] !== 'floor') continue;
-                const variant = ((r >> 1) + (c >> 1)) & 1;
-                floor.fillStyle(variant ? b.floorColorB : b.floorColorA, 1);
-                floor.fillRect(c * T, r * T, T, T);
-            }
-        }
-        // 2. Mortar seams ONLY on plate boundaries (every 80px) and only between two floor cells
-        floor.lineStyle(1, b.gridColor, 0.35);
-        for (let r = 0; r < NAV_H; r++) {
-            for (let c = 0; c < NAV_W; c++) {
-                if (grid[r][c] !== 'floor') continue;
-                const x = c * T, y = r * T;
-                if ((c & 1) === 0 && isFloor(r, c - 1)) floor.lineBetween(x, y, x, y + T);
-                if ((r & 1) === 0 && isFloor(r - 1, c)) floor.lineBetween(x, y, x + T, y);
-            }
-        }
-        // 3. Sparse detail: cracks (4% of cells) and pebbles (2%)
-        for (let r = 0; r < NAV_H; r++) {
-            for (let c = 0; c < NAV_W; c++) {
-                if (grid[r][c] !== 'floor') continue;
-                const roll = Math.random();
-                if (roll >= 0.06) continue;
-                const cx = c * T + T / 2, cy = r * T + T / 2;
-                if (roll < 0.04) {
-                    floor.lineStyle(1, b.gridColor, 0.55);
-                    floor.beginPath();
-                    floor.moveTo(cx - 9, cy - 3);
-                    floor.lineTo(cx - 2, cy + 2);
-                    floor.lineTo(cx + 4, cy - 1);
-                    floor.lineTo(cx + 10, cy + 5);
-                    floor.strokePath();
-                } else {
-                    floor.fillStyle(b.gridColor, 0.5);
-                    floor.fillCircle(cx + 6, cy - 5, 1.5);
-                    floor.fillCircle(cx - 7, cy + 6, 1.2);
-                }
-            }
-        }
+        const wallAbove = grid[r - 1]?.[c] === 'wall' && this.isBorderWall(r - 1, c);
+        const floorBelow = grid[r + 1]?.[c] === 'floor';
+        return TILE.WALL + (wallAbove ? 0 : 1) + (floorBelow ? 2 : 0);
     }
 
     spawnBiomeTiles() {
@@ -1773,7 +1748,6 @@ export class DungeonScene extends Phaser.Scene {
     addWall(x, y, w, h) {
         const wall = { x, y, w, h };
         this.walls.push(wall);
-        const b = this.biome || { wallFill: 0x3a2438, wallShadow: 0x1a0c18, wallHighlight: 0x4d3050 };
         // Spatial hash for fast wall queries
         if (this.spatialHash) {
             const C = this._hashCell;
@@ -1786,36 +1760,6 @@ export class DungeonScene extends Phaser.Scene {
                     if (!bucket) { bucket = []; this.spatialHash.set(key, bucket); }
                     bucket.push(wall);
                 }
-            }
-        }
-        // === Draw on SHARED wall graphics (baked once in buildWorld) ===
-        const g = this.wallGfx;
-        g.fillStyle(b.wallFill, 1);
-        g.fillRect(x, y, w, h);
-        // Running-bond brickwork: two courses, the lower one offset by half a brick
-        const brickW = NAV_CELL, courseH = h / 2;   // 40×20 bricks align with the cell grid at every corner
-        g.lineStyle(1.2, b.wallShadow, 0.75);
-        g.lineBetween(x, y + courseH, x + w, y + courseH);
-        for (let course = 0; course < 2; course++) {
-            const cy = y + course * courseH;
-            const offset = course === 0 ? 0 : brickW / 2;
-            for (let bx = x + offset; bx < x + w; bx += brickW) {
-                g.lineBetween(bx, cy, bx, cy + courseH);
-            }
-        }
-        // Per cell: dark recessed cant + highlight only on the top edge of a wall mass,
-        // gilded skirting only where floor lies directly below
-        const grid = this.navGrid, r = y / NAV_CELL, c0 = x / NAV_CELL;
-        for (let c = c0; c < c0 + w / NAV_CELL; c++) {
-            const cx = c * NAV_CELL;
-            const wallAbove = grid[r - 1]?.[c] === 'wall' && this.isBorderWall(r - 1, c);
-            if (!wallAbove) {
-                g.fillStyle(b.wallShadow, 0.85);   g.fillRect(cx, y, NAV_CELL, 4);
-                g.fillStyle(b.wallHighlight, 0.9); g.fillRect(cx, y + 4, NAV_CELL, 2);
-            }
-            if (grid[r + 1]?.[c] === 'floor') {
-                g.fillStyle(b.wallShadow, 0.9);    g.fillRect(cx, y + h - 3, NAV_CELL, 1);
-                g.fillStyle(WALL_TRIM_GOLD, 0.55); g.fillRect(cx, y + h - 2, NAV_CELL, 2);
             }
         }
     }
@@ -3391,33 +3335,15 @@ export class DungeonScene extends Phaser.Scene {
             used.add(idx);
             w.weak = true;
             w.crackHp = 1;   // one pie hit
-            // Draw a glowing crack pattern overlay on the wall
-            const cx = w.x + w.w / 2;
-            const cy = w.y + w.h / 2;
-            const g = this.add.graphics().setDepth(52);
-            g.lineStyle(2.5, 0xa0e0ff, 0.85);
-            // Lightning-style crack from top to bottom
-            const pts = [
-                [cx - w.w * 0.25, w.y + 4],
-                [cx + w.w * 0.15, w.y + w.h * 0.3],
-                [cx - w.w * 0.15, w.y + w.h * 0.55],
-                [cx + w.w * 0.20, w.y + w.h * 0.78],
-                [cx - w.w * 0.05, w.y + w.h - 4]
-            ];
-            g.beginPath();
-            g.moveTo(pts[0][0], pts[0][1]);
-            for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
-            g.strokePath();
-            // Small side branches
-            g.lineStyle(1.5, 0xa0e0ff, 0.6);
-            g.lineBetween(pts[1][0], pts[1][1], pts[1][0] + 12, pts[1][1] - 6);
-            g.lineBetween(pts[3][0], pts[3][1], pts[3][0] - 10, pts[3][1] + 4);
-            // Soft pulsing glow
+            // Crack overlay tiles on the wall's cells, pulsing via per-tile alpha
+            const r = w.y / NAV_CELL, c0 = w.x / NAV_CELL, cells = w.w / NAV_CELL;
+            const tiles = [];
+            for (let c = c0; c < c0 + cells; c++) tiles.push(this.crackLayer.putTileAt(TILE.WEAK_CRACK, c, r));
             this.tweens.add({
-                targets: g, alpha: 0.4,
+                targets: tiles, alpha: 0.4,
                 duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
             });
-            w.crackGfx = g;
+            w.crackTiles = tiles;
             placed++;
         }
     }
@@ -3425,18 +3351,17 @@ export class DungeonScene extends Phaser.Scene {
     breakWeakWall(wall) {
         if (wall.broken) return;
         wall.broken = true;
-        if (wall.crackGfx) { wall.crackGfx.destroy(); wall.crackGfx = null; }
-        // "Erase" the wall by drawing biome floor pattern on top of it
+        if (wall.crackTiles) { this.tweens.killTweensOf(wall.crackTiles); wall.crackTiles = null; }
+        // Swap the wall's cells for floor plates; neighbours get the skirting/cant they now border
         const b = this.biome;
-        const overlay = this.add.graphics().setDepth(51);
-        for (let y = wall.y; y < wall.y + wall.h; y += NAV_CELL) {
-            for (let x = wall.x; x < wall.x + wall.w; x += NAV_CELL) {
-                const r = Math.floor(y / NAV_CELL);
-                const c = Math.floor(x / NAV_CELL);
-                const variant = ((r >> 1) + (c >> 1)) & 1;
-                overlay.fillStyle(variant ? b.floorColorB : b.floorColorA, 1);
-                overlay.fillRect(x, y, NAV_CELL, NAV_CELL);
-            }
+        const r = Math.floor(wall.y / NAV_CELL), c0 = Math.floor(wall.x / NAV_CELL);
+        for (let c = c0; c < c0 + Math.round(wall.w / NAV_CELL); c++) {
+            this.wallLayer.removeTileAt(c, r);
+            this.crackLayer.removeTileAt(c, r);
+            this.floorLayer.putTileAt(this.plateTile(r, c), c, r);
+            const above = this.wallLayer.getTileAt(c, r - 1), below = this.wallLayer.getTileAt(c, r + 1);
+            if (above && above.index >= TILE.WALL) above.index = TILE.WALL + ((above.index - TILE.WALL) | 2);
+            if (below && below.index >= TILE.WALL) below.index = TILE.WALL + ((below.index - TILE.WALL) | 1);
         }
         // Burst of debris
         const cx = wall.x + wall.w / 2;
