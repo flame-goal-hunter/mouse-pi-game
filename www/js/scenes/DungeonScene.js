@@ -59,6 +59,16 @@ const LAYER = {
     UI_FLASH: 3000,       // flashNoCheese
     UI_DEBUG: 5000,       // fps overlay
 };
+// Shared UI palette / fonts — same language as the rebuilt HTML menus.
+const UI_C = {
+    bg: 0x1a0c2e, surface: 0x241338, surface2: 0x2e1a46,
+    gold: 0xe8b54a, goldBright: 0xf6d77a,
+    text: 0xf4ecff, muted: 0xb9a6d4,
+};
+const UI_F = {
+    display: '"Comfortaa", "Nunito", sans-serif',
+    body: '"Nunito", "Roboto", system-ui, sans-serif',
+};
 // Tile indices in www/assets/tiles/<biome>.svg (see tools/gen_tiles.py)
 const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10, WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13, EMPTY: 14, WEAK_CRACK: 15 };
 const TILES_PER_SHEET = 16;
@@ -6391,116 +6401,76 @@ export class DungeonScene extends Phaser.Scene {
         );
     }
 
-    // === GOTHIC UI HELPERS — cartoony but professional Transylvania frames/buttons ===
+    // === UI HELPERS — flat gold-on-violet, same language as the rebuilt menus ===
     drawGothicPanel(cx, cy, w, h, opts = {}) {
-        const accent = opts.accent || 0xd49920;        // gold
-        const bgTop = opts.bgTop || 0x3a1248;
-        const bgBot = opts.bgBot || 0x18062a;
-        const radius = opts.radius != null ? opts.radius : 18;
+        const radius = opts.radius != null ? opts.radius : 20;
         const D = opts.depth || LAYER.UI_OVERLAY;
         const out = [];
-        // DROP SHADOW
+        const x0 = cx - w / 2, y0 = cy - h / 2;
+        // Soft offset shadow
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 2);
-        shadow.fillStyle(0x000000, 0.55);
-        shadow.fillRoundedRect(cx - w/2 + 8, cy - h/2 + 10, w, h, radius);
+        shadow.fillStyle(0x000000, 0.35);
+        shadow.fillRoundedRect(x0 + 4, y0 + 4, w, h, radius);
         out.push(shadow);
-        // MAIN PANEL with vertical gradient
+        // Flat panel + hairline gold border
         const panel = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
-        panel.fillGradientStyle(bgTop, bgTop, bgBot, bgBot, 1);
-        panel.fillRoundedRect(cx - w/2, cy - h/2, w, h, radius);
-        // Inner soft highlight at top
-        panel.fillStyle(0xffffff, 0.06);
-        panel.fillRoundedRect(cx - w/2 + 4, cy - h/2 + 4, w - 8, h * 0.45, radius - 4);
-        // OUTER GOLD FRAME
-        panel.lineStyle(4, accent, 1);
-        panel.strokeRoundedRect(cx - w/2, cy - h/2, w, h, radius);
-        // INNER thin trim
-        panel.lineStyle(1.5, 0xfff0a0, 0.55);
-        panel.strokeRoundedRect(cx - w/2 + 5, cy - h/2 + 5, w - 10, h - 10, radius - 5);
+        panel.fillStyle(UI_C.bg, 0.97);
+        panel.fillRoundedRect(x0, y0, w, h, radius);
+        panel.lineStyle(2, UI_C.gold, 0.55);
+        panel.strokeRoundedRect(x0, y0, w, h, radius);
         out.push(panel);
-        // CORNER ORNAMENTS — gothic fleurons (gold dots with dark center)
-        const cornerCurl = (x, y, side) => {
-            const c = this.add.graphics().setScrollFactor(0).setDepth(D);
-            c.fillStyle(accent, 1);
-            c.fillCircle(x, y, 6);
-            c.fillStyle(0x1a0820, 1);
-            c.fillCircle(x, y, 2.5);
-            // tiny ornament arc
-            c.lineStyle(2, accent, 0.95);
-            const r = 10;
-            const startA = side === 0 ? Math.PI : (side === 1 ? -Math.PI / 2 : (side === 2 ? Math.PI / 2 : 0));
-            c.beginPath();
-            c.arc(x, y, r, startA, startA + Math.PI / 2);
-            c.strokePath();
-            out.push(c);
+        // Corner accents — small gold arcs with two short stubs
+        const acc = this.add.graphics().setScrollFactor(0).setDepth(D);
+        acc.lineStyle(2, UI_C.gold, 0.75);
+        const inset = 10, r = 16, len = 16;
+        const corner = (px, py, sx, sy) => {
+            const ax = px + sx * r, ay = py + sy * r;
+            const a0 = (sy > 0) ? (sx > 0 ? Math.PI : Math.PI * 1.5) : (sx > 0 ? Math.PI * 0.5 : 0);
+            acc.beginPath(); acc.arc(ax, ay, r, a0, a0 + Math.PI / 2); acc.strokePath();
+            acc.beginPath(); acc.moveTo(ax, py); acc.lineTo(ax + sx * len, py); acc.strokePath();
+            acc.beginPath(); acc.moveTo(px, ay); acc.lineTo(px, ay + sy * len); acc.strokePath();
         };
-        const inset = 14;
-        cornerCurl(cx - w/2 + inset, cy - h/2 + inset, 0);
-        cornerCurl(cx + w/2 - inset, cy - h/2 + inset, 1);
-        cornerCurl(cx - w/2 + inset, cy + h/2 - inset, 2);
-        cornerCurl(cx + w/2 - inset, cy + h/2 - inset, 3);
-        // SPOOKY decorations in corners (small emoji)
-        if (opts.themed !== false) {
-            const themes = opts.theme || ['🕸️', '🦇', '💀', '🕯️'];
-            const corners = [
-                { x: cx - w/2 + 30, y: cy - h/2 + 30, ox: 0.5, oy: 0.5 },
-                { x: cx + w/2 - 30, y: cy - h/2 + 30, ox: 0.5, oy: 0.5 },
-                { x: cx - w/2 + 30, y: cy + h/2 - 30, ox: 0.5, oy: 0.5 },
-                { x: cx + w/2 - 30, y: cy + h/2 - 30, ox: 0.5, oy: 0.5 }
-            ];
-            for (let i = 0; i < 4; i++) {
-                const t = this.add.text(corners[i].x, corners[i].y, themes[i % themes.length],
-                    { fontSize: '24px' })
-                    .setOrigin(0.5)
-                    .setScrollFactor(0).setDepth(D + 1)
-                    .setAlpha(0.55);
-                out.push(t);
-            }
-        }
+        corner(x0 + inset, y0 + inset, 1, 1);
+        corner(cx + w / 2 - inset, y0 + inset, -1, 1);
+        corner(x0 + inset, cy + h / 2 - inset, 1, -1);
+        corner(cx + w / 2 - inset, cy + h / 2 - inset, -1, -1);
+        out.push(acc);
+        // opts.accent / opts.bgTop / opts.bgBot / opts.theme / opts.themed are accepted and
+        // ignored — the panel is one flat surface now, accents are icons the screen supplies.
         return out;
     }
 
     drawGothicCard(cx, cy, w, h, opts = {}) {
-        const accent = opts.accent || 0xa060ff;
-        const bgTop = opts.bgTop || 0x3a1858;
-        const bgBot = opts.bgBot || 0x1a0830;
-        const hoverAccent = opts.hoverAccent || 0xffd040;
-        const hoverBgTop = opts.hoverBgTop || 0x4a2870;
-        const hoverBgBot = opts.hoverBgBot || 0x2a1850;
-        const radius = opts.radius != null ? opts.radius : 14;
+        const radius = opts.radius != null ? opts.radius : 16;
         const D = opts.depth || LAYER.UI_OVERLAY;
         const els = [];
-        // Drop shadow
+        const x0 = cx - w / 2, y0 = cy - h / 2;
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
-        shadow.fillStyle(0x000000, 0.55);
-        shadow.fillRoundedRect(cx - w/2 + 4, cy - h/2 + 6, w, h, radius);
+        shadow.fillStyle(0x000000, 0.3);
+        shadow.fillRoundedRect(x0 + 3, y0 + 4, w, h, radius);
         els.push(shadow);
-        // Body
         const body = this.add.graphics().setScrollFactor(0).setDepth(D);
-        const drawBody = (top, bot, rim) => {
+        // Signature kept: (top, bot, rim) — the first argument now selects the state.
+        const drawBody = (selected) => {
             body.clear();
-            body.fillGradientStyle(top, top, bot, bot, 1);
-            body.fillRoundedRect(cx - w/2, cy - h/2, w, h, radius);
-            body.fillStyle(0xffffff, 0.10);
-            body.fillRoundedRect(cx - w/2 + 4, cy - h/2 + 4, w - 8, h * 0.42, radius - 3);
-            body.lineStyle(3, rim, 0.95);
-            body.strokeRoundedRect(cx - w/2, cy - h/2, w, h, radius);
-            body.lineStyle(1, 0xfff0a0, 0.4);
-            body.strokeRoundedRect(cx - w/2 + 4, cy - h/2 + 4, w - 8, h - 8, radius - 4);
+            body.fillStyle(selected ? UI_C.surface2 : UI_C.surface, 1);
+            body.fillRoundedRect(x0, y0, w, h, radius);
+            if (selected) body.lineStyle(2, UI_C.gold, 0.9);
+            else body.lineStyle(1.5, UI_C.text, 0.14);
+            body.strokeRoundedRect(x0, y0, w, h, radius);
         };
-        drawBody(bgTop, bgBot, accent);
+        drawBody(!!opts.selected);
         els.push(body);
-        // Interactive hit (transparent rectangle on top)
         const hit = this.add.rectangle(cx, cy, w, h, 0xffffff, 0.001)
             .setScrollFactor(0).setDepth(D + 10)
             .setInteractive({ useHandCursor: true })
-            .on('pointerover', () => drawBody(hoverBgTop, hoverBgBot, hoverAccent))
-            .on('pointerout',  () => drawBody(bgTop, bgBot, accent));
+            .on('pointerover', () => drawBody(true))
+            .on('pointerout',  () => drawBody(!!opts.selected));
         if (opts.onClick) {
             hit.on('pointerdown', () => {
                 this.tweens.add({
                     targets: [body, shadow], scaleX: 0.97, scaleY: 0.97,
-                    duration: 80, yoyo: true, ease: 'Quad.easeOut',
+                    duration: 90, yoyo: true, ease: 'Quad.easeOut',
                     onComplete: opts.onClick
                 });
             });
@@ -6510,53 +6480,61 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     drawGothicButton(cx, cy, w, h, label, opts = {}) {
-        const colorBase = opts.color || 0x7a30a0;        // body color
-        const colorTop  = opts.colorTop || 0xa050d0;
-        const accent = opts.accent || 0xffd040;
-        const hoverTop = opts.hoverTop || 0xc070e0;
-        const hoverBase = opts.hover || 0x9a50c0;
+        const variant = opts.variant === 'secondary' ? 'secondary' : 'primary';
+        const primary = variant === 'primary';
+        const disabled = !!opts.disabled;
         const radius = opts.radius != null ? opts.radius : 14;
+        h = Math.max(48, h);
         const D = opts.depth || (LAYER.UI_OVERLAY + 10);
         const out = [];
-        // Draw in LOCAL coords so setScale pivots around button center (no drift on pulse tweens)
+        // Drawn in LOCAL coords so setScale pivots around the button centre.
         const shadow = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
-        shadow.fillStyle(0x000000, 0.55);
-        shadow.fillRoundedRect(-w/2 + 4, -h/2 + 5, w, h, radius);
+        shadow.fillStyle(0x000000, 0.3);
+        shadow.fillRoundedRect(-w/2 + 3, -h/2 + 4, w, h, radius);
         shadow.setPosition(cx, cy);
         out.push(shadow);
         const body = this.add.graphics().setScrollFactor(0).setDepth(D);
-        const drawBody = (top, bot) => {
+        const drawBody = (hover) => {
             body.clear();
-            body.fillGradientStyle(top, top, bot, bot, 1);
-            body.fillRoundedRect(-w/2, -h/2, w, h, radius);
-            body.fillStyle(0xffffff, 0.18);
-            body.fillRoundedRect(-w/2 + 4, -h/2 + 4, w - 8, h * 0.42, radius - 3);
-            body.lineStyle(3, accent, 0.95);
-            body.strokeRoundedRect(-w/2, -h/2, w, h, radius);
+            if (primary) {
+                body.fillStyle(hover ? UI_C.goldBright : UI_C.gold, 1);
+                body.fillRoundedRect(-w/2, -h/2, w, h, radius);
+            } else {
+                body.fillStyle(UI_C.surface, hover ? 0.9 : 0.35);
+                body.fillRoundedRect(-w/2, -h/2, w, h, radius);
+                body.lineStyle(2, hover ? UI_C.goldBright : UI_C.gold, 1);
+                body.strokeRoundedRect(-w/2, -h/2, w, h, radius);
+            }
         };
-        drawBody(colorTop, colorBase);
+        drawBody(false);
         body.setPosition(cx, cy);
         out.push(body);
-        // LABEL
-        const fontSize = opts.fontSize || Math.max(16, Math.round(h * 0.4));
+        const fontSize = opts.fontSize || Math.max(16, Math.round(h * 0.36));
         const text = this.add.text(cx, cy, label, {
-            fontFamily: 'Arial Black', fontSize: fontSize + 'px',
-            color: '#ffffff', stroke: '#1a0a3a', strokeThickness: 3, align: 'center'
+            fontFamily: primary ? UI_F.display : UI_F.body,
+            fontSize: fontSize + 'px',
+            fontStyle: '700',
+            color: primary ? '#2a1206' : '#f4ecff',
+            align: 'center'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
-        // INTERACTIVE: use the text rect as hit area (covers the button)
+        out.push(text);
+        if (disabled) {
+            out.forEach(e => e.setAlpha(0.45));
+            return out;
+        }
         const hit = this.add.rectangle(cx, cy, w, h, 0xffffff, 0.001)
             .setScrollFactor(0).setDepth(D + 2)
             .setInteractive({ useHandCursor: true })
-            .on('pointerover', () => drawBody(hoverTop, hoverBase))
-            .on('pointerout',  () => drawBody(colorTop, colorBase))
+            .on('pointerover', () => drawBody(true))
+            .on('pointerout',  () => drawBody(false))
             .on('pointerdown', () => {
                 this.tweens.add({
-                    targets: [body, text, shadow], scaleX: 0.96, scaleY: 0.96,
-                    duration: 80, yoyo: true, ease: 'Quad.easeOut',
+                    targets: [body, text, shadow], scaleX: 0.97, scaleY: 0.97,
+                    duration: 90, yoyo: true, ease: 'Quad.easeOut',
                     onComplete: () => { if (opts.onClick) opts.onClick(); }
                 });
             });
-        out.push(text, hit);
+        out.push(hit);
         return out;
     }
 
