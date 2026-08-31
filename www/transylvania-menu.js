@@ -74,7 +74,7 @@ function renderHero() {
     const skin = Progress.getCurrentSkin();
     heroSpriteEl.setAttribute('src', skinSrc(skin.id));
     heroSpriteEl.setAttribute('alt', skin.name || 'Мышонок Пи');
-    heroAccentEl.textContent = skin.accent || '';
+    heroAccentEl.textContent = '';
     heroNameEl.textContent = skin.name || 'Мышонок Пи';
     // Fallback if SVG fails (e.g., file missing) — swap to pi.svg
     heroSpriteEl.onerror = () => {

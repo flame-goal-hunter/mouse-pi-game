@@ -457,7 +457,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         // Static hero is the safest baseline.
 
         // Skin name pill under sprite
-        const skinName = (skin?.accent ? skin.accent + ' ' : '') + (skin?.name || 'Мышонок Пи');
+        const skinName = skin?.name || 'Мышонок Пи';
         const labelText = this.add.text(cx, bot - 14, skinName, {
             fontFamily: FONT.body, fontSize: '13px',
             color: hex(C.textPrimary), fontStyle: '700',
