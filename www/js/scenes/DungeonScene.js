@@ -7,6 +7,7 @@ import { Progress, SKINS } from '../storage/ProgressStore.js';
 import { biomeForFloor, weightedPick, pickDecor } from './Biomes.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
+import { preloadAudio } from '../audio/AudioManager.js';
 import { RELICS, pickRandomRelics, relicById, RARITY_COLORS } from './Relics.js';
 import { computeHudLayout } from '../ui/hudLayout.js';
 import { readSafeArea } from '../ui/safeArea.js';
@@ -217,6 +218,8 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     preload() {
+        // Sound set (samples + music loops) — Phaser skips keys already in the cache
+        preloadAudio(this);
         // SVGs sized for on-screen scale 0.28-0.34 + ~2x DPR — bigger wastes texture memory on Android
         const base = 'assets/characters/transylvania/';
         this.load.svg('d_pi',       base + 'pi.svg',       { width: 150, height: 172 });
@@ -305,6 +308,7 @@ export class DungeonScene extends Phaser.Scene {
         // Combo state
         this._combo = 0;
         this._comboExpire = 0;
+        this._stepDist = 0;
 
         this.dungeon = this.generateDungeon();
         this.computeRoomGoals();    // pick key/exit rooms BEFORE walls so pillars skip them
@@ -319,12 +323,11 @@ export class DungeonScene extends Phaser.Scene {
         this.distractionBooks = 3;
         this.runAlarmCount = this.runAlarmCount || 0;
 
-        // === BIOME BGM — DISABLED. Procedural BGM (oscillator + setInterval + reverb delay)
-        // tanked fps to ~2 on Pixel 9a. Will replace with static OGG files in a follow-up.
-        // const presetByBiome = { dungeon: 'dungeon', kitchen: 'kitchen', library: 'library', garden: 'garden', throne: 'throne' };
-        // const presetName = presetByBiome[this.biome?.id] || 'dungeon';
-        // try { window.audio?.playBgmPreset?.(presetName); } catch (e) {}
-        // this.events.once('shutdown', () => { try { window.audio?.stopBgmPreset?.(); } catch (e) {} });
+        // === BIOME BGM — looping OGG (the procedural synth tanked fps to ~2 on Pixel 9a).
+        // The same track across floors of one biome keeps playing: playBgm no-ops on the same key.
+        try { window.audio?.setBiome?.(this.biome?.id || 'dungeon'); } catch (e) {}
+        const bgmByBiome = { dungeon: BGM.DUNGEON, kitchen: BGM.KITCHEN, library: BGM.LIBRARY, garden: BGM.GARDEN, throne: BGM.THRONE };
+        bus.emit(bgmByBiome[this.biome?.id] || BGM.DUNGEON);
 
         // KEYBOARD
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -2367,6 +2370,16 @@ export class DungeonScene extends Phaser.Scene {
         this.moveWithWalls(this.player, PLAYER.radius, dt);
 
         const speed = Math.hypot(this.player.vx, this.player.vy);
+        // Footsteps on a distance cadence: 240 px/s ÷ 92 px ≈ 2.6 steps/s at full speed.
+        // Crouching = half the rate and quieter.
+        if (!this.player.dashing && speed > 25) {
+            this._stepDist = (this._stepDist || 0) + speed * dt;
+            const stride = this.player.crouch ? 184 : 92;
+            if (this._stepDist >= stride) {
+                this._stepDist = 0;
+                bus.emit(SFX.FOOTSTEP, this.player.crouch ? { vol: 0.45 } : undefined);
+            }
+        }
         this.animateSprite(this.player, 0.34, speed > 25, 0.22);
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
         this.player.shadow.setScale(speed > 25 ? 0.95 + Math.abs(Math.sin(this.player.walkPhase * 2)) * 0.08 : 1, 1);
@@ -6602,6 +6615,7 @@ export class DungeonScene extends Phaser.Scene {
     exitToMenu() {
         // NOTE: renamed from exit() — spawnExitDoor() assigns this.exit = {door object},
         // which previously shadowed this method and caused TypeError on click.
+        try { window.audio?.stopBgm?.(); } catch (e) {}
         if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
         if (window.parent && window.parent !== window) {
             window.parent.postMessage('closePhaserSnowball', '*');
