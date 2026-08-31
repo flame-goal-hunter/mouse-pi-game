@@ -50,7 +50,6 @@ const ACHIEVEMENTS = [
 const $ = (sel) => document.querySelector(sel);
 const balanceEl = $('#balance-value');
 const heroSpriteEl = $('#hero-sprite');
-const heroAccentEl = $('#hero-accent');
 const heroNameEl = $('#hero-name');
 const storyHintEl = $('#story-hint');
 const endlessHintEl = $('#endless-hint');
@@ -74,7 +73,6 @@ function renderHero() {
     const skin = Progress.getCurrentSkin();
     heroSpriteEl.setAttribute('src', skinSrc(skin.id));
     heroSpriteEl.setAttribute('alt', skin.name || 'Мышонок Пи');
-    heroAccentEl.textContent = '';
     heroNameEl.textContent = skin.name || 'Мышонок Пи';
     // Fallback if SVG fails (e.g., file missing) — swap to pi.svg
     heroSpriteEl.onerror = () => {
@@ -89,10 +87,10 @@ function renderModeHints() {
     try { sStat = Progress.getStoryStats() || sStat; } catch (e) {}
     try { eStat = Progress.getEndlessStats() || eStat; } catch (e) {}
     storyHintEl.textContent = sStat.wins > 0
-        ? `✓ Спасений: ${sStat.wins}`
+        ? `Спасений: ${sStat.wins}`
         : '5 этажей · босс · спасение';
     endlessHintEl.textContent = eStat.bestFloor > 0
-        ? `🏆 Лучший этаж: ${eStat.bestFloor}`
+        ? `Лучший этаж: ${eStat.bestFloor}`
         : 'Спускайся вечно · растущая сложность';
 }
 
