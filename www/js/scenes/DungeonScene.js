@@ -58,7 +58,6 @@ const LAYER = {
     UI_FLASH: 3000,       // flashNoCheese
     UI_DEBUG: 5000,       // fps overlay
 };
-const WALL_TRIM_GOLD = 0xd8a850;   // gilded skirting where walls meet the floor
 // Tile indices in www/assets/tiles/<biome>.svg (see tools/gen_tiles.py)
 const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10, WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13, EMPTY: 14, WEAK_CRACK: 15 };
 const TILES_PER_SHEET = 16;
@@ -1156,8 +1155,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     spawnFlourSack(x, y) {
-        const sprite = this.add.text(x, y, '🌾', { fontSize: '36px' })
-            .setOrigin(0.5).setDepth(145);
+        const sprite = this._worldImage(x, y, 'sack_flour', 145, 0.5, 0.85);
         // small idle shake
         this.tweens.add({ targets: sprite, angle: 4, duration: 1400,
             yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -1165,11 +1163,8 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     spawnHangingPot(x, y) {
-        const chain = this.add.graphics().setDepth(75);
-        chain.lineStyle(2, 0x808080, 0.7);
-        chain.lineBetween(x, y - 50, x, y + 4);
-        const sprite = this.add.text(x, y, '🍯', { fontSize: '36px' })
-            .setOrigin(0.5).setDepth(75);
+        const chain = this._worldImage(x, y - 54, 'chain', 75, 0.5, 0);
+        const sprite = this._worldImage(x, y, 'pot_hanging', 75, 0.5, 0.2);
         this.tweens.add({ targets: sprite, x: x + 4, duration: 1800,
             yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.hangingPots.push({ sprite, chain, x, y, dropped: false });
@@ -1196,7 +1191,7 @@ export class DungeonScene extends Phaser.Scene {
             onComplete: () => cloudGfx.destroy()
         });
         this.tweens.add({
-            targets: sack.sprite, scale: 1.4, alpha: 0,
+            targets: sack.sprite, scale: 1.4 / this.dpr, alpha: 0,
             duration: 300, onComplete: () => sack.sprite.destroy()
         });
         // Track cloud — blind cone enemies inside (no detection during cloud)
@@ -1356,8 +1351,7 @@ export class DungeonScene extends Phaser.Scene {
         ];
         for (const p of positions) {
             if (this.pointInWalls(p.x, p.y, 26)) continue;
-            const sprite = this.add.text(p.x, p.y, '🕯', { fontSize: '40px' })
-                .setOrigin(0.5).setDepth(155);
+            const sprite = this._worldImage(p.x, p.y, 'candelabra_unlit', 155, 0.5, 0.9);
             const glow = this.add.circle(p.x, p.y, 30, 0xa080ff, 0.25).setDepth(154);
             this.tweens.add({ targets: glow, alpha: 0.10, scale: 1.4,
                 duration: 1100, yoyo: true, repeat: -1 });
@@ -1376,11 +1370,11 @@ export class DungeonScene extends Phaser.Scene {
             boss._lightsOut2 = true;
             // Extinguish 2 candelabras
             const toKill = this.candelabras.filter(c => c.lit).slice(0, 2);
-            for (const c of toKill) { c.lit = false; c.sprite.setText('🕯'); c.sprite.setAlpha(0.4); }
+            for (const c of toKill) { c.lit = false; c.sprite.setTexture('candelabra_unlit'); c.sprite.setAlpha(0.4); }
         }
         if (boss.phase3 && !boss._lightsOut3) {
             boss._lightsOut3 = true;
-            for (const c of this.candelabras) { c.lit = false; c.sprite.setText('🕯'); c.sprite.setAlpha(0.3); }
+            for (const c of this.candelabras) { c.lit = false; c.sprite.setTexture('candelabra_unlit'); c.sprite.setAlpha(0.3); }
         }
         // Telegraphed boss attacks
         boss._attackCd = (boss._attackCd || 0) - dt * 1000;
@@ -1417,7 +1411,7 @@ export class DungeonScene extends Phaser.Scene {
 
     _lightCandelabra(c) {
         c.lit = true;
-        c.sprite.setText('🔥');
+        c.sprite.setTexture('candelabra_lit');
         c.sprite.setAlpha(1);
         c.glow.fillColor = 0xffd040;
         bus.emit(SFX.LIGHT_TORCH);
@@ -2196,8 +2190,7 @@ export class DungeonScene extends Phaser.Scene {
         const range = 260;
         const tx = this.player.x + Math.cos(angle) * range;
         const ty = this.player.y + Math.sin(angle) * range;
-        const book = this.add.text(this.player.x, this.player.y, '📕', { fontSize: '24px' })
-            .setOrigin(0.5).setDepth(180);
+        const book = this._worldImage(this.player.x, this.player.y, 'prop_book', 180);
         this.tweens.add({
             targets: book, x: tx, y: ty, angle: 360, duration: 420, ease: 'Quad.easeOut',
             onComplete: () => {
@@ -2779,8 +2772,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     placeRelicChest(x, y) {
-        const sprite = this.add.text(x, y, '⚱', { fontSize: '40px' })
-            .setOrigin(0.5).setDepth(160);
+        const sprite = this._worldImage(x, y, 'relic_urn', 160, 0.5, 0.85);
         const glow = this.add.circle(x, y, 32, 0xa080ff, 0.40).setDepth(159);
         this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.15,
             duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -2794,16 +2786,17 @@ export class DungeonScene extends Phaser.Scene {
         if (rc.taken) return;
         rc.taken = true;
         bus.emit(SFX.OPEN_CHEST);
-        this.tweens.add({ targets: [rc.sprite, rc.glow], scale: 2, alpha: 0, duration: 400,
-            onComplete: () => { rc.sprite.destroy(); rc.glow.destroy(); } });
+        this.tweens.add({ targets: rc.sprite, scale: 2 / this.dpr, alpha: 0, duration: 400,
+            onComplete: () => rc.sprite.destroy() });
+        this.tweens.add({ targets: rc.glow, scale: 2, alpha: 0, duration: 400,
+            onComplete: () => rc.glow.destroy() });
         this.showRelicPicker();
     }
 
     placePowerup(x, y, type) {
-        const emoji = { triple: '🎯', speed: '⚡', shield: '🛡️', fire: '🔥' }[type];
         const tint  = { triple: 0xff70a0, speed: 0xfff060, shield: 0x60a0ff, fire: 0xff8030 }[type];
-        const sprite = this.add.text(x, y, emoji, { fontSize: '34px' })
-            .setOrigin(0.5).setDepth(160);
+        const sprite = this.add.image(x, y, POWERUP_ICON[type] || 'ui_bolt')
+            .setDisplaySize(34, 34).setDepth(160);
         const glow = this.add.circle(x, y, 28, tint, 0.30).setDepth(159);
         this.tweens.add({
             targets: sprite, y: y - 8, duration: 800,
@@ -2824,8 +2817,12 @@ export class DungeonScene extends Phaser.Scene {
         this.activePowerup = { type: p.type, tint: p.tint, endTime: this.time.now + DURATION };
         this.poofAt(p.x, p.y, p.tint);
         this.tweens.add({
-            targets: [p.sprite, p.glow], scale: 1.8, alpha: 0, y: p.y - 30,
-            duration: 350, onComplete: () => { p.sprite.destroy(); p.glow.destroy(); }
+            targets: p.sprite, scale: p.sprite.scaleX * 1.8, alpha: 0, y: p.y - 30,
+            duration: 350, onComplete: () => p.sprite.destroy()
+        });
+        this.tweens.add({
+            targets: p.glow, scale: 1.8, alpha: 0, y: p.y - 30,
+            duration: 350, onComplete: () => p.glow.destroy()
         });
         const name = { triple: 'ТРИ ПИРОГА', speed: 'СКОРОСТЬ', shield: 'ЩИТ', fire: 'ОГНЕННЫЕ ПИРОГИ' }[p.type];
         this.showFloatingText(p.x, p.y - 30, name + '!', '#' + p.tint.toString(16).padStart(6, '0'), 26);
@@ -2996,8 +2993,7 @@ export class DungeonScene extends Phaser.Scene {
                 guard.suspicion = 0;
                 guard.coneGfx = this.add.graphics().setDepth(83);
                 guard.sprite.setTint(0x6080a0);
-                guard.zzz = this.add.text(gx, gy - 60, '💤', { fontSize: '22px' })
-                    .setOrigin(0.5).setDepth(190).setAlpha(0.85);
+                guard.zzz = this._worldImage(gx, gy - 60, 'badge_sleep', 190).setAlpha(0.85);
             }
             // Chest in opposite corner
             const chestX = room.x + room.w - 70;
@@ -3017,8 +3013,7 @@ export class DungeonScene extends Phaser.Scene {
                 ];
                 for (const c of candidates) {
                     if (this.pointInWalls(c.x, c.y, 24)) continue;
-                    const sprite = this.add.text(c.x, c.y, '📕', { fontSize: '32px' })
-                        .setOrigin(0.5).setDepth(155);
+                    const sprite = this._worldImage(c.x, c.y, 'book_forbidden', 155, 0.5, 0.8);
                     const glow = this.add.circle(c.x, c.y, 24, 0xff60ff, 0.30).setDepth(154);
                     this.tweens.add({ targets: glow, alpha: 0.10, scale: 1.6,
                         duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -3050,8 +3045,12 @@ export class DungeonScene extends Phaser.Scene {
             this.showFloatingText(b.x, b.y - 30, '📕 +1 урон навсегда!', '#ff60ff', 22);
             bus.emit(SFX.OPEN_CHEST);
             this.tweens.add({
-                targets: [b.sprite, b.glow], scale: 2, alpha: 0, y: b.y - 50, duration: 500,
-                onComplete: () => { b.sprite.destroy(); b.glow.destroy(); }
+                targets: b.sprite, scale: 2 / this.dpr, alpha: 0, y: b.y - 50, duration: 500,
+                onComplete: () => b.sprite.destroy()
+            });
+            this.tweens.add({
+                targets: b.glow, scale: 2, alpha: 0, y: b.y - 50, duration: 500,
+                onComplete: () => b.glow.destroy()
             });
         }
     }
@@ -3168,8 +3167,7 @@ export class DungeonScene extends Phaser.Scene {
         // Red camera flash — player feels "I'm caught"
         this.cameras.main.flash(280, 200, 30, 30);
         this.cameras.main.shake(180, 0.012);
-        const t = this.add.text(e.x, e.y - 50, '❗', { fontSize: '32px', color: '#ff4040' })
-            .setOrigin(0.5).setDepth(800);
+        const t = this._worldImage(e.x, e.y - 50, 'badge_alert', 800);
         this.tweens.add({ targets: t, y: e.y - 90, alpha: 0, duration: 900,
             onComplete: () => t.destroy() });
         if (e.zzz) { e.zzz.destroy(); e.zzz = null; }
@@ -3255,7 +3253,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     spawnChest(x, y) {
-        const sprite = this.add.text(x, y, '📦', { fontSize: '40px' }).setOrigin(0.5).setDepth(150);
+        const sprite = this._worldImage(x, y, 'chest_closed', 150, 0.5, 0.85);
         const glow = this.add.circle(x, y, 28, 0xffd040, 0.25).setDepth(149);
         this.tweens.add({ targets: glow, alpha: 0.08, scale: 1.4,
             duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
@@ -3269,7 +3267,7 @@ export class DungeonScene extends Phaser.Scene {
         if (c.opened) return;
         c.opened = true;
         bus.emit(SFX.OPEN_CHEST);
-        c.sprite.setText('🎁');
+        c.sprite.setTexture('chest_open');
         // Chest reward depends on per-room alarm scope: if THIS room is unalarmed, big bonus
         const chestRoomId = this._findRoomIdForPoint(c.x, c.y);
         const stealthSuccess = !this._alarmedRooms || !this._alarmedRooms.has(chestRoomId);
@@ -3297,9 +3295,13 @@ export class DungeonScene extends Phaser.Scene {
         this.score += scoreGain;
         this.showFloatingText(c.x, c.y - 40, msg, msgColor, 26);
         this.poofAt(c.x, c.y, 0xffd040);
-        this.tweens.add({ targets: [c.sprite, c.glow],
+        this.tweens.add({ targets: c.sprite,
+            scale: 1.6 / this.dpr, alpha: 0, duration: 500,
+            onComplete: () => c.sprite.destroy()
+        });
+        this.tweens.add({ targets: c.glow,
             scale: 1.6, alpha: 0, duration: 500,
-            onComplete: () => { c.sprite.destroy(); c.glow.destroy(); }
+            onComplete: () => c.glow.destroy()
         });
     }
 
@@ -3507,12 +3509,11 @@ export class DungeonScene extends Phaser.Scene {
         if (kind === 'librarian') sprite.setTint(0xc88060);
         if (kind === 'snapdragon') sprite.setTint(0xff60c0);
         // Mimic starts disguised as a chest (kept below)
-        // Mimic disguise — show a chest emoji over the sprite, hide real sprite until revealed
+        // Mimic disguise — show a chest decoy over the sprite, hide real sprite until revealed
         let mimicDecoy = null;
         if (kind === 'mimic') {
             sprite.setVisible(false);
-            mimicDecoy = this.add.text(x, y, '📦', { fontSize: '40px' })
-                .setOrigin(0.5).setDepth(189);
+            mimicDecoy = this._worldImage(x, y, 'chest_closed', 189, 0.5, 0.85);
             this.tweens.add({ targets: mimicDecoy, y: y - 4,
                 duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         }
@@ -3559,14 +3560,11 @@ export class DungeonScene extends Phaser.Scene {
             enemy.coneAngle = def.coneAngle || Math.PI / 3.6;
             enemy.coneRange = def.coneRange || 220;
             // Small badge icon above stealth enemies so player can tell them apart from aggressive ones
-            enemy.behaviorIcon = this.add.text(enemy.x, enemy.y - 56, '👁', {
-                fontSize: '16px'
-            }).setOrigin(0.5).setDepth(202).setAlpha(0.6);
+            enemy.behaviorIcon = this.add.image(enemy.x, enemy.y - 56, 'ui_eye')
+                .setDisplaySize(16, 16).setDepth(202).setAlpha(0.6);
         } else if (kind !== 'boss' && kind !== 'mimic') {
             // Aggressive enemies (always chase) — small red icon
-            enemy.behaviorIcon = this.add.text(enemy.x, enemy.y - 56, '💢', {
-                fontSize: '14px'
-            }).setOrigin(0.5).setDepth(202).setAlpha(0.45);
+            enemy.behaviorIcon = this._worldImage(enemy.x, enemy.y - 56, 'badge_anger', 202).setAlpha(0.45);
         }
         this.enemies.push(enemy);
         return enemy;
@@ -3809,8 +3807,7 @@ export class DungeonScene extends Phaser.Scene {
                     duration: 150, yoyo: true, ease: 'Quad.easeOut'
                 });
                 // Exclamation
-                const t = this.add.text(e.x, e.y - 40, '❗', { fontSize: '32px' })
-                    .setOrigin(0.5).setDepth(800);
+                const t = this._worldImage(e.x, e.y - 40, 'badge_alert', 800);
                 this.tweens.add({ targets: t, y: e.y - 80, alpha: 0, duration: 800,
                     onComplete: () => t.destroy() });
                 this.cameras.main.shake(150, 0.008);
@@ -4302,9 +4299,7 @@ export class DungeonScene extends Phaser.Scene {
                             other.suspicion = Math.max(other.suspicion || 0, 0.7);
                             other.alertTimer = (other.def.alertMs || 4000);
                             // Visual cue: enemy heard the shot
-                            const ear = this.add.text(other.x, other.y - 50, '👂', {
-                                fontSize: '24px'
-                            }).setOrigin(0.5).setDepth(800);
+                            const ear = this._worldImage(other.x, other.y - 50, 'badge_ear', 800);
                             this.tweens.add({
                                 targets: ear, y: other.y - 84, alpha: 0,
                                 duration: 1000, ease: 'Quad.easeOut',
@@ -4499,15 +4494,19 @@ export class DungeonScene extends Phaser.Scene {
             }
         }
         this.tweens.add({
-            targets: [pk.sprite, pk.glow],
+            targets: pk.sprite,
+            scale: pk.sprite.scaleX * 1.6, alpha: 0, y: pk.y - 20, duration: 260,
+            onComplete: () => pk.sprite.destroy()
+        });
+        this.tweens.add({
+            targets: pk.glow,
             scale: 1.6, alpha: 0, y: pk.y - 20, duration: 260,
-            onComplete: () => { pk.sprite.destroy(); pk.glow.destroy(); }
+            onComplete: () => pk.glow.destroy()
         });
     }
 
     spawnHeart(x, y) {
-        const sprite = this.add.text(x, y, '❤️', { fontSize: '28px' })
-            .setOrigin(0.5).setDepth(155);
+        const sprite = this.add.image(x, y, 'ui_heart').setDisplaySize(28, 28).setDepth(155);
         const glow = this.add.circle(x, y, 22, 0xff3060, 0.25).setDepth(154);
         // Auto-despawn after 12 seconds
         this.time.delayedCall(12000, () => {
@@ -4547,16 +4546,8 @@ export class DungeonScene extends Phaser.Scene {
             if (safe) { x = safe.x; y = safe.y; }
         }
         const ringGlow = this.add.circle(x, y, 60, 0xa060ff, 0.18).setDepth(120);
-        const g = this.add.graphics().setPosition(x, y).setDepth(122);
-        g.fillStyle(0x5a3088, 1); g.lineStyle(3, 0x1a0a2e, 1);
-        g.fillRoundedRect(-34, -52, 68, 94, { tl: 34, tr: 34, bl: 0, br: 0 });
-        g.strokeRoundedRect(-34, -52, 68, 94, { tl: 34, tr: 34, bl: 0, br: 0 });
-        g.fillStyle(0x2a0a3a, 1);
-        g.fillRoundedRect(-26, -44, 52, 78, { tl: 26, tr: 26, bl: 0, br: 0 });
-        g.lineStyle(2, 0x8a5510, 0.8);
-        g.beginPath(); g.moveTo(-20, -32); g.lineTo(20, 24);
-        g.moveTo(20, -32); g.lineTo(-20, 24); g.strokePath();
-        const lock = this.add.text(x, y - 2, '🔒', { fontSize: '30px' }).setOrigin(0.5).setDepth(123);
+        const g = this._worldImage(x, y, 'door_closed', 122, 0.5, 0.9);
+        const lock = this._worldImage(x, y - 30, 'lock', 123);
         this.exit = { x, y, radius: 42, graphics: g, glow: ringGlow, lockIcon: lock, unlocked: false };
 
         // Grandma in cage ONLY on the final floor; intermediate floors show a "down stairs" portal
@@ -4605,9 +4596,7 @@ export class DungeonScene extends Phaser.Scene {
             g.strokeRect(sx, sy, 60 - i * 12, 12);
         }
         // Floating "↓" arrow above
-        const arrow = this.add.text(x, y - 70, '⬇', {
-            fontSize: '36px', color: '#a060ff', stroke: '#1a0a3a', strokeThickness: 4
-        }).setOrigin(0.5).setDepth(125);
+        const arrow = this.add.image(x, y - 70, 'ui_stairs').setDisplaySize(36, 36).setDepth(125);
         this.tweens.add({
             targets: arrow, y: y - 78, alpha: 0.5,
             duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
@@ -4622,18 +4611,7 @@ export class DungeonScene extends Phaser.Scene {
     spawnCaptive(x, y) {
         const fam = { name: 'Бабушка', nameLow: 'бабушку', emoji: '👵',
                       plea: 'Помоги, внучок!', tint: 0xffffff, freed: 'Внучок!' };
-        const cage = this.add.graphics().setDepth(124);
-        cage.fillStyle(0x3a2438, 1);
-        cage.fillRoundedRect(x - 60, y - 90, 120, 30, 8);
-        cage.fillRoundedRect(x - 60, y + 50, 120, 20, 4);
-        cage.lineStyle(4, 0x2a2030, 1);
-        cage.strokeRoundedRect(x - 60, y - 90, 120, 30, 8);
-        cage.strokeRoundedRect(x - 60, y + 50, 120, 20, 4);
-        cage.lineStyle(5, 0x2a2030, 1);
-        for (let i = 0; i < 6; i++) {
-            const bx = x - 50 + i * 20;
-            cage.lineBetween(bx, y - 80, bx, y + 55);
-        }
+        const cage = this._worldImage(x, y + 54, 'cage', 124, 0.5, 0.9);
 
         const sprite = this.add.image(x, y + 14, 'd_grandma')
             .setOrigin(0.5, 1).setScale(0.32).setDepth(123);
@@ -4644,7 +4622,7 @@ export class DungeonScene extends Phaser.Scene {
             duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
         });
 
-        const bubble = this.add.text(x, y - 110, `💬 ${fam.plea}`, {
+        const bubble = this.add.text(x, y - 110, fam.plea, {
             fontFamily: 'Arial Black', fontSize: '16px',
             color: '#1a1a1a', backgroundColor: '#fff8e0',
             padding: { x: 10, y: 6 }, stroke: '#5a3010', strokeThickness: 1
@@ -4675,19 +4653,18 @@ export class DungeonScene extends Phaser.Scene {
             duration: 220, yoyo: true, repeat: 2, ease: 'Sine.easeOut'
         });
         if (c.bubble) {
-            c.bubble.setText(`🎉 ${c.family.freed}`);
+            c.bubble.setText(c.family.freed);
             c.bubble.setBackgroundColor('#80ff80');
         }
         for (let i = 0; i < 12; i++) {
             const angle = Math.random() * Math.PI * 2;
             const r = Phaser.Math.Between(40, 80);
-            const p = this.add.text(c.x, c.y - 30, '✨', { fontSize: '20px' })
-                .setOrigin(0.5).setDepth(800);
+            const p = this._worldImage(c.x, c.y - 30, 'badge_sparkle', 800);
             this.tweens.add({
                 targets: p,
                 x: c.x + Math.cos(angle) * r,
                 y: c.y - 30 + Math.sin(angle) * r,
-                alpha: 0, scale: 0.4,
+                alpha: 0, scale: 0.4 / this.dpr,
                 duration: 1200, ease: 'Quad.easeOut',
                 onComplete: () => p.destroy()
             });
@@ -4782,9 +4759,10 @@ export class DungeonScene extends Phaser.Scene {
     unlockExit() {
         if (!this.exit || this.exit.unlocked) return;
         this.exit.unlocked = true;
-        this.exit.lockIcon.setText('🔓');
+        this.exit.graphics.setTexture('door_open');
+        this.exit.lockIcon.setTexture('unlock');
         this.tweens.add({
-            targets: this.exit.lockIcon, alpha: 0, scale: 1.6,
+            targets: this.exit.lockIcon, alpha: 0, scale: 1.6 / this.dpr,
             duration: 600, onComplete: () => this.exit.lockIcon.destroy()
         });
         this.exit.glowHoldUntil = this.time.now + 600;  // let the unlock flash win over the bob for its duration
