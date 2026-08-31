@@ -66,10 +66,11 @@ def parse_biomes(src):
 
 def plate_quarter(fill, grid, q):
     """One 40×40 quarter of an 80×80 stone plate. q in TL,TR,BL,BR."""
-    light = mix(fill, 0xffffff, 0.14)
-    dark = mix(fill, 0x000000, 0.28)
+    light = mix(fill, 0xffffff, 0.24)
+    dark = mix(fill, 0x000000, 0.22)
     seam = hex6(grid)
-    parts = [f'<rect x="0" y="0" width="{T}" height="{T}" fill="{fill_hex(fill)}"/>']
+    base = mix(fill, 0xffffff, 0.10)   # lift the stone so the art reads through the biome darkness
+    parts = [f'<rect x="0" y="0" width="{T}" height="{T}" fill="{base}"/>']
     # Bevel: light along the plate's top/left, dark along bottom/right (2px inside the seam)
     if q in ('TL', 'TR'):
         parts.append(f'<rect x="0" y="1" width="{T}" height="2" fill="{light}" opacity="0.55"/>')

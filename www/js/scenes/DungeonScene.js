@@ -76,7 +76,7 @@ const WORLD_SVGS = {
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
 };
 // Weighted decor types with no matching prop_* asset — reuse the closest existing sprite
-const DECOR_ALIAS = { flower: 'moonflower', vine: 'hedge_tuft', plate: 'pot', knife: 'goblet', inkwell: 'scroll', chain: 'bone' };
+const DECOR_ALIAS = { flower: 'moonflower', vine: 'hedge_tuft', plate: 'pot', knife: 'pot', inkwell: 'scroll', chain: 'bone' };
 
 const PLAYER = {
     speed: 240,
@@ -1703,10 +1703,11 @@ export class DungeonScene extends Phaser.Scene {
     // Returns cells inside the room that are adjacent to a wall — torches attach visually here
     _collectWallAdjacentCells(room) {
         const cells = [];
-        const c0 = Math.floor(room.x / NAV_CELL) + 1;
-        const r0 = Math.floor(room.y / NAV_CELL) + 1;
-        const c1 = Math.floor((room.x + room.w) / NAV_CELL) - 1;
-        const r1 = Math.floor((room.y + room.h) / NAV_CELL) - 1;
+        // Full room rect (no inset): the outermost floor cells are the ones that touch the wall.
+        const c0 = Math.max(0, Math.floor(room.x / NAV_CELL));
+        const r0 = Math.max(0, Math.floor(room.y / NAV_CELL));
+        const c1 = Math.min(NAV_W - 1, Math.ceil((room.x + room.w) / NAV_CELL));
+        const r1 = Math.min(NAV_H - 1, Math.ceil((room.y + room.h) / NAV_CELL));
         for (let r = r0; r <= r1; r++) {
             for (let c = c0; c <= c1; c++) {
                 if (this.navGrid[r]?.[c] !== 'floor') continue;
