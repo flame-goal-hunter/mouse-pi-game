@@ -1252,7 +1252,6 @@ export class DungeonScene extends Phaser.Scene {
             if (type === 'hotpan') {
                 tile.phase = 'cold';
                 tile.phaseTimer = Math.random() * 2000;   // stagger so they don't all flame at once
-                tile.gfx = this.add.graphics().setDepth(96);
             }
             this.biomeTiles.push(tile);
             this.drawBiomeTile(x, y, radius, type, tile);
@@ -1286,7 +1285,7 @@ export class DungeonScene extends Phaser.Scene {
             if (this.pointInWalls(nx, ny, 30)) continue;
             const tile = { x: nx, y: ny, radius: 40, type: 'vines' };
             this.biomeTiles.push(tile);
-            this.drawBiomeTile(nx, ny, 40, 'vines');
+            this.drawBiomeTile(nx, ny, 40, 'vines', tile);
             newVines.push(tile);
         }
         this.growingVines.push(...newVines);
@@ -1485,11 +1484,14 @@ export class DungeonScene extends Phaser.Scene {
                 if (this.pointInWalls(px, py, 28)) continue;
                 const tile = { x: px, y: py, radius: 36, type: 'thorn' };
                 this.biomeTiles.push(tile);
-                this.drawBiomeTile(px, py, 36, 'thorn');
+                this.drawBiomeTile(px, py, 36, 'thorn', tile);
                 // Despawn after 4s
                 this.time.delayedCall(4000, () => {
                     const idx = this.biomeTiles.indexOf(tile);
-                    if (idx >= 0) this.biomeTiles.splice(idx, 1);
+                    if (idx >= 0) {
+                        tile.sprite?.destroy();
+                        this.biomeTiles.splice(idx, 1);
+                    }
                 });
             }
         }
@@ -1511,30 +1513,8 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     _redrawHotpan(t) {
-        if (!t.gfx) return;
-        t.gfx.clear();
-        if (t.phase === 'cold') {
-            // dark plate
-            t.gfx.fillStyle(0x303030, 0.6);
-            t.gfx.fillCircle(t.x, t.y, t.radius);
-            t.gfx.lineStyle(2, 0x606060, 0.8);
-            t.gfx.strokeCircle(t.x, t.y, t.radius);
-        } else if (t.phase === 'warn') {
-            // pulsing yellow warning
-            const pulse = 0.6 + 0.3 * Math.sin(this.time.now * 0.020);
-            t.gfx.fillStyle(0xffd040, pulse);
-            t.gfx.fillCircle(t.x, t.y, t.radius);
-            t.gfx.lineStyle(3, 0xff8030, 1);
-            t.gfx.strokeCircle(t.x, t.y, t.radius);
-        } else if (t.phase === 'flame') {
-            // red flame
-            t.gfx.fillStyle(0xff3010, 0.85);
-            t.gfx.fillCircle(t.x, t.y, t.radius);
-            t.gfx.fillStyle(0xffd040, 0.6);
-            t.gfx.fillCircle(t.x, t.y, t.radius * 0.6);
-            t.gfx.lineStyle(3, 0xff8030, 1);
-            t.gfx.strokeCircle(t.x, t.y, t.radius);
-        }
+        if (!t.sprite) return;
+        t.sprite.setTexture('tile_hotpan_' + t.phase);
     }
 
     spawnBiomeParticles() {
@@ -1642,78 +1622,17 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     drawBiomeTile(x, y, radius, type, tile) {
-        // KITCHEN timed hotpan — uses tile.gfx so phase updates can redraw
-        if (type === 'hotpan' && tile && tile.gfx) {
-            this._redrawHotpan(tile);
-            return;
-        }
-        const g = this.add.graphics().setDepth(LAYER.TILE);
-        if (type === 'butter') {
-            // Yellow slippery butter puddle
-            g.fillStyle(0xffd060, 0.65);
-            g.fillEllipse(x, y, radius * 1.7, radius * 1.0);
-            g.fillStyle(0xfff0a0, 0.5);
-            g.fillEllipse(x - radius * 0.2, y - radius * 0.2, radius * 0.8, radius * 0.4);
-            g.lineStyle(2, 0xc89530, 0.6);
-            g.strokeEllipse(x, y, radius * 1.7, radius * 1.0);
-        } else if (type === 'vines') {
-            g.fillStyle(0x2a5028, 0.7);
-            g.fillCircle(x, y, radius);
-            g.lineStyle(2, 0x488038, 0.85);
-            for (let i = 0; i < 6; i++) {
-                const a = Math.random() * Math.PI * 2;
-                const r1 = radius * 0.2;
-                const r2 = radius * 0.9;
-                g.beginPath();
-                g.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
-                g.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2);
-                g.strokePath();
-            }
-            for (let i = 0; i < 4; i++) {
-                const a = Math.random() * Math.PI * 2;
-                const r = radius * 0.6;
-                g.fillStyle(0x5aa040, 0.85);
-                g.fillEllipse(x + Math.cos(a) * r, y + Math.sin(a) * r, 8, 4);
-            }
-        } else if (type === 'hotpan') {
-            // Glowing red-hot pan — dangerous tile
-            g.fillStyle(0x2a1808, 1);
-            g.lineStyle(2, 0x1a0a04, 1);
-            g.fillEllipse(x, y, radius * 1.4, radius * 0.9);
-            g.strokeEllipse(x, y, radius * 1.4, radius * 0.9);
-            // Red glow center
-            g.fillStyle(0xff4020, 0.9);
-            g.fillEllipse(x, y, radius * 1.0, radius * 0.55);
-            g.fillStyle(0xff8030, 0.7);
-            g.fillEllipse(x, y, radius * 0.7, radius * 0.35);
-            g.fillStyle(0xffe040, 0.5);
-            g.fillEllipse(x - radius * 0.2, y - radius * 0.15, radius * 0.35, radius * 0.18);
-            // Pulsing animation
-            this.tweens.add({
-                targets: g, alpha: 0.7, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-            });
-        } else if (type === 'thorn') {
-            // Pink spiky thorn patch
-            g.fillStyle(0x3a1828, 0.85);
-            g.fillCircle(x, y, radius);
-            g.lineStyle(2, 0xff60a0, 0.9);
-            // Spikes around perimeter
-            for (let i = 0; i < 8; i++) {
-                const a = (i / 8) * Math.PI * 2 + Math.random() * 0.3;
-                const r1 = radius * 0.5;
-                const r2 = radius * 1.1;
-                g.beginPath();
-                g.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
-                g.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2);
-                g.strokePath();
-            }
-            g.fillStyle(0xff80c0, 1);
-            for (let i = 0; i < 5; i++) {
-                const a = Math.random() * Math.PI * 2;
-                const r = radius * (0.2 + Math.random() * 0.5);
-                g.fillCircle(x + Math.cos(a) * r, y + Math.sin(a) * r, 2);
-            }
-        }
+        const key = type === 'hotpan' ? 'tile_hotpan_cold' : (type === 'vines' ? 'tile_vine' : 'tile_' + type);
+        if (!this.textures.exists(key)) { console.warn('[DungeonScene] unknown biome tile', type); return; }
+        const spr = this._worldImage(x, y, key, LAYER.TILE);
+        this._sizeBiomeTile(spr, type, radius);
+        if (tile) tile.sprite = spr;
+        return spr;
+    }
+    _sizeBiomeTile(spr, type, radius) {
+        if (type === 'butter') spr.setDisplaySize(radius * 3.4, radius * 2.0);
+        else if (type === 'hotpan') spr.setDisplaySize(radius * 2.8, radius * 1.8);
+        else spr.setDisplaySize(radius * 2, radius * 2);
     }
 
     addWall(x, y, w, h) {
@@ -4868,6 +4787,7 @@ export class DungeonScene extends Phaser.Scene {
                     if (v.type !== 'vines') continue;
                     if (Math.hypot(p.x - v.x, p.y - v.y) < v.radius * 0.7) {
                         this.poofAt(v.x, v.y, 0x408060);
+                        v.sprite?.destroy();
                         this.biomeTiles.splice(i, 1);
                         if (this.growingVines) {
                             const gi = this.growingVines.indexOf(v);
