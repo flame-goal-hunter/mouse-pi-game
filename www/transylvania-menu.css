@@ -231,6 +231,23 @@ button:focus-visible,
     gap: var(--space-2);
 }
 
+/* Floor line — a very low, very wide pool of light the front row stands on, so
+   the bottom of the stage reads as ground instead of a crop. */
+#stage::after {
+    content: '';
+    position: absolute;
+    left: -8%;
+    right: -8%;
+    bottom: 0;
+    height: 30%;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 58% 96% at 50% 100%,
+        rgba(232, 181, 74, 0.17) 0%,
+        rgba(232, 181, 74, 0.07) 44%,
+        rgba(232, 181, 74, 0) 76%);
+}
+
 #stage-cast {
     position: absolute;
     inset: 0;
@@ -260,19 +277,49 @@ button:focus-visible,
 .cast-mid   { opacity: 0.75; filter: brightness(0.75) var(--cast-shadow); }
 .cast-front { opacity: 1; }
 
-/* --- Placement (landscape defaults; right-anchored on the right so nothing overflows) --- */
-.cast-cage    { --ch: 26%; left: 1%;  top: 23%; aspect-ratio: 128 / 160; }
-.cast-ghost   { --ch: 22%; right: 5%; top: 2%; }
-.cast-bat     { --ch: 16%; left: 4%;  top: 4%; }
-.cast-skeleton{ --ch: 25%; right: 2%; top: 28%; }
-.cast-zombie  { --ch: 28%; left: 6%;  top: 48%; }
-.cast-cat     { --ch: 21%; right: 2%; top: 54%; }
-.cast-mimic   { --ch: 18%; left: 1%;  top: 76%; }
-.cast-slime   { --ch: 13%; right: 6%; top: 79%; }
+/* --- Placement: a staggered depth ladder, not two columns.
+   --ch is the member's height in % of the stage: back 15-19, mid 22-25, front
+   27-28 (Pi is ~88% of the stage, so he stays clearly the largest). Vertical
+   order runs back-row-high to front-row-on-the-floor; the left/right anchors
+   zig-zag so no two neighbours on a side share a centre line. --- */
+.cast-bat     { --ch: 15%; left: 10.8%;  top: 5%; }
+.cast-ghost   { --ch: 17%; right: 15.2%; top: 11%; }
+.cast-cage    { --ch: 20%; left: 6.4%;   top: 20%; aspect-ratio: 128 / 160; }
+.cast-skeleton{ --ch: 22%; right: 2%;    top: 27%; }
+.cast-cat     { --ch: 24%; left: 11.6%;  top: 43%; }
+.cast-zombie  { --ch: 25%; right: 8.5%;  top: 47%; }
+.cast-slime   { --ch: 25%; left: 2%;     top: 72%; }
+.cast-mimic   { --ch: 27%; right: 1%;    top: 72%; }
 
-/* The cage is the story goal — keep it a shade brighter than the rest of the back row. */
-.cast-cage    { opacity: 0.66; filter: brightness(0.72); }
+/* The squashers grow ~6% wider mid-loop; anchor them away from the clipped edge. */
+.cast-slime   { transform-origin: 12% 100%; }
+.cast-mimic   { transform-origin: 88% 100%; }
+
+/* Grandma's cage is the story goal — brightest thing in the back row, with a
+   warm halo behind the bars so the eye finds her before anything else. */
+.cast-cage    { opacity: 0.82; filter: brightness(0.95); }
 .cast-bat     { opacity: 0.68; filter: brightness(0.85) var(--cast-shadow); }
+
+.cast-cage::before {
+    content: '';
+    position: absolute;
+    left: -30%;
+    top: -22%;
+    width: 160%;
+    height: 150%;
+    border-radius: 50%;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center,
+        rgba(246, 215, 122, 0.40) 0%,
+        rgba(232, 181, 74, 0.19) 40%,
+        rgba(232, 181, 74, 0) 70%);
+    animation: cageGlow 4.6s ease-in-out infinite;
+}
+
+@keyframes cageGlow {
+    0%, 100% { opacity: 0.7; }
+    50%      { opacity: 1; }
+}
 
 /* Grandma behind the bars — the goal of the run, tucked at the back left. */
 .cast-cage .cage {
@@ -288,7 +335,7 @@ button:focus-visible,
 .cast-grandma {
     left: 50%;
     bottom: 11%;
-    height: 56%;
+    height: 64%;
     transform: translateX(-50%);
 }
 
@@ -1052,8 +1099,11 @@ button:focus-visible,
 
 /* Narrow landscape (small phones): the right column has no room next to Pi. */
 @media (orientation: landscape) and (max-width: 760px) {
-    #stage-cast { --cast-scale: 0.92; }
-    .cast-skeleton { display: none; }
+    /* Pi fills almost the whole stage here, so the cast shrinks and the two
+       widest front members hug the outer edges to stay clear of the hero pill. */
+    #stage-cast { --cast-scale: 0.80; }
+    .cast-slime { left: 0.6%; }
+    .cast-mimic { right: 0.6%; }
 }
 
 @media (orientation: portrait) {
@@ -1068,10 +1118,8 @@ button:focus-visible,
     #panel { justify-content: flex-end; }
     #hero-plate { width: min(100%, 220px); }
 
-    /* Short stage band: drop the two mid characters and shrink the rest ~15%. */
+    /* Short, wide stage band: everything fits, just ~15% smaller. */
     #stage-cast { --cast-scale: 0.85; }
-    .cast-mimic,
-    .cast-skeleton { display: none; }
 
     .modal-body-two-col {
         grid-template-columns: 1fr;
