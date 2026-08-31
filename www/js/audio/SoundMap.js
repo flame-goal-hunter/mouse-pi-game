@@ -1,6 +1,7 @@
 // ============================================
 // SoundMap — event → sample table.
-// `vol` values are loudness-matched (target RMS ≈ 0.13, peak-limited to 0.95).
+// `vol` values are measured per sample: min(0.115 / rms, 0.92 / peak), clamped to [0.15, 2.6],
+// so every sound lands at a similar perceived level and none can clip.
 // `rate`/`jitter` give per-play pitch variation; `guard` is the minimum ms between
 // two plays of the same event (anti machine-gun).
 // ============================================
@@ -8,24 +9,24 @@ import { SFX, UI, BGM } from './SoundKeys.js';
 
 export const SFX_FILES = {
     // key: [file, volume]
-    ui_click:   ['ui_click', 0.85],   ui_back:  ['ui_back', 0.9],   ui_buy:  ['ui_buy', 0.75],
-    ui_deny:    ['ui_deny', 0.85],    ui_open:  ['ui_open', 0.9],   ui_close:['ui_close', 0.9],
-    ui_tick:    ['ui_tick', 1.0],
-    throw_a:    ['throw_a', 3.0],     throw_b:  ['throw_b', 3.0],   dash:    ['dash', 2.0],
-    hit_enemy_a:['hit_enemy_a', 0.95],hit_enemy_b:['hit_enemy_b', 0.95], hit_enemy_c:['hit_enemy_c', 0.7],
-    hit_wall_a: ['hit_wall_a', 0.95], hit_wall_b:['hit_wall_b', 0.95],
-    take_damage:['take_damage', 1.0], enemy_death_a:['enemy_death_a', 1.4], enemy_death_b:['enemy_death_b', 1.4],
-    boss_hit:   ['boss_hit', 2.0],    squelch:  ['squelch', 0.7],
-    cheese:     ['cheese', 1.4],      heart:    ['heart', 0.75],    powerup: ['powerup', 0.65],
-    key:        ['key', 1.3],         chest:    ['chest', 2.5],     coins:   ['coins', 3.0],
-    torch:      ['torch', 3.0],       door:     ['door', 1.1],
-    alarm:      ['alarm', 1.05],      book_thud:['book_thud', 1.7],
-    step_stone_1:['step_stone_1', 1.4], step_stone_2:['step_stone_2', 1.4], step_stone_3:['step_stone_3', 1.4],
-    step_wood_1: ['step_wood_1', 1.4],  step_wood_2: ['step_wood_2', 1.4],  step_wood_3: ['step_wood_3', 1.4],
-    step_carpet_1:['step_carpet_1', 1.9],step_carpet_2:['step_carpet_2', 1.9],step_carpet_3:['step_carpet_3', 1.9],
-    step_grass_1:['step_grass_1', 3.0], step_grass_2:['step_grass_2', 3.0], step_grass_3:['step_grass_3', 3.0],
-    sting_win:  ['sting_win', 0.7],   sting_lose:['sting_lose', 0.8], sting_death:['sting_death', 0.9],
-    sting_floor:['sting_floor', 0.7], sting_boss:['sting_boss', 2.2], sting_boss_phase:['sting_boss_phase', 0.75],
+    ui_click: ['ui_click', 0.74],   ui_back: ['ui_back', 0.82],   ui_buy: ['ui_buy', 0.65],
+    ui_deny: ['ui_deny', 0.76],    ui_open: ['ui_open', 0.78],   ui_close: ['ui_close', 0.8],
+    ui_tick: ['ui_tick', 0.91],
+    throw_a: ['throw_a', 2.29],     throw_b: ['throw_b', 2.6],   dash: ['dash', 1.56],
+    hit_enemy_a: ['hit_enemy_a', 0.67],hit_enemy_b: ['hit_enemy_b', 0.63], hit_enemy_c: ['hit_enemy_c', 0.63],
+    hit_wall_a: ['hit_wall_a', 0.85], hit_wall_b: ['hit_wall_b', 0.83],
+    take_damage: ['take_damage', 0.87], enemy_death_a: ['enemy_death_a', 1.06], enemy_death_b: ['enemy_death_b', 1.03],
+    boss_hit: ['boss_hit', 1.04],    squelch: ['squelch', 0.63],
+    cheese: ['cheese', 0.91],      heart: ['heart', 0.67],    powerup: ['powerup', 0.6],
+    key: ['key', 0.77],         chest: ['chest', 2.07],     coins: ['coins', 0.9],
+    torch: ['torch', 2.6],       door: ['door', 0.88],
+    alarm: ['alarm', 0.93],      book_thud: ['book_thud', 1.04],
+    step_stone_1: ['step_stone_1', 1.02], step_stone_2: ['step_stone_2', 1.04], step_stone_3: ['step_stone_3', 1.03],
+    step_wood_1: ['step_wood_1', 1.02],  step_wood_2: ['step_wood_2', 1.03],  step_wood_3: ['step_wood_3', 1.02],
+    step_carpet_1: ['step_carpet_1', 1.04],step_carpet_2: ['step_carpet_2', 1.05],step_carpet_3: ['step_carpet_3', 1.05],
+    step_grass_1: ['step_grass_1', 1.04], step_grass_2: ['step_grass_2', 1.05], step_grass_3: ['step_grass_3', 1.04],
+    sting_win: ['sting_win', 0.59],   sting_lose: ['sting_lose', 0.72], sting_death: ['sting_death', 0.85],
+    sting_floor: ['sting_floor', 0.66], sting_boss: ['sting_boss', 1.05], sting_boss_phase: ['sting_boss_phase', 0.84],
 };
 
 // key: [file, volume] — music streams from an HTMLAudioElement (AudioManager), never the
