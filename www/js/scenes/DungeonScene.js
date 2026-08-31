@@ -302,6 +302,7 @@ export class DungeonScene extends Phaser.Scene {
         this._circlePool = [];
         this._textPool = [];
         this.state = 'intro';
+        this._introPanelRect = null;
         this._bossIntroDone = false;
         this._shopReopen = false;
         this._hudHidden = false;
@@ -5057,58 +5058,31 @@ export class DungeonScene extends Phaser.Scene {
     // STORY INTRO
     // =================================================================
     showStoryIntro() {
-        const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_INTRO;
 
         const elements = [];
-        const addEl = (el) => { el.setScrollFactor(0).setDepth(D); elements.push(el); return el; };
+        const addEl = (el, dep) => { el.setScrollFactor(0).setDepth(dep != null ? dep : D + 2); elements.push(el); return el; };
 
-        // Responsive sizing — scale based on screen height
-        const s = Math.min(1, H / 720);
-        const titleSize = Math.max(20, Math.round(Math.min(48, W * 0.05) * 1));
-        const subTitleSize = Math.max(14, Math.round(titleSize * 0.55));
-        const bodySize = Math.max(12, Math.round(17 * s));
-        const hintSize = Math.max(11, Math.round(14 * s));
-        const btnSize = Math.max(16, Math.round(28 * s));
-        const btnPadX = Math.max(20, Math.round(30 * s));
-        const btnPadY = Math.max(10, Math.round(12 * s));
+        addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.88).setOrigin(0), D - 6);
 
-        addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.92).setOrigin(0));
+        const cx = W / 2, cy = H / 2;
+        const PAD = 20;
+        const panelW = Math.round(Math.min(W * 0.9, 620));
+        // The hero portrait only earns its place when the panel is tall enough.
+        const showPortrait = H > 380;
+        const portraitH = 90, portraitGap = 16;
+        let heroKey = 'd_pi';
+        const skin = Progress.getCurrentSkin && Progress.getCurrentSkin();
+        if (skin && skin.spriteKey && this.textures.exists(skin.spriteKey)) heroKey = skin.spriteKey;
+        let portraitW = 0;
+        if (showPortrait && this.textures.exists(heroKey)) {
+            const src = this.textures.get(heroKey).getSourceImage();
+            portraitW = Math.round(portraitH * (src.width / Math.max(1, src.height)));
+        }
+        // The portrait's gutter is mirrored on the right so the text stays on the panel's axis.
+        const textW = panelW - PAD * 2 - (portraitW ? (portraitW + portraitGap) * 2 : 0);
 
-        // Title banner panel
-        const bannerW = Math.min(W * 0.88, 720);
-        const bannerH = Math.round(titleSize * 2.6);
-        const bannerY = Math.round(50 * s) + bannerH / 2;
-        const titleBanner = this.drawGothicPanel(W/2, bannerY, bannerW, bannerH, {
-            accent: 0xffd040, bgTop: 0x3a0a3a, bgBot: 0x18041a,
-            depth: D, themed: false
-        });
-        titleBanner.forEach(e => elements.push(e));
-
-        // Stack from top: title block — body text — hints — button (pinned to bottom area)
-        const padTop = Math.round(24 * s);
-        let y = padTop;
-
-        addEl(this.add.text(W/2, y + titleSize/2, 'МЫШОНОК ПИ', {
-            fontFamily: 'Arial Black', fontSize: titleSize + 'px',
-            color: '#f0d8ff', stroke: '#5a2080', strokeThickness: Math.max(4, Math.round(8 * s))
-        }).setOrigin(0.5));
-        y += titleSize + Math.round(2 * s);
-        addEl(this.add.text(W/2, y + subTitleSize/2, 'и Замок Теней', {
-            fontFamily: 'Arial Black', fontSize: subTitleSize + 'px',
-            color: '#d0b0f0', stroke: '#3a0050', strokeThickness: Math.max(3, Math.round(4 * s))
-        }).setOrigin(0.5));
-        y += subTitleSize + Math.round(6 * s);
-        const chapterLabelSize = Math.max(11, Math.round(15 * s));
-        addEl(this.add.text(W/2, y + chapterLabelSize/2,
-            this.isFinalFloor ? `🏰 Этаж ${this.chapter}/${TOTAL_FLOORS} — ДНО ЗАМКА`
-                              : `Этаж ${this.chapter}/${TOTAL_FLOORS}`,
-            { fontFamily: 'Arial', fontSize: chapterLabelSize + 'px', color: '#9a70b8', fontStyle: 'italic' }
-        ).setOrigin(0.5));
-        y += chapterLabelSize + Math.round(12 * s);
-
-        // Body text — make Ch1 shorter for small screens
         const isSmall = H < 500;
         const introText = this.chapter === 1
             ? (isSmall
@@ -5121,30 +5095,90 @@ export class DungeonScene extends Phaser.Scene {
                   '«Внучок, помоги! Меня забрал граф Ратула...»\n\n' +
                   'Пи надел шлем и спустился спасать бабушку.')
             : this.isFinalFloor
-            ? `Пи дошёл до самого низа замка!\n` +
-              `Где-то здесь граф Ратула держит бабушку.\n` +
-              `Найди ключ и спаси её!`
-            : `Пи спускается всё глубже.\n` +
-              `Подземелье темнее и опаснее.\n` +
-              `Найди ключ и иди по лестнице вниз ⬇`;
-
-        addEl(this.add.text(W/2, y, introText, {
-            fontFamily: 'Arial', fontSize: bodySize + 'px', color: '#f0d8ff',
-            align: 'center', lineSpacing: Math.round(3 * s),
-            wordWrap: { width: W * 0.85 }
-        }).setOrigin(0.5, 0));
-
-        // Hints just above the button
-        const btnH = btnSize + btnPadY * 2;
-        const btnY = H - Math.round(40 * s) - btnH / 2;
-        const hintY = btnY - btnH / 2 - hintSize - Math.round(6 * s);
+            ? 'Пи дошёл до самого низа замка!\n' +
+              'Где-то здесь граф Ратула держит бабушку.\n' +
+              'Найди ключ и спаси её!'
+            : 'Пи спускается всё глубже.\n' +
+              'Подземелье темнее и опаснее.\n' +
+              'Найди ключ и иди по лестнице вниз.';
         const hintLabel = IS_TOUCH
             ? 'Левый стик — ходьба   ·   Правый — прицел и огонь   ·   Кнопка — рывок'
             : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
-        addEl(this.add.text(W/2, hintY, hintLabel, {
-            fontFamily: 'Arial', fontSize: hintSize + 'px', color: '#9070b0',
-            align: 'center', wordWrap: { width: W * 0.9 }
-        }).setOrigin(0.5));
+        const floorLabel = this.isFinalFloor
+            ? `Этаж ${this.chapter}/${TOTAL_FLOORS} — ДНО ЗАМКА`
+            : `Этаж ${this.chapter}/${TOTAL_FLOORS}`;
+
+        const title = addEl(this.add.text(0, 0, 'МЫШОНОК ПИ', {
+            fontFamily: UI_F.display, fontStyle: '700', color: '#f6d77a',
+            stroke: '#1a0a2e', strokeThickness: 2, align: 'center'
+        }).setOrigin(0.5, 0));
+        const subtitle = addEl(this.add.text(0, 0, 'и Замок Теней', {
+            fontFamily: UI_F.display, fontStyle: '700', color: '#b9a6d4', align: 'center'
+        }).setOrigin(0.5, 0));
+        const pill = addEl(this.add.graphics(), D + 1);
+        const floorTxt = addEl(this.add.text(0, 0, floorLabel, {
+            fontFamily: UI_F.body, fontStyle: '700', color: '#e8b54a', align: 'center'
+        }).setOrigin(0.5, 0));
+        const body = addEl(this.add.text(0, 0, introText, {
+            fontFamily: UI_F.body, color: '#f4ecff', align: 'center'
+        }).setOrigin(0.5, 0));
+        const hint = addEl(this.add.text(0, 0, hintLabel, {
+            fontFamily: UI_F.body, color: '#b9a6d4', align: 'center'
+        }).setOrigin(0.5, 0));
+
+        // MEASURE FIRST, THEN SIZE THE PANEL — shrink `s` until the stack fits the cap.
+        const gaps = { title: 4, sub: 12, pill: 12, body: 14, hint: 14 };
+        const measure = (k) => {
+            title.setFontSize(Math.max(20, Math.round(34 * k)));
+            subtitle.setFontSize(Math.max(13, Math.round(19 * k)));
+            floorTxt.setFontSize(Math.max(11, Math.round(13 * k)));
+            body.setFontSize(Math.max(13, Math.round(17 * k)));
+            body.setLineSpacing(Math.round(3 * k));
+            body.setWordWrapWidth(textW);
+            hint.setFontSize(Math.max(11, Math.round(13 * k)));
+            hint.setWordWrapWidth(panelW - PAD * 2);
+            const g = (v) => Math.max(4, Math.round(v * k));
+            const pillH = Math.round(floorTxt.height + 10 * k);
+            const btnH = Math.max(48, Math.round(52 * k));
+            const total = title.height + g(gaps.title) + subtitle.height + g(gaps.sub)
+                + pillH + g(gaps.pill) + body.height + g(gaps.body)
+                + hint.height + g(gaps.hint) + btnH;
+            return { total, pillH, btnH, g };
+        };
+
+        const capH = Math.round(H * 0.78);
+        let s = 1, m = measure(s);
+        for (let i = 0; i < 5 && m.total + PAD * 2 > capH; i++) {
+            const room = capH - PAD * 2 - m.btnH;
+            const ratio = Math.max(0.55, room / Math.max(1, m.total - m.btnH));
+            if (ratio >= 0.995) break;
+            s *= ratio;
+            m = measure(s);
+        }
+        // Containment beats the 78 % cap: never clip the content, just allow a taller panel.
+        const panelH = Math.min(Math.round(H * 0.94), m.total + PAD * 2);
+
+        const panelEls = this.drawGothicPanel(cx, cy, panelW, panelH, { depth: D });
+        panelEls.forEach(e => { e.setScrollFactor(0); elements.push(e); });
+        this._introPanelRect = { x: cx - panelW / 2, y: cy - panelH / 2, w: panelW, h: panelH };
+
+        if (portraitW) {
+            addEl(this.add.image(cx - panelW / 2 + PAD + portraitW / 2, cy, heroKey)
+                .setDisplaySize(portraitW, portraitH), D + 2);
+        }
+
+        let y = cy - panelH / 2 + (panelH - m.total) / 2;
+        title.setPosition(cx, y);      y += title.height + m.g(gaps.title);
+        subtitle.setPosition(cx, y);   y += subtitle.height + m.g(gaps.sub);
+        const pillW = Math.round(floorTxt.width + 22 * s);
+        pill.fillStyle(UI_C.gold, 0.14);
+        pill.fillRoundedRect(cx - pillW / 2, y, pillW, m.pillH, m.pillH / 2);
+        pill.lineStyle(1, UI_C.gold, 0.5);
+        pill.strokeRoundedRect(cx - pillW / 2, y, pillW, m.pillH, m.pillH / 2);
+        floorTxt.setPosition(cx, y + (m.pillH - floorTxt.height) / 2);
+        y += m.pillH + m.g(gaps.pill);
+        body.setPosition(cx, y);       y += body.height + m.g(gaps.body);
+        hint.setPosition(cx, y);          y += hint.height + m.g(gaps.hint);
 
         const startGame = () => {
             bus.emit(UI.BUTTON_CLICK);
@@ -5152,6 +5186,7 @@ export class DungeonScene extends Phaser.Scene {
                 targets: elements, alpha: 0, duration: 300,
                 onComplete: () => {
                     elements.forEach(e => e.destroy());
+                    this._introPanelRect = null;
                     this.state = 'play';
                     bus.emit(SFX.FLOOR_ENTER);
                     this._setHudVisible(true);
@@ -5160,13 +5195,10 @@ export class DungeonScene extends Phaser.Scene {
                 }
             });
         };
-        // Gothic Start button
-        const btnW = Math.min(W * 0.5, 320);
-        const gBtnH = btnH + 14;
-        const startBtnEls = this.drawGothicButton(W/2, btnY, btnW, gBtnH, 'НАЧАТЬ', {
-            color: 0x7a30a0, colorTop: 0xb060e0, hover: 0x9a40c0, hoverTop: 0xd080f0,
-            accent: 0xffd040, fontSize: btnSize, depth: D + 5,
-            onClick: startGame
+        const btnW = Math.round(Math.min(panelW - PAD * 2, Math.max(200, 260 * s)));
+        const startBtnEls = this.drawGothicButton(cx, y + m.btnH / 2, btnW, m.btnH, 'НАЧАТЬ', {
+            variant: 'primary', fontSize: Math.max(15, Math.round(19 * s)),
+            depth: D + 5, onClick: startGame
         });
         startBtnEls.forEach(e => elements.push(e));
         this.input.keyboard.once('keydown-ENTER', startGame);
