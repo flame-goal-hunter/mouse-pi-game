@@ -241,9 +241,9 @@ export class DungeonScene extends Phaser.Scene {
         this.load.svg('d_skeleton', base + 'skeleton.svg', { width: 150, height: 180 });
         this.load.svg('d_ghost',    base + 'ghost.svg',    { width: 150, height: 180 });
         this.load.svg('d_mimic',    base + 'mimic.svg',    { width: 150, height: 150 });
-        for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: 64, height: 64 });
         // Level art kit — everything at css × dpr so it is crisp under the camera zoom
         const dpr = window.__GAME_DPR || 1;
+        for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: Math.round(64 * dpr), height: Math.round(64 * dpr) });
         this.tilePx = Math.round(NAV_CELL * dpr);
         this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
         for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {
@@ -292,6 +292,12 @@ export class DungeonScene extends Phaser.Scene {
         this.pickups = [];
         this.projectiles = [];
         this.powerups = [];
+        this.chests = [];
+        this.relicChests = [];
+        this.forbiddenBooks = [];
+        this.enemyBolts = [];
+        this.ambientClouds = [];
+        this.flourClouds = [];
         this.activePowerup = null;
         this.cheeseTotal = 0;
         this.cheeseGot = 0;
@@ -1165,7 +1171,7 @@ export class DungeonScene extends Phaser.Scene {
     spawnHangingPot(x, y) {
         const chain = this._worldImage(x, y - 54, 'chain', 75, 0.5, 0);
         const sprite = this._worldImage(x, y, 'pot_hanging', 75, 0.5, 0.2);
-        this.tweens.add({ targets: sprite, x: x + 4, duration: 1800,
+        this.tweens.add({ targets: sprite, x: x + 1, duration: 1800,
             yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.hangingPots.push({ sprite, chain, x, y, dropped: false });
     }
@@ -1206,7 +1212,7 @@ export class DungeonScene extends Phaser.Scene {
         pot.dropped = true;
         pot.chain.destroy();
         const startY = pot.y;
-        const groundY = pot.y + 26;
+        const groundY = pot.y + 12;
         this.tweens.add({
             targets: pot.sprite, y: groundY, duration: 350, ease: 'Quad.easeIn',
             onComplete: () => {
@@ -1352,7 +1358,7 @@ export class DungeonScene extends Phaser.Scene {
         for (const p of positions) {
             if (this.pointInWalls(p.x, p.y, 26)) continue;
             const sprite = this._worldImage(p.x, p.y, 'candelabra_unlit', 155, 0.5, 0.9);
-            const glow = this.add.circle(p.x, p.y, 30, 0xa080ff, 0.25).setDepth(154);
+            const glow = this.add.circle(p.x, p.y - 34, 30, 0xa080ff, 0.25).setDepth(154);
             this.tweens.add({ targets: glow, alpha: 0.10, scale: 1.4,
                 duration: 1100, yoyo: true, repeat: -1 });
             this.candelabras.push({ x: p.x, y: p.y, sprite, glow, lit: false });
@@ -2773,7 +2779,7 @@ export class DungeonScene extends Phaser.Scene {
 
     placeRelicChest(x, y) {
         const sprite = this._worldImage(x, y, 'relic_urn', 160, 0.5, 0.85);
-        const glow = this.add.circle(x, y, 32, 0xa080ff, 0.40).setDepth(159);
+        const glow = this.add.circle(x, y - 17, 32, 0xa080ff, 0.40).setDepth(159);
         this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.15,
             duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.tweens.add({ targets: sprite, y: y - 6,
@@ -3014,7 +3020,7 @@ export class DungeonScene extends Phaser.Scene {
                 for (const c of candidates) {
                     if (this.pointInWalls(c.x, c.y, 24)) continue;
                     const sprite = this._worldImage(c.x, c.y, 'book_forbidden', 155, 0.5, 0.8);
-                    const glow = this.add.circle(c.x, c.y, 24, 0xff60ff, 0.30).setDepth(154);
+                    const glow = this.add.circle(c.x, c.y - 12, 24, 0xff60ff, 0.30).setDepth(154);
                     this.tweens.add({ targets: glow, alpha: 0.10, scale: 1.6,
                         duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
                     this.tweens.add({ targets: sprite, y: c.y - 6,
@@ -3254,7 +3260,7 @@ export class DungeonScene extends Phaser.Scene {
 
     spawnChest(x, y) {
         const sprite = this._worldImage(x, y, 'chest_closed', 150, 0.5, 0.85);
-        const glow = this.add.circle(x, y, 28, 0xffd040, 0.25).setDepth(149);
+        const glow = this.add.circle(x, y - 15, 28, 0xffd040, 0.25).setDepth(149);
         this.tweens.add({ targets: glow, alpha: 0.08, scale: 1.4,
             duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         this.tweens.add({ targets: sprite, y: y - 4,
@@ -3513,7 +3519,7 @@ export class DungeonScene extends Phaser.Scene {
         let mimicDecoy = null;
         if (kind === 'mimic') {
             sprite.setVisible(false);
-            mimicDecoy = this._worldImage(x, y, 'chest_closed', 189, 0.5, 0.85);
+            mimicDecoy = this._worldImage(x, y, 'chest_closed', 189);
             this.tweens.add({ targets: mimicDecoy, y: y - 4,
                 duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
         }
@@ -4609,7 +4615,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     spawnCaptive(x, y) {
-        const fam = { name: 'Бабушка', nameLow: 'бабушку', emoji: '👵',
+        const fam = { name: 'Бабушка', nameLow: 'бабушку',
                       plea: 'Помоги, внучок!', tint: 0xffffff, freed: 'Внучок!' };
         const cage = this._worldImage(x, y + 54, 'cage', 124, 0.5, 0.9);
 
@@ -4876,7 +4882,7 @@ export class DungeonScene extends Phaser.Scene {
             if (!p.dead && this.biome?.id === 'throne' && this.candelabras) {
                 for (const c of this.candelabras) {
                     if (c.lit) continue;
-                    if (Math.hypot(p.x - c.x, p.y - c.y) < 30) {
+                    if (Math.hypot(p.x - c.x, p.y - (c.y - 30)) < 34) {
                         this._lightCandelabra(c);
                         p.dead = true;
                         break;
