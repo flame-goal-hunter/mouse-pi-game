@@ -235,6 +235,100 @@ button:focus-visible,
     position: absolute;
     inset: 0;
     pointer-events: none;
+    z-index: 1;
+    --cast-scale: 1;
+    --cast-shadow: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+}
+
+/* Every cast member is placed in % of the stage box, so the diorama scales with it. */
+.cast,
+.cast-cage {
+    position: absolute;
+    height: calc(var(--ch) * var(--cast-scale));
+}
+
+.cast {
+    width: auto;
+    display: block;
+    pointer-events: none;
+    transform-origin: 50% 100%;
+    filter: var(--cast-shadow);
+}
+
+/* Depth bands — further back means dimmer and flatter. Never animated. */
+.cast-back  { opacity: 0.5;  filter: brightness(0.55) var(--cast-shadow); }
+.cast-mid   { opacity: 0.75; filter: brightness(0.75) var(--cast-shadow); }
+.cast-front { opacity: 1; }
+
+/* --- Placement (landscape defaults; right-anchored on the right so nothing overflows) --- */
+.cast-cage    { --ch: 26%; left: 1%;  top: 23%; aspect-ratio: 128 / 160; }
+.cast-ghost   { --ch: 22%; right: 5%; top: 2%; }
+.cast-bat     { --ch: 16%; left: 4%;  top: 4%; }
+.cast-skeleton{ --ch: 25%; right: 2%; top: 28%; }
+.cast-zombie  { --ch: 28%; left: 6%;  top: 48%; }
+.cast-cat     { --ch: 21%; right: 2%; top: 54%; }
+.cast-mimic   { --ch: 18%; left: 1%;  top: 76%; }
+.cast-slime   { --ch: 13%; right: 6%; top: 79%; }
+
+/* The cage is the story goal — keep it a shade brighter than the rest of the back row. */
+.cast-cage    { opacity: 0.66; filter: brightness(0.72); }
+.cast-bat     { opacity: 0.68; filter: brightness(0.85) var(--cast-shadow); }
+
+/* Grandma behind the bars — the goal of the run, tucked at the back left. */
+.cast-cage .cage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    opacity: 0.85;
+    filter: var(--cast-shadow);
+}
+
+.cast-grandma {
+    left: 50%;
+    bottom: 11%;
+    height: 56%;
+    transform: translateX(-50%);
+}
+
+/* --- Ambient idle loops: transform/opacity only, slow and staggered --- */
+.cast-bat      { animation: castBatFlap 5.6s ease-in-out infinite; }
+.cast-ghost    { animation: castGhostDrift 4.5s ease-in-out infinite; animation-delay: -1.2s; }
+.cast-slime    { animation: castSquash 2.4s ease-in-out infinite; }
+.cast-cat      { animation: castBob 3.2s ease-in-out infinite; animation-delay: -0.8s; }
+.cast-zombie   { animation: castSway 5s ease-in-out infinite; }
+.cast-skeleton { animation: castSway 5s ease-in-out infinite; animation-delay: -2.5s; }
+.cast-mimic    { animation: castSquash 3.6s ease-in-out infinite; animation-delay: -1.6s; }
+
+@keyframes castBatFlap {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(-5deg); }
+    50%      { transform: translate3d(8%, -16%, 0) rotate(6deg); }
+}
+
+@keyframes castGhostDrift {
+    0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.4; }
+    50%      { transform: translate3d(-4%, -10%, 0); opacity: 0.62; }
+}
+
+@keyframes castSquash {
+    0%, 100% { transform: scale(1, 1); }
+    50%      { transform: scale(1.06, 0.92); }
+}
+
+@keyframes castBob {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50%      { transform: translate3d(0, -5%, 0); }
+}
+
+@keyframes castSway {
+    0%, 100% { transform: rotate(-1.5deg); }
+    50%      { transform: rotate(1.5deg); }
+}
+
+@keyframes heroBreathe {
+    0%, 100% { transform: scale(1, 1); }
+    50%      { transform: scale(1, 1.02); }
 }
 
 #hero-plate {
@@ -243,6 +337,33 @@ button:focus-visible,
     flex: 1 1 auto;
     min-height: 0;
     width: min(100%, 260px);
+    transform-origin: 50% 100%;
+    animation: heroBreathe 2.8s ease-in-out infinite;
+}
+
+/* Gold halo — lit only while a purchased skin is worn (JS toggles .skin-equipped). */
+#hero-plate::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    left: 50%;
+    bottom: 2%;
+    width: 78%;
+    height: 54%;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center,
+        rgba(246, 215, 122, 0.42) 0%,
+        rgba(232, 181, 74, 0.20) 46%,
+        rgba(232, 181, 74, 0) 72%);
+    transform: translateX(-50%) scale(0.7);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 240ms var(--ease), transform 240ms var(--ease);
+}
+
+#hero-plate.skin-equipped::after {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
 }
 
 #hero-sprite {
@@ -929,6 +1050,12 @@ button:focus-visible,
     #panel { padding-left: var(--space-2); }
 }
 
+/* Narrow landscape (small phones): the right column has no room next to Pi. */
+@media (orientation: landscape) and (max-width: 760px) {
+    #stage-cast { --cast-scale: 0.92; }
+    .cast-skeleton { display: none; }
+}
+
 @media (orientation: portrait) {
     :root { --moon-x: 76%; --moon-y: 14%; }
 
@@ -940,6 +1067,11 @@ button:focus-visible,
 
     #panel { justify-content: flex-end; }
     #hero-plate { width: min(100%, 220px); }
+
+    /* Short stage band: drop the two mid characters and shrink the rest ~15%. */
+    #stage-cast { --cast-scale: 0.85; }
+    .cast-mimic,
+    .cast-skeleton { display: none; }
 
     .modal-body-two-col {
         grid-template-columns: 1fr;

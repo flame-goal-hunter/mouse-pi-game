@@ -50,6 +50,7 @@ const ACHIEVEMENTS = [
 const $ = (sel) => document.querySelector(sel);
 const balanceEl = $('#balance-value');
 const heroSpriteEl = $('#hero-sprite');
+const heroPlateEl = $('#hero-plate');
 const heroNameEl = $('#hero-name');
 const storyHintEl = $('#story-hint');
 const endlessHintEl = $('#endless-hint');
@@ -74,6 +75,7 @@ function renderHero() {
     heroSpriteEl.setAttribute('src', skinSrc(skin.id));
     heroSpriteEl.setAttribute('alt', skin.name || 'Мышонок Пи');
     heroNameEl.textContent = skin.name || 'Мышонок Пи';
+    if (heroPlateEl) heroPlateEl.classList.toggle('skin-equipped', !!skin.id && skin.id !== 'blue');
     // Fallback if SVG fails (e.g., file missing) — swap to pi.svg
     heroSpriteEl.onerror = () => {
         heroSpriteEl.onerror = null;
