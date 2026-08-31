@@ -17,6 +17,45 @@ function skinSrc(skinId) {
     return `${SKIN_BASE}${fileBase}.svg`;
 }
 
+// ----- Shop icon kit — no emoji anywhere in the shop -----
+const CHEESE_ICON = 'assets/characters/transylvania/cheese.svg';
+// PERMANENT_UPGRADES ids (ProgressStore.js) mapped to icons from the kit.
+const UPGRADE_ICONS = {
+    hp1:     'assets/ui/heart.svg',
+    speed1:  'assets/ui/bolt.svg',
+    dash1:   'assets/ui/dash.svg',
+    dmg1:    'assets/ui/flame.svg',
+    powerup: 'assets/ui/shield.svg'
+};
+const UPGRADE_ICON_DEFAULT = 'assets/ui/target.svg';
+
+function iconImg(src, cls) {
+    const img = document.createElement('img');
+    img.className = cls;
+    img.src = src;
+    img.alt = '';
+    img.setAttribute('aria-hidden', 'true');
+    return img;
+}
+
+function checkMark(cls) {
+    const el = document.createElement('span');
+    el.className = cls;
+    el.setAttribute('aria-hidden', 'true');
+    return el;
+}
+
+function pricePill(amount, cls) {
+    const pill = document.createElement('span');
+    pill.className = cls;
+    pill.appendChild(iconImg(CHEESE_ICON, 'price-cheese'));
+    const n = document.createElement('span');
+    n.className = 'price-value';
+    n.textContent = String(amount);
+    pill.appendChild(n);
+    return pill;
+}
+
 // ----- Bestiary (matches Phaser scene's enemyList) -----
 const ENEMY_LIST = [
     { kind: 'zombie',     name: 'Зомби',          emoji: '🧟' },
@@ -63,6 +102,8 @@ const bestiaryListEl = $('#bestiary-list');
 const statsBlockEl = $('#stats-block');
 const achievementsListEl = $('#achievements-list');
 const toastEl = $('#toast');
+const balancePillEl = $('#balance-pill');
+const shopBalancePillEl = $('#shop-modal .modal-balance');
 
 // ----- Render: header / hero / mode hints -----
 function renderHeader() {
@@ -110,6 +151,14 @@ function flashNoCheese() {
     void toastEl.offsetWidth;
     toastEl.classList.add('show');
     setTimeout(() => toastEl.classList.remove('show'), 1150);
+
+    [shopBalancePillEl, balancePillEl].forEach(pill => {
+        if (!pill) return;
+        pill.classList.remove('shake');
+        void pill.offsetWidth;
+        pill.classList.add('shake');
+        setTimeout(() => pill.classList.remove('shake'), 480);
+    });
 }
 
 // ----- Navigation -----
@@ -149,33 +198,49 @@ function renderSkinGrid() {
     skinGridEl.innerHTML = '';
     const skins = Progress.getAllSkins();
     const current = Progress.getCurrentSkin();
+    const cheese = Progress.getCheese();
     skins.forEach(skin => {
         const unlocked = Progress.isSkinUnlocked(skin.id);
         const equipped = unlocked && current.id === skin.id;
+        const affordable = unlocked || cheese >= skin.price;
 
         const card = document.createElement('button');
         card.type = 'button';
-        card.className = 'skin-card' + (equipped ? ' equipped' : (unlocked ? ' unlocked' : ' locked'));
+        card.className = 'skin-card ' + (equipped ? 'equipped' : (unlocked ? 'unlocked' : 'locked'))
+            + (affordable ? '' : ' unaffordable');
         card.setAttribute('data-skin-id', skin.id);
+        if (!affordable) card.setAttribute('aria-disabled', 'true');
+        card.setAttribute('aria-label', equipped
+            ? `${skin.name} — надет`
+            : (unlocked ? `${skin.name} — надеть` : `${skin.name} — ${skin.price} сыра`));
 
-        const name = document.createElement('div');
+        const name = document.createElement('span');
         name.className = 'skin-name';
         name.textContent = skin.name;
         card.appendChild(name);
 
         const img = document.createElement('img');
         img.className = 'skin-preview';
-        img.alt = skin.name;
+        img.alt = '';
+        img.setAttribute('aria-hidden', 'true');
         img.src = skinSrc(skin.id);
         img.onerror = () => { img.onerror = null; img.src = PI_BASE; };
         card.appendChild(img);
 
-        const badge = document.createElement('div');
-        badge.className = 'skin-badge';
-        if (equipped) badge.textContent = '✓ НАДЕТ';
-        else if (unlocked) badge.textContent = 'НАДЕТЬ';
-        else badge.textContent = `🧀 ${skin.price}`;
-        card.appendChild(badge);
+        if (equipped) {
+            const badge = document.createElement('span');
+            badge.className = 'skin-badge badge-owned';
+            badge.appendChild(checkMark('badge-check'));
+            badge.appendChild(document.createTextNode('НАДЕТ'));
+            card.appendChild(badge);
+        } else if (unlocked) {
+            const badge = document.createElement('span');
+            badge.className = 'skin-badge badge-wear';
+            badge.textContent = 'НАДЕТЬ';
+            card.appendChild(badge);
+        } else {
+            card.appendChild(pricePill(skin.price, 'skin-badge badge-price'));
+        }
 
         card.addEventListener('click', () => onSkinClick(skin));
         skinGridEl.appendChild(card);
@@ -197,26 +262,30 @@ function onSkinClick(skin) {
 
 function renderUpgradeList() {
     upgradeListEl.innerHTML = '';
+    const cheese = Progress.getCheese();
     PERMANENT_UPGRADES.forEach(upg => {
         const lvl = Progress.getUpgradeLevel(upg.id);
         const maxed = lvl >= upg.maxLevel;
+        const affordable = cheese >= upg.price;
 
         const card = document.createElement('button');
         card.type = 'button';
-        card.className = 'upgrade-card' + (maxed ? ' maxed' : '');
+        card.className = 'upgrade-card' + (maxed ? ' maxed' : (affordable ? '' : ' unaffordable'));
         card.setAttribute('data-upgrade-id', upg.id);
+        if (maxed || !affordable) card.setAttribute('aria-disabled', 'true');
 
-        const icon = document.createElement('span');
-        icon.className = 'upgrade-icon';
-        icon.textContent = upg.emoji;
-        card.appendChild(icon);
+        card.appendChild(iconImg(UPGRADE_ICONS[upg.id] || UPGRADE_ICON_DEFAULT, 'upgrade-icon'));
 
         const info = document.createElement('span');
         info.className = 'upgrade-info';
 
         const title = document.createElement('span');
         title.className = 'upgrade-title';
-        title.textContent = `${upg.name}  (${lvl}/${upg.maxLevel})`;
+        title.appendChild(document.createTextNode(upg.name));
+        const lvlTag = document.createElement('span');
+        lvlTag.className = 'upgrade-level';
+        lvlTag.textContent = `(${lvl}/${upg.maxLevel})`;
+        title.appendChild(lvlTag);
         info.appendChild(title);
 
         const desc = document.createElement('span');
@@ -226,14 +295,17 @@ function renderUpgradeList() {
 
         card.appendChild(info);
 
-        const price = document.createElement('span');
-        price.className = 'upgrade-price';
-        price.textContent = maxed ? 'МАКС' : `🧀 ${upg.price}`;
-        card.appendChild(price);
-
-        if (!maxed) {
+        if (maxed) {
+            const done = document.createElement('span');
+            done.className = 'upgrade-price is-maxed';
+            done.appendChild(checkMark('badge-check'));
+            done.appendChild(document.createTextNode('МАКС'));
+            card.appendChild(done);
+        } else {
+            card.appendChild(pricePill(upg.price, 'upgrade-price'));
             card.addEventListener('click', () => onUpgradeClick(upg));
         }
+
         upgradeListEl.appendChild(card);
     });
 }

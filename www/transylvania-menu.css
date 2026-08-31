@@ -211,6 +211,17 @@ button:focus-visible,
     font-variant-numeric: tabular-nums;
 }
 
+@keyframes pillShake {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    14%      { transform: translate3d(-5px, 0, 0); }
+    30%      { transform: translate3d(5px, 0, 0); }
+    46%      { transform: translate3d(-4px, 0, 0); }
+    62%      { transform: translate3d(4px, 0, 0); }
+    80%      { transform: translate3d(-2px, 0, 0); }
+}
+
+.pill.shake { animation: pillShake 440ms var(--ease); }
+
 .pill .cheese-icon {
     width: 20px;
     height: 17px;
@@ -760,19 +771,31 @@ button:focus-visible,
     flex: 1 1 auto;
     min-height: 0;
     padding: 14px 18px var(--space-4);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;              /* the page never scrolls — the columns do */
 }
 
 .modal-body-two-col {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: minmax(0, 1fr);
     gap: 20px;
 }
 
+/* Each column is its own scroller, so a long skin grid never pushes the panel. */
 .modal-col {
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.modal-col::-webkit-scrollbar { width: 4px; }
+.modal-col::-webkit-scrollbar-thumb {
+    background: rgba(232, 181, 74, 0.35);
+    border-radius: var(--radius-pill);
 }
 
 .col-header {
@@ -820,28 +843,38 @@ button:focus-visible,
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    min-height: 140px;
+    gap: 6px;
+    min-height: 136px;              /* ≥96px tap target with room for the preview */
     padding: var(--space-2) 6px var(--space-2);
     border-radius: var(--space-3);
-    background: #3a2a15;
-    border: 2px solid rgba(232, 181, 74, 0.5);
+    background: rgba(58, 42, 21, 0.55);
+    border: 2px solid rgba(232, 181, 74, 0.34);
     overflow: hidden;
-    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+                box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease);
     cursor: pointer;
 }
 
+/* Worn skin — gold ring, the one highlight in the grid. */
 .skin-card.equipped {
-    background: #1a4030;
-    border-color: var(--ok);
+    background: rgba(58, 42, 21, 0.85);
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px rgba(232, 181, 74, 0.45), 0 0 16px rgba(232, 181, 74, 0.28);
 }
 
 .skin-card.locked {
-    background: #2a1414;
-    border-color: rgba(160, 40, 60, 0.55);
+    background: rgba(42, 20, 20, 0.6);
+    border-color: rgba(160, 40, 60, 0.45);
+}
+
+/* Not enough cheese — dimmed but still tappable, so the tap explains itself. */
+.skin-card.unaffordable,
+.upgrade-card.unaffordable {
+    opacity: 0.5;
 }
 
 .skin-card:active {
-    transform: scale(0.97);
+    transform: scale(0.96);
 }
 
 .skin-card .skin-name {
@@ -865,21 +898,59 @@ button:focus-visible,
 }
 
 .skin-card .skin-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 24px;
     font-size: 12px;
     font-weight: 800;
     padding: var(--space-1) var(--space-2);
-    border-radius: 6px;
+    border-radius: var(--radius-pill);
     background: rgba(0, 0, 0, 0.35);
-    color: var(--gold);
-    text-align: center;
-}
-
-.skin-card.equipped .skin-badge {
-    color: var(--ok);
-}
-
-.skin-card.unlocked:not(.equipped) .skin-badge {
     color: var(--text);
+    text-align: center;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.skin-badge.badge-owned {
+    color: var(--ok);
+    background: rgba(92, 214, 122, 0.14);
+}
+
+/* Gold price pill — the affordable state; .unaffordable dims the whole card. */
+.badge-price,
+.upgrade-price {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--gold-bright);
+    background: rgba(232, 181, 74, 0.16);
+    border: 1px solid rgba(232, 181, 74, 0.45);
+    font-variant-numeric: tabular-nums;
+}
+
+.price-cheese {
+    width: 15px;
+    height: 13px;
+    display: block;
+    flex: 0 0 auto;
+}
+
+.price-value {
+    font-variant-numeric: tabular-nums;
+}
+
+/* check.svg is a currentColor stroke, black inside an <img> — mask it instead. */
+.badge-check {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    background-color: currentColor;
+    -webkit-mask: url('assets/ui-menu/check.svg') center / contain no-repeat;
+    mask: url('assets/ui-menu/check.svg') center / contain no-repeat;
 }
 
 /* ===== Upgrade list ===== */
@@ -892,29 +963,33 @@ button:focus-visible,
 .upgrade-card {
     display: flex;
     align-items: center;
+    text-align: left;
     gap: var(--space-3);
-    min-height: 70px;
+    min-height: 72px;               /* ≥48px tap target */
     padding: 10px var(--space-3);
     border-radius: var(--space-3);
-    background: #3a2a15;
-    border: 2px solid rgba(232, 181, 74, 0.5);
-    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    background: rgba(58, 42, 21, 0.55);
+    border: 2px solid rgba(232, 181, 74, 0.34);
+    transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+                opacity var(--dur) var(--ease);
     cursor: pointer;
 }
 
 .upgrade-card.maxed {
-    background: #1a4030;
-    border-color: var(--ok);
+    background: rgba(26, 64, 48, 0.55);
+    border-color: rgba(92, 214, 122, 0.55);
     cursor: default;
 }
 
 .upgrade-card:not(.maxed):active {
-    transform: scale(0.985);
+    transform: scale(0.97);
 }
 
 .upgrade-card .upgrade-icon {
-    font-size: 26px;
-    line-height: 1;
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    display: block;
     flex: 0 0 auto;
 }
 
@@ -929,7 +1004,18 @@ button:focus-visible,
 .upgrade-card .upgrade-title {
     font-size: 14px;
     font-weight: 800;
+    line-height: 1.2;
     color: var(--text);
+}
+
+/* Inline so a wrapping name keeps the level right after it, not in a second column. */
+.upgrade-card .upgrade-level {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .upgrade-card .upgrade-desc {
@@ -939,15 +1025,19 @@ button:focus-visible,
 }
 
 .upgrade-card .upgrade-price {
-    font-size: 12px;
+    min-height: 30px;
+    padding: 0 10px;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
     font-weight: 800;
-    color: var(--gold);
     flex: 0 0 auto;
-    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.upgrade-card.maxed .upgrade-price {
+.upgrade-price.is-maxed {
     color: var(--ok);
+    background: rgba(92, 214, 122, 0.14);
+    border-color: rgba(92, 214, 122, 0.45);
 }
 
 /* ===== Bestiary, stats, achievements ===== */
@@ -1123,6 +1213,7 @@ button:focus-visible,
 
     .modal-body-two-col {
         grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
         gap: var(--space-4);
     }
 }
