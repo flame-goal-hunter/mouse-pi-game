@@ -141,6 +141,12 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
 
+        .title-mouse {
+            height: 1.15em;
+            vertical-align: -0.18em;
+            margin-right: 6px;
+        }
+
         .overlay p {
             color: #fff;
             font-size: min(4vw, 17px);
@@ -270,6 +276,14 @@
         .mode-btn .mode-icon {
             font-size: min(6vw, 28px);
             line-height: 1;
+        }
+
+        .mode-icon-img {
+            width: min(9vw, 34px);
+            height: min(9vw, 34px);
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 4px;
         }
 
         .mode-btn.selected {
@@ -473,22 +487,22 @@
 
     <div class="overlay visible" id="startScreen">
         <div class="overlay-content">
-            <h2>🐭 Мышонок Пи</h2>
+            <h2><img src="assets/characters/transylvania/pi.svg" alt="" aria-hidden="true" class="title-mouse"> Мышонок Пи</h2>
             <div class="mode-selector">
                 <button class="mode-btn selected" data-mode="adventure">
-                    <span class="mode-icon">🚀</span>
+                    <img class="mode-icon-img" src="assets/ui-menu/rocket.svg" alt="" aria-hidden="true">
                     <span>Приключение</span>
                 </button>
                 <button class="mode-btn" data-mode="newyear">
-                    <span class="mode-icon">🎄</span>
+                    <img class="mode-icon-img" src="assets/ui-menu/tree.svg" alt="" aria-hidden="true">
                     <span>Новый год</span>
                 </button>
                 <button class="mode-btn" data-mode="snowball">
-                    <span class="mode-icon">❄️</span>
+                    <img class="mode-icon-img" src="assets/ui-menu/snowflake.svg" alt="" aria-hidden="true">
                     <span>Снежки</span>
                 </button>
                 <button class="mode-btn" data-mode="transylvania">
-                    <span class="mode-icon">🦇</span>
+                    <img class="mode-icon-img" src="assets/characters/transylvania/bat.svg" alt="" aria-hidden="true">
                     <span>Замок Теней</span>
                 </button>
             </div>
