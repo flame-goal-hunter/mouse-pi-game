@@ -4,6 +4,7 @@
 // ============================================
 
 import { Progress, SKINS, PERMANENT_UPGRADES } from './js/storage/ProgressStore.js';
+import { playMenuSound } from './js/audio/menuAudio.js';
 
 // ----- Asset path helpers -----
 // Skin IDs use underscores ('yellow_antler'), filenames use hyphens ('yellow-antler.svg').
@@ -149,6 +150,7 @@ function renderAll() {
 
 // ----- Toast (insufficient cheese) -----
 function flashNoCheese() {
+    playMenuSound('deny');
     toastEl.textContent = 'Не хватает сыра!';
     toastEl.classList.remove('show');
     // Force reflow so animation re-triggers
@@ -182,6 +184,7 @@ function goBack() {
 
 // ----- Shop -----
 function openShop() {
+    playMenuSound('open');
     renderShop();
     shopModal.style.display = 'flex';
     shopModal.setAttribute('aria-hidden', 'false');
@@ -257,6 +260,7 @@ function onSkinClick(skin) {
         const ok = Progress.spendCheese(skin.price);
         if (!ok) { flashNoCheese(); return; }
         Progress.unlockSkin(skin.id);
+        playMenuSound('buy');
     }
     Progress.setSkin(skin.id);
     renderShop();
@@ -317,12 +321,14 @@ function renderUpgradeList() {
 function onUpgradeClick(upg) {
     const ok = Progress.buyUpgrade(upg.id);
     if (!ok) { flashNoCheese(); return; }
+    playMenuSound('buy');
     renderShop();
     renderHeader();
 }
 
 // ----- Codex -----
 function openCodex() {
+    playMenuSound('open');
     renderCodex();
     codexModal.style.display = 'flex';
     codexModal.setAttribute('aria-hidden', 'false');
@@ -428,12 +434,17 @@ function renderAchievements() {
 }
 
 // ----- Wire events -----
+function handleBack() {
+    playMenuSound('back');
+    goBack();
+}
+
 function wireEvents() {
-    $('#btn-back').addEventListener('click', goBack);
-    $('#card-story').addEventListener('click', () => startRun('story'));
-    $('#card-endless').addEventListener('click', () => startRun('endless'));
-    $('#btn-shop').addEventListener('click', openShop);
-    $('#btn-codex').addEventListener('click', openCodex);
+    $('#btn-back').addEventListener('click', handleBack);
+    $('#card-story').addEventListener('click', () => { playMenuSound('click'); startRun('story'); });
+    $('#card-endless').addEventListener('click', () => { playMenuSound('click'); startRun('endless'); });
+    $('#btn-shop').addEventListener('click', () => { playMenuSound('click'); openShop(); });
+    $('#btn-codex').addEventListener('click', () => { playMenuSound('click'); openCodex(); });
 
     // Close handlers (backdrop + close buttons share data-close attr)
     document.querySelectorAll('[data-close]').forEach(el => {
@@ -462,11 +473,11 @@ function wireEvents() {
     // Parent-frame back contract — if embedded in an iframe via index.html
     // (the Phaser scene used postMessage; we keep parity).
     if (window.parent && window.parent !== window) {
-        const origBack = goBack;
         const wrappedBack = () => {
-            try { window.parent.postMessage('closePhaserSnowball', '*'); } catch (e) { origBack(); }
+            playMenuSound('back');
+            try { window.parent.postMessage('closePhaserSnowball', '*'); } catch (e) { goBack(); }
         };
-        $('#btn-back').removeEventListener('click', goBack);
+        $('#btn-back').removeEventListener('click', handleBack);
         $('#btn-back').addEventListener('click', wrappedBack);
     }
 }
