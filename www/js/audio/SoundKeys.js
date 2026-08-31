@@ -38,6 +38,10 @@ export const SFX = {
     // Floor events
     FLOOR_ENTER:     'audio:floorEnter',
 
+    // Movement / world
+    FOOTSTEP:        'audio:footstep',
+    DOOR_OPEN:       'audio:doorOpen',
+
     // Ambience
     AMBIENCE_START:  'audio:ambienceStart',
     AMBIENCE_STOP:   'audio:ambienceStop'
