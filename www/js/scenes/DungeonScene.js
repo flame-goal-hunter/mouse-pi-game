@@ -3,7 +3,7 @@
 // Mousie Pi vs Count Ratula's dungeon: find key, fight monsters, escape
 // ============================================
 
-import { Progress, SKINS } from '../storage/ProgressStore.js';
+import { Progress, SKINS, PERMANENT_UPGRADES } from '../storage/ProgressStore.js';
 import { biomeForFloor, weightedPick, pickDecor } from './Biomes.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
