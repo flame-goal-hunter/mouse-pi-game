@@ -3,6 +3,29 @@
    Palette: deep violets, midnight, gold #e8b54a, crimson #ff4a5c, green #52d27a
    ========================================================================== */
 
+:root {
+    /* Warm gothic — dark only. Semantic tokens; never use raw hex below this block. */
+    --bg-deep: #100620;   --bg: #1a0c2e;      --surface: #241338;   --surface-2: #2e1a46;
+    --gold: #e8b54a;      --gold-bright: #f6d77a;
+    --text: #f4ecff;      --text-muted: #b9a6d4;
+    --danger: #ff4a5c;    --ok: #5cd67a;
+    --border: rgba(244, 236, 255, 0.12);
+    --scrim: rgba(8, 3, 16, 0.72);
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+    --space-5: 24px; --space-6: 32px; --space-7: 48px;
+    --radius-sm: 8px; --radius: 14px; --radius-lg: 20px; --radius-pill: 999px;
+    --tap: 48px;                                   /* minimum touch target */
+    --font-display: 'Comfortaa', 'Nunito', system-ui, sans-serif;
+    --font-body: 'Nunito', system-ui, sans-serif;
+    --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+    --dur: 180ms;
+    --elev-1: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --elev-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
 * {
     box-sizing: border-box;
     -webkit-tap-highlight-color: transparent;
@@ -16,7 +39,7 @@ html, body {
     overflow: hidden;
     background: #0a0510;
     color: #f1e9ff;
-    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-family: var(--font-body);
     user-select: none;
     -webkit-user-select: none;
     touch-action: manipulation;
@@ -97,7 +120,7 @@ button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 16px 12px;
+    padding: 14px var(--space-4) var(--space-3);
     border-bottom: 1px solid rgba(232, 181, 74, 0.18);
 }
 
@@ -107,8 +130,8 @@ button {
     justify-content: center;
     gap: 6px;
     min-height: 48px;
-    padding: 0 16px;
-    border-radius: 12px;
+    padding: 0 var(--space-4);
+    border-radius: var(--space-3);
     font-weight: 700;
     font-size: 14px;
     transition: transform 0.08s ease, background 0.12s ease, opacity 0.12s ease;
@@ -133,10 +156,10 @@ button {
 .pill {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: 40px;
     padding: 0 14px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: rgba(20, 10, 35, 0.92);
     border: 1px solid rgba(232, 181, 74, 0.6);
     font-weight: 800;
@@ -152,15 +175,16 @@ button {
 /* ===== Title ===== */
 #title-block {
     text-align: center;
-    padding: 14px 16px 6px;
+    padding: 14px var(--space-4) 6px;
 }
 
 #title {
     margin: 0;
-    font-weight: 900;
+    font-family: var(--font-display);
+    font-weight: 700;
     font-size: 32px;
     letter-spacing: 1.5px;
-    color: #e8b54a;
+    color: var(--gold);
     -webkit-text-stroke: 1px #000;
     text-shadow: 0 2px 0 #000;
 }
@@ -183,7 +207,7 @@ button {
 .divider .diamond {
     width: 6px;
     height: 6px;
-    background: #e8b54a;
+    background: var(--gold);
     border-radius: 50%;
 }
 
@@ -202,7 +226,7 @@ button {
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
-    padding: 6px 16px 12px;
+    padding: 6px var(--space-4) var(--space-3);
     min-height: 140px;
 }
 
@@ -246,19 +270,19 @@ button {
 #mode-cards {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 4px 16px 12px;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-4) var(--space-3);
 }
 
 .mode-card {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     width: 100%;
     min-height: 78px;
-    padding: 14px 16px 14px 24px;
-    border-radius: 16px;
+    padding: 14px var(--space-4) 14px var(--space-5);
+    border-radius: var(--space-4);
     border: 2px solid transparent;
     text-align: left;
     transition: transform 0.08s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -283,7 +307,7 @@ button {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     min-width: 0;
 }
 
@@ -316,7 +340,7 @@ button {
 }
 
 .mode-card-story .card-stripe {
-    background: #e8b54a;
+    background: var(--gold);
 }
 
 .mode-card-story .card-title {
@@ -329,7 +353,7 @@ button {
 }
 
 .mode-card-endless .card-stripe {
-    background: #ff4a5c;
+    background: var(--danger);
 }
 
 .mode-card-endless .card-title {
@@ -339,8 +363,8 @@ button {
 /* ===== Footer ===== */
 #footer {
     display: flex;
-    gap: 12px;
-    padding: 4px 16px 16px;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-4) var(--space-4);
 }
 
 .footer-btn {
@@ -348,7 +372,7 @@ button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: 54px;
     border-radius: 14px;
     background: rgba(40, 22, 60, 0.92);
@@ -418,8 +442,8 @@ button {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 18px 14px;
+    gap: var(--space-3);
+    padding: var(--space-4) 18px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -430,14 +454,15 @@ button {
 
 .modal-title {
     margin: 0;
+    font-family: var(--font-display);
     font-size: 26px;
-    font-weight: 900;
+    font-weight: 700;
     letter-spacing: 1.2px;
     -webkit-text-stroke: 1px #000;
     text-shadow: 0 2px 0 #000;
 }
 
-.shop-title { color: #e8b54a; }
+.shop-title { color: var(--gold); }
 .codex-title { color: #52d27a; }
 
 .modal-subtitle {
@@ -454,8 +479,8 @@ button {
 
 .btn-close {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: var(--space-3);
+    right: var(--space-3);
     width: 40px;
     height: 40px;
     border-radius: 10px;
@@ -474,7 +499,7 @@ button {
 
 .modal-body {
     flex: 1 1 auto;
-    padding: 14px 18px 16px;
+    padding: 14px 18px var(--space-4);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -534,8 +559,8 @@ button {
     align-items: center;
     justify-content: space-between;
     min-height: 140px;
-    padding: 8px 6px 8px;
-    border-radius: 12px;
+    padding: var(--space-2) 6px var(--space-2);
+    border-radius: var(--space-3);
     background: #3a2a15;
     border: 2px solid rgba(232, 181, 74, 0.5);
     overflow: hidden;
@@ -580,10 +605,10 @@ button {
 .skin-card .skin-badge {
     font-size: 12px;
     font-weight: 800;
-    padding: 4px 8px;
+    padding: var(--space-1) var(--space-2);
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.35);
-    color: #e8b54a;
+    color: var(--gold);
     text-align: center;
 }
 
@@ -599,16 +624,16 @@ button {
 .upgrade-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-2);
 }
 
 .upgrade-card {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     min-height: 70px;
-    padding: 10px 12px;
-    border-radius: 12px;
+    padding: 10px var(--space-3);
+    border-radius: var(--space-3);
     background: #3a2a15;
     border: 2px solid rgba(232, 181, 74, 0.5);
     transition: transform 0.08s ease, border-color 0.12s ease;
@@ -654,7 +679,7 @@ button {
 .upgrade-card .upgrade-price {
     font-size: 12px;
     font-weight: 800;
-    color: #e8b54a;
+    color: var(--gold);
     flex: 0 0 auto;
 }
 
@@ -667,14 +692,14 @@ button {
 .achievements-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
 }
 
 .bestiary-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
     font-size: 13px;
 }
 
@@ -733,14 +758,14 @@ button {
 .skin-progress {
     font-size: 14px;
     font-weight: 800;
-    color: #e8b54a;
+    color: var(--gold);
     margin: 6px 0;
 }
 
 .achievement-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     padding: 3px 0;
     font-size: 12.5px;
 }
@@ -768,9 +793,9 @@ button {
     transform: translate(-50%, -50%) scale(1);
     z-index: 200;
     padding: 14px 22px;
-    border-radius: 12px;
+    border-radius: var(--space-3);
     background: rgba(40, 8, 12, 0.95);
-    color: #ff4a5c;
+    color: var(--danger);
     font-weight: 900;
     font-size: 20px;
     -webkit-text-stroke: 1px #000;
@@ -810,7 +835,7 @@ button {
 @media (max-width: 600px) {
     .modal-body-two-col {
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: var(--space-4);
     }
     .modal-panel {
         width: 96vw;
