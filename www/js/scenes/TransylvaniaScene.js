@@ -1166,7 +1166,7 @@ export class TransylvaniaScene extends Phaser.Scene {
             color: hex(C.danger), stroke: hex(C.bgVoid), strokeThickness: 5,
             fontStyle: '700',
         }).setOrigin(0.5).setDepth(3000);
-        try { window.audio?.emit?.('ui.shop.deny'); } catch (e) {}
+        try { bus.emit(UI.SHOP_DENY); } catch (e) {}
         this.tweens.add({
             targets: t, y: y - 60, alpha: 0, scale: 1.15,
             duration: 1100, ease: EASE.out, onComplete: () => t.destroy()

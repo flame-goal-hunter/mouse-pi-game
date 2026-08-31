@@ -285,6 +285,8 @@ export class DungeonScene extends Phaser.Scene {
         this._circlePool = [];
         this._textPool = [];
         this.state = 'intro';
+        this._bossIntroDone = false;
+        this._shopReopen = false;
         this._hudHidden = false;
         this._touchWanted = false;
         this.score = 0;
@@ -2562,10 +2564,12 @@ export class DungeonScene extends Phaser.Scene {
                         p.y += p.vy * dt * 0.3;
                         p.sprite.setPosition(p.x, p.y);
                         this.poofAt(p.x, p.y, 0xffa040);
+                        bus.emit(SFX.HIT_WALL);
                         break;
                     }
                     p.dead = true;
                     this.poofAt(p.x, p.y, 0xf5b048);
+                    bus.emit(SFX.HIT_WALL);
                     // GOLD PIE relic — every 10th pie explodes on impact (AoE)
                     if (p._goldPie) this._goldPieExplosion(p.x, p.y);
                     break;
@@ -2769,6 +2773,7 @@ export class DungeonScene extends Phaser.Scene {
     // === BOSS PHASES ===
     bossPhase2(e) {
         e.phase2 = true;
+        bus.emit(SFX.BOSS_PHASE);
         // Brief invulnerability + spawn helpers
         e.invulnUntil = this.time.now + 2200;
         e.sprite.setTint(0xc080ff);
@@ -2796,6 +2801,7 @@ export class DungeonScene extends Phaser.Scene {
 
     bossPhase3(e) {
         e.phase3 = true;
+        bus.emit(SFX.BOSS_PHASE);
         // Rage — faster + damage boost (mutate def)
         e.def = { ...e.def, speed: e.def.speed * 1.7, damage: e.def.damage + 1 };
         e.invulnUntil = this.time.now + 1500;
@@ -2841,6 +2847,7 @@ export class DungeonScene extends Phaser.Scene {
     breakWeakWall(wall) {
         if (wall.broken) return;
         wall.broken = true;
+        bus.emit(SFX.HIT_WALL);
         if (wall.crackTiles) { this.tweens.killTweensOf(wall.crackTiles); wall.crackTiles = null; }
         // Swap the wall's cells for floor plates; neighbours get the skirting/cant they now border
         const b = this.biome;
@@ -3225,6 +3232,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         this.runCheeseTotal = (this.runCheeseTotal || 0) + cheeseGain;
         this.score += scoreGain;
+        this.time.delayedCall(190, () => bus.emit(SFX.CHEST_COINS));
         this.showFloatingText(c.x, c.y - 40, msg, msgColor, 26);
         this.poofAt(c.x, c.y, 0xffd040);
         this.tweens.add({ targets: c.sprite,
@@ -3516,6 +3524,11 @@ export class DungeonScene extends Phaser.Scene {
             // Freeze far-away enemies (no AI, no path, no animation) — huge CPU saving
             if (e.x < viewLeft || e.x > viewRight || e.y < viewTop || e.y > viewBottom) {
                 continue;
+            }
+            if (e.kind === 'boss' && !this._bossIntroDone
+                && Math.hypot(e.x - this.player.x, e.y - this.player.y) < 520) {
+                this._bossIntroDone = true;
+                bus.emit(SFX.BOSS_INTRO);
             }
             this.updateEnemy(e, dt);
             const tx = e.lastSeen ? e.lastSeen.x : this.player.x;
@@ -4682,6 +4695,7 @@ export class DungeonScene extends Phaser.Scene {
     unlockExit() {
         if (!this.exit || this.exit.unlocked) return;
         this.exit.unlocked = true;
+        bus.emit(SFX.DOOR_OPEN);
         this.exit.graphics.setTexture('door_open');
         this.exit.lockIcon.setTexture('unlock');
         this.tweens.add({
@@ -5116,11 +5130,13 @@ export class DungeonScene extends Phaser.Scene {
         }).setOrigin(0.5));
 
         const startGame = () => {
+            bus.emit(UI.BUTTON_CLICK);
             this.tweens.add({
                 targets: elements, alpha: 0, duration: 300,
                 onComplete: () => {
                     elements.forEach(e => e.destroy());
                     this.state = 'play';
+                    bus.emit(SFX.FLOOR_ENTER);
                     this._setHudVisible(true);
                     if (this.joy) this.setTouchUIVisible(!!(this._touchWanted || this._touchUsed));
                     this._pinFixed();
@@ -5244,7 +5260,7 @@ export class DungeonScene extends Phaser.Scene {
         this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
             .setInteractive(new Phaser.Geom.Circle(32, 32, 44), Phaser.Geom.Circle.Contains)
-            .on('pointerdown', () => this.exitToMenu());
+            .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.exitToMenu(); });
         this.repositionHUD();
     }
 
@@ -5907,6 +5923,7 @@ export class DungeonScene extends Phaser.Scene {
         const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
         if (choices.length === 0) return;
+        bus.emit(UI.MENU_OPEN);
         const els = [];
         const addEl = (e, dep) => { e.setScrollFactor(0).setDepth(dep || D); els.push(e); return e; };
         addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.86).setOrigin(0).setInteractive());
@@ -5988,6 +6005,7 @@ export class DungeonScene extends Phaser.Scene {
             this._cachedUpgradeChoices = pool.slice(0, 3);
         }
         const choices = this._cachedUpgradeChoices;
+        bus.emit(UI.MENU_OPEN);
 
         if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
         if (this.aimIndicator) this.aimIndicator.setVisible(false);
@@ -6067,6 +6085,7 @@ export class DungeonScene extends Phaser.Scene {
         choices.forEach((upg, i) => {
             const cx = startX + i * (cardW + cardGap) + cardW/2;
             const onPick = () => {
+                bus.emit(UI.BUTTON_CLICK);
                 const nextUpgrades = [...this.upgradeIds, upg.id];
                 this._cachedUpgradeChoices = null;
                 this.scene.start('DungeonScene', {
@@ -6107,6 +6126,9 @@ export class DungeonScene extends Phaser.Scene {
 
     // === IN-RUN SHOP — opens over the upgrade picker between floors ===
     openInRunShop() {
+        const reopen = this._shopReopen;   // a purchase refreshes the panel — no second ui_open
+        this._shopReopen = false;
+        if (!reopen) bus.emit(UI.MENU_OPEN);
         if (this._pickerElements) this._pickerElements.forEach(e => e.setVisible(false));
         const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
@@ -6234,9 +6256,13 @@ export class DungeonScene extends Phaser.Scene {
                         return;
                     }
                     Progress.unlockSkin(skin.id);
+                    bus.emit(UI.SHOP_BUY);
+                } else {
+                    bus.emit(UI.BUTTON_CLICK);
                 }
                 Progress.setSkin(skin.id);
                 this.applySkinToPlayer(Progress.getCurrentSkin());
+                this._shopReopen = true;
                 this.closeInRunShop();
                 this.openInRunShop();
             });
@@ -6277,6 +6303,8 @@ export class DungeonScene extends Phaser.Scene {
             card.on('pointerdown', () => {
                 if (maxed) return;
                 if (Progress.buyUpgrade(upg.id)) {
+                    bus.emit(UI.SHOP_BUY);
+                    this._shopReopen = true;
                     this.closeInRunShop();
                     this.openInRunShop();
                 } else {
@@ -6288,6 +6316,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     closeInRunShop() {
+        if (this._shopElements && !this._shopReopen) bus.emit(UI.MENU_CLOSE);
         if (this._shopElements) {
             this._shopElements.forEach(e => e.destroy());
             this._shopElements = null;
@@ -6296,6 +6325,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     flashNoCheese(x, y) {
+        bus.emit(UI.SHOP_DENY);
         const t = this.add.text(x, y, 'Не хватает сыра!', {
             fontFamily: 'Arial Black', fontSize: '24px',
             color: '#ff4040', stroke: '#1a0a0a', strokeThickness: 4
@@ -6319,6 +6349,7 @@ export class DungeonScene extends Phaser.Scene {
             return;
         }
         this.state = 'lost';
+        bus.emit(SFX.PLAYER_DEATH);
         // Endless: full bank of run cheese (it's a separate "deposit on death" model since no boss caps the run)
         // Story: half-cheese rescue
         const banked = (this.runMode === 'endless')
@@ -6331,7 +6362,8 @@ export class DungeonScene extends Phaser.Scene {
         } else {
             Progress.recordStoryLoss(totalScore);
         }
-        bus.emit(SFX.LOSE_STORY);
+        // Spaced 800 ms after PLAYER_DEATH so the death hit and the overlay sting never stack
+        this.time.delayedCall(800, () => bus.emit(SFX.LOSE_STORY));
         const subtitle = (this.runMode === 'endless')
             ? `Пи дошёл до этажа ${this.chapter} и упал!\n\n` +
               `🧀 Получено сыра: +${banked}\n` +
@@ -6579,7 +6611,8 @@ export class DungeonScene extends Phaser.Scene {
         }).setOrigin(0.5, 0));
 
         const btnLabel = btnText || '🔄 Заново';
-        const action = btnAction || (() => this.scene.restart());
+        const rawAction = btnAction || (() => this.scene.restart());
+        const action = () => { bus.emit(UI.BUTTON_CLICK); rawAction(); };
         const btnH = Math.max(42, Math.round(56 * s));
         const btnW = panelW * 0.65;
         const btnGap = Math.round(14 * s);
@@ -6594,7 +6627,7 @@ export class DungeonScene extends Phaser.Scene {
             els1.forEach(e => e.setScrollFactor(0));
             const els2 = this.drawGothicButton(W/2, secondBtnY, btnW, btnH, btnText2, {
                 color: 0xc89530, colorTop: 0xf5b048, hover: 0xf5b048, hoverTop: 0xffd070,
-                onClick: btnAction2, depth: D + 10
+                onClick: () => { bus.emit(UI.BUTTON_CLICK); btnAction2(); }, depth: D + 10
             });
             els2.forEach(e => e.setScrollFactor(0));
         } else {

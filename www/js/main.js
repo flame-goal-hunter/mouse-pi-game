@@ -124,7 +124,12 @@ function _unlockAllAudio() {
     const ctx = game.sound.context;
     if (ctx && ctx.state === 'suspended') {
         game.sound.mute = true;
-        ctx.resume().then(() => setTimeout(() => { game.sound.mute = false; }, 150));
+        // Restore the stored preference, not `false` — unlocking must not un-mute a muted game.
+        ctx.resume().then(() => setTimeout(() => {
+            let muted = false;
+            try { muted = !!Progress.getAudioPrefs().muted; } catch (e) {}
+            game.sound.mute = muted;
+        }, 150));
     }
     // CRITICAL: resume the ProceduralSfx context too — it's a separate AudioContext
     try { window.audio?.proc?.resume(); } catch (e) {}

@@ -21,6 +21,7 @@ export const SFX = {
     COLLECT_POWERUP: 'audio:collectPowerup',
     KEY_GRAB:        'audio:keyGrab',
     OPEN_CHEST:      'audio:openChest',
+    CHEST_COINS:     'audio:chestCoins',
     LIGHT_TORCH:     'audio:lightTorch',
 
     // Stealth
@@ -53,6 +54,7 @@ export const UI = {
     SHOP_BUY:        'audio:ui:buy',
     SHOP_DENY:       'audio:ui:deny',
     MENU_OPEN:       'audio:ui:menuOpen',
+    MENU_CLOSE:      'audio:ui:menuClose',
     HEARTBEAT_TICK:  'audio:ui:heartbeat'
 };
 

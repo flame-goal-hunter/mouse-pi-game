@@ -42,6 +42,7 @@ export const EVENT_MAP = {
     [UI.SHOP_BUY]:       { keys: ['ui_buy'],    guard: 120, cat: 'ui' },
     [UI.SHOP_DENY]:      { keys: ['ui_deny'],   guard: 200, cat: 'ui' },
     [UI.MENU_OPEN]:      { keys: ['ui_open'],   guard: 120, cat: 'ui' },
+    [UI.MENU_CLOSE]:     { keys: ['ui_close'],  guard: 120, cat: 'ui' },
     [UI.HEARTBEAT_TICK]: { keys: ['hit_wall_a'], rate: 0.55, jitter: 0.03, guard: 300, cat: 'ui' },
 
     [SFX.FIRE_PIE]:      { keys: ['throw_a', 'throw_b'], rate: 1.25, jitter: 0.12, guard: 45 },
@@ -59,6 +60,7 @@ export const EVENT_MAP = {
     [SFX.COLLECT_POWERUP]: { keys: ['powerup'], guard: 150 },
     [SFX.KEY_GRAB]:        { keys: ['key'], rate: 1.1, guard: 200 },
     [SFX.OPEN_CHEST]:      { keys: ['chest'], rate: 1.05, jitter: 0.05, guard: 200 },
+    [SFX.CHEST_COINS]:     { keys: ['coins'], rate: 1.0, jitter: 0.04, guard: 250 },   // fired ~190 ms after the chest creak
     [SFX.LIGHT_TORCH]:     { keys: ['torch'], rate: 0.7, jitter: 0.1, guard: 120 },
     [SFX.DOOR_OPEN]:       { keys: ['door'], rate: 0.95, guard: 300 },
 
