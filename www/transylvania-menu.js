@@ -57,32 +57,36 @@ function pricePill(amount, cls) {
 }
 
 // ----- Bestiary (matches Phaser scene's enemyList) -----
+// sprite = the art DungeonScene.spawnEnemy() actually draws for this kind (biome
+// variants reuse a base sprite with a tint — see DungeonScene.js:3414-3429):
+// guard/librarian/boss -> zombie, chef -> cat, snapdragon -> slime.
+const CHAR_BASE = 'assets/characters/transylvania/';
 const ENEMY_LIST = [
-    { kind: 'zombie',     name: 'Зомби',          emoji: '🧟' },
-    { kind: 'cat',        name: 'Кот',            emoji: '🐈' },
-    { kind: 'slime',      name: 'Слизень',        emoji: '🫐' },
-    { kind: 'bat',        name: 'Летучая мышь',   emoji: '🦇' },
-    { kind: 'skeleton',   name: 'Скелет',         emoji: '💀' },
-    { kind: 'ghost',      name: 'Призрак',        emoji: '👻' },
-    { kind: 'mimic',      name: 'Мимик',          emoji: '🎁' },
-    { kind: 'guard',      name: 'Страж',          emoji: '🛡️' },
-    { kind: 'librarian',  name: 'Библиотекарь',   emoji: '📚' },
-    { kind: 'chef',       name: 'Шеф-повар',      emoji: '🍳' },
-    { kind: 'snapdragon', name: 'Львиный зев',    emoji: '🌸' },
-    { kind: 'boss',       name: 'Босс',           emoji: '👹' }
+    { kind: 'zombie',     name: 'Зомби',          sprite: CHAR_BASE + 'zombie.svg' },
+    { kind: 'cat',        name: 'Кот',            sprite: CHAR_BASE + 'cat.svg' },
+    { kind: 'slime',      name: 'Слизень',        sprite: CHAR_BASE + 'slime.svg' },
+    { kind: 'bat',        name: 'Летучая мышь',   sprite: CHAR_BASE + 'bat.svg' },
+    { kind: 'skeleton',   name: 'Скелет',         sprite: CHAR_BASE + 'skeleton.svg' },
+    { kind: 'ghost',      name: 'Призрак',        sprite: CHAR_BASE + 'ghost.svg' },
+    { kind: 'mimic',      name: 'Мимик',          sprite: CHAR_BASE + 'mimic.svg' },
+    { kind: 'guard',      name: 'Страж',          sprite: CHAR_BASE + 'zombie.svg' },
+    { kind: 'librarian',  name: 'Библиотекарь',   sprite: CHAR_BASE + 'zombie.svg' },
+    { kind: 'chef',       name: 'Шеф-повар',      sprite: CHAR_BASE + 'cat.svg' },
+    { kind: 'snapdragon', name: 'Львиный зев',    sprite: CHAR_BASE + 'slime.svg' },
+    { kind: 'boss',       name: 'Босс',           sprite: CHAR_BASE + 'zombie.svg' }
 ];
 
 // ----- Achievements list (matches scene) -----
 const ACHIEVEMENTS = [
-    { id: 'first_win',     emoji: '🌟', name: 'Первая победа' },
-    { id: 'five_wins',     emoji: '🏆', name: 'Пять побед' },
-    { id: 'speed_win',     emoji: '⚡',       name: 'Быстрая победа' },
-    { id: 'boss_defeated', emoji: '👑', name: 'Босс повержен' },
-    { id: 'boss_no_hit',   emoji: '🛡️', name: 'Босс без урона' },
-    { id: 'combo_25',      emoji: '🔥', name: 'Комбо x25' },
-    { id: 'endless_10',    emoji: '🔽', name: 'Этаж 10' },
-    { id: 'endless_20',    emoji: '💥', name: 'Этаж 20' },
-    { id: 'endless_30',    emoji: '💀', name: 'Этаж 30' }
+    { id: 'first_win',     name: 'Первая победа' },
+    { id: 'five_wins',     name: 'Пять побед' },
+    { id: 'speed_win',     name: 'Быстрая победа' },
+    { id: 'boss_defeated', name: 'Босс повержен' },
+    { id: 'boss_no_hit',   name: 'Босс без урона' },
+    { id: 'combo_25',      name: 'Комбо x25' },
+    { id: 'endless_10',    name: 'Этаж 10' },
+    { id: 'endless_20',    name: 'Этаж 20' },
+    { id: 'endless_30',    name: 'Этаж 30' }
 ];
 
 // ----- DOM refs -----
@@ -344,18 +348,22 @@ function renderBestiary() {
         const discovered = kills > 0;
         const row = document.createElement('div');
         row.className = 'bestiary-row ' + (discovered ? 'discovered' : 'unknown');
-        const em = document.createElement('span');
-        em.className = 'row-emoji';
-        em.textContent = discovered ? e.emoji : '❓';
-        row.appendChild(em);
+        row.setAttribute('aria-label', `${e.name} — ${discovered ? `убито ${kills}` : 'не встречен'}`);
+
+        const img = iconImg(e.sprite, 'row-sprite');
+        img.onerror = () => { img.onerror = null; img.src = PI_BASE; };
+        row.appendChild(img);
+
         const nm = document.createElement('span');
         nm.className = 'row-name';
-        nm.textContent = discovered ? e.name : '???';
+        nm.textContent = e.name;
         row.appendChild(nm);
+
         const cnt = document.createElement('span');
         cnt.className = 'row-count';
         cnt.textContent = discovered ? `×${kills}` : 'не встречен';
         row.appendChild(cnt);
+
         bestiaryListEl.appendChild(row);
     });
 }
@@ -369,37 +377,30 @@ function renderStats() {
     try { eStat = Progress.getEndlessStats() || eStat; } catch (e) {}
     try { ghostRuns = Progress.getGhostRuns() || 0; } catch (e) {}
     const cheeseAllTime = (Progress.state && Progress.state.cheeseEarnedAllTime) || 0;
+    const skinsUnlocked = ((Progress.state && Progress.state.skinsUnlocked) || ['blue']).length;
+    const skinsTotal = Progress.getAllSkins().length;
 
     const rows = [
-        { emoji: '📖', label: 'Сюжетных побед',  value: sStat.wins || 0 },
-        { emoji: '📏', label: 'Глубочайший этаж', value: eStat.bestFloor || 0 },
-        { emoji: '🥷', label: 'Тихих забегов',   value: ghostRuns },
-        { emoji: '🧀', label: 'Сыра всего',       value: cheeseAllTime }
+        { icon: 'assets/ui-menu/trophy.svg', label: 'Сюжетных побед',   value: sStat.wins || 0 },
+        { icon: 'assets/ui/stairs.svg',      label: 'Глубочайший этаж', value: eStat.bestFloor || 0 },
+        { icon: 'assets/ui/paw.svg',         label: 'Тихих забегов',    value: ghostRuns },
+        { icon: CHEESE_ICON,                 label: 'Сыра всего',       value: cheeseAllTime },
+        { icon: PI_BASE,                     label: 'Скинов открыто',   value: `${skinsUnlocked}/${skinsTotal}` }
     ];
     rows.forEach(r => {
         const row = document.createElement('div');
         row.className = 'stat-row';
-        const em = document.createElement('span');
-        em.textContent = r.emoji;
+        row.appendChild(iconImg(r.icon, 'stat-icon'));
         const lbl = document.createElement('span');
         lbl.className = 'stat-label';
         lbl.textContent = r.label;
         const val = document.createElement('span');
         val.className = 'stat-value';
         val.textContent = String(r.value);
-        row.appendChild(em);
         row.appendChild(lbl);
         row.appendChild(val);
         statsBlockEl.appendChild(row);
     });
-
-    // Skin progress
-    const skinsUnlocked = ((Progress.state && Progress.state.skinsUnlocked) || ['blue']).length;
-    const skinsTotal = Progress.getAllSkins().length;
-    const sp = document.createElement('div');
-    sp.className = 'skin-progress';
-    sp.textContent = `🐭  Скинов открыто: ${skinsUnlocked}/${skinsTotal}`;
-    statsBlockEl.appendChild(sp);
 }
 
 function renderAchievements() {
@@ -409,13 +410,19 @@ function renderAchievements() {
         try { unlocked = !!(Progress.hasAchievement && Progress.hasAchievement(a.id)); } catch (e) {}
         const row = document.createElement('div');
         row.className = 'achievement-row ' + (unlocked ? 'unlocked' : 'locked');
-        const em = document.createElement('span');
-        em.className = 'row-emoji';
-        em.textContent = unlocked ? a.emoji : '🔒';
-        row.appendChild(em);
+        row.setAttribute('aria-label', `${a.name} — ${unlocked ? 'получено' : 'не получено'}`);
+
+        if (unlocked) {
+            row.appendChild(checkMark('badge-check achievement-icon'));
+        } else {
+            row.appendChild(iconImg('assets/world/lock.svg', 'achievement-icon achievement-lock'));
+        }
+
         const nm = document.createElement('span');
-        nm.textContent = unlocked ? a.name : '???';
+        nm.className = 'achievement-name';
+        nm.textContent = a.name;
         row.appendChild(nm);
+
         achievementsListEl.appendChild(row);
     });
 }

@@ -1052,6 +1052,7 @@ button:focus-visible,
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    min-height: 48px;
     padding: var(--space-1) 0;
     font-size: 13px;
 }
@@ -1065,10 +1066,17 @@ button:focus-visible,
     color: #6b5b85;
 }
 
-.bestiary-row .row-emoji {
-    flex: 0 0 24px;
-    text-align: center;
-    font-size: 16px;
+.bestiary-row .row-sprite {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    display: block;
+}
+
+/* Unseen enemy — same art, rendered as a black silhouette (never "???"). */
+.bestiary-row.unknown .row-sprite {
+    filter: brightness(0) opacity(0.5);
 }
 
 .bestiary-row .row-name {
@@ -1093,10 +1101,19 @@ button:focus-visible,
 .stat-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-2);
+    min-height: 24px;
     font-size: 13px;
     color: var(--text);
     font-weight: 500;
+}
+
+.stat-row .stat-icon {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    display: block;
 }
 
 .stat-row .stat-label {
@@ -1108,19 +1125,14 @@ button:focus-visible,
     font-weight: 800;
     color: var(--text);
     font-variant-numeric: tabular-nums;
-}
-
-.skin-progress {
-    font-size: 14px;
-    font-weight: 800;
-    color: var(--gold);
-    margin: 6px 0;
+    text-align: right;
 }
 
 .achievement-row {
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    min-height: 44px;
     padding: 3px 0;
     font-size: 12.5px;
 }
@@ -1135,9 +1147,15 @@ button:focus-visible,
     font-weight: 400;
 }
 
-.achievement-row .row-emoji {
-    flex: 0 0 22px;
-    text-align: center;
+.achievement-row .achievement-icon {
+    flex: 0 0 18px;
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.achievement-row .achievement-lock {
+    opacity: 0.5;
 }
 
 /* ===== Toast ===== */
