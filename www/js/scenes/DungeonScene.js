@@ -5908,7 +5908,7 @@ export class DungeonScene extends Phaser.Scene {
                 '▶ ИГРАТЬ ЗАНОВО',
                 () => this.scene.start('DungeonScene', { runMode: 'story', chapter: 1 }),
                 '🏪 В ЛАВКУ',
-                () => this.scene.start('TransylvaniaScene', { openShop: true })
+                () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); }
             );
         } else {
             // INTERMEDIATE FLOOR — show upgrade picker, then descend
@@ -6380,7 +6380,7 @@ export class DungeonScene extends Phaser.Scene {
             '🔄 ЗАНОВО',
             () => this.scene.start('DungeonScene', { runMode: this.runMode, chapter: 1 }),
             '🏪 В ЛАВКУ',
-            () => this.scene.start('TransylvaniaScene', { openShop: true })
+            () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); }
         );
     }
 

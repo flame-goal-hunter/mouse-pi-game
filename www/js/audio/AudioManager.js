@@ -79,6 +79,12 @@ const FALLBACK = {
     // SFX.FOOTSTEP has no synth voice on purpose — a beep 2-3× a second is worse than silence.
 };
 
+// Stings that own their moment — the music steps back under them (spec 3.F).
+const DUCK_EVENTS = new Set([
+    SFX.WIN_STORY, SFX.LOSE_STORY, SFX.PLAYER_DEATH,
+    SFX.BOSS_INTRO, SFX.BOSS_PHASE, SFX.FLOOR_ENTER,
+]);
+
 export class AudioManager {
     constructor(game) {
         this.game = game;
@@ -93,6 +99,10 @@ export class AudioManager {
         this._unlocked = false;
         this._last = {};               // event → last play time (retrigger guard)
         this._biome = 'dungeon';
+        this._duckGain = 1;            // music multiplier owned by duckMusic()
+        this._duckTimer = null;
+        this._duckUntil = 0;
+        this._duckFactor = 1;
         this._cheeseCombo = 0;
         this._cheeseAt = 0;
 
@@ -198,6 +208,7 @@ export class AudioManager {
         if (!keys || !keys.length) return;
         const key = keys[(Math.random() * keys.length) | 0];
         const entry = SFX_FILES[key];
+        if (DUCK_EVENTS.has(event)) this._duckForSample(key);
         if (!entry || !this.game?.cache?.audio?.exists(key)) { this._fallback(event); return; }
         const rate = (opts.rate ?? cfg.rate ?? 1) * (1 + (Math.random() * 2 - 1) * (cfg.jitter || 0));
         const vol = entry[1] * (opts.vol ?? 1) * this._catVolume(cfg.cat || 'sfx');
@@ -267,12 +278,67 @@ export class AudioManager {
         this.bgm.stop();
     }
 
+    // === Ducking — the music steps back under a sting and comes straight back ===
+    // Volume is (track x channel x master) x _duckGain, so a cross-fade in flight still
+    // lands on the ducked level and applyPrefs() keeps working untouched.
+    _duckForSample(key) {
+        let ms = 1200;
+        try {
+            const snd = this.game?.cache?.audio?.get(key);
+            const d = snd && (snd.duration || snd.totalDuration);
+            if (typeof d === 'number' && d > 0) ms = d * 1000;
+        } catch (e) {}
+        this.duckMusic(ms + 250);
+    }
+
+    _applyDuckVolume() {
+        const el = this._bgmEl;
+        if (!el || el._fadeTimer) return;   // a running ramp reads _musicVolume itself
+        try { el.volume = this._musicVolume(this._bgmKey); } catch (e) {}
+    }
+
+    // Always reachable: a scene restart cannot strand the music at the ducked level because
+    // the timer lives on the manager, and playBgm/resumeAll call this if it ever went missing.
+    _clearDuck() {
+        if (this._duckTimer) { clearInterval(this._duckTimer); this._duckTimer = null; }
+        this._duckUntil = 0;
+        this._duckFactor = 1;
+        this._duckGain = 1;
+        this._applyDuckVolume();
+    }
+
+    // Ramp down over ~120 ms, hold, ramp back over ~400 ms. Called again while ducked:
+    // keep the deeper factor and push the release out to the later of the two.
+    duckMusic(ms, factor = 0.35) {
+        const DOWN = 120, UP = 400;
+        const total = Math.max(DOWN + UP, ms || 0);
+        const f = Math.max(0, Math.min(1, factor));
+        const now = performance.now();
+        this._duckUntil = Math.max(this._duckUntil || 0, now + total);
+        this._duckFactor = Math.min(this._duckFactor == null ? 1 : this._duckFactor, f);
+        if (this._duckTimer) return;
+        const t0 = now;
+        this._duckTimer = setInterval(() => {
+            const t = performance.now();
+            const target = this._duckFactor;
+            const release = this._duckUntil - UP;
+            let g;
+            if (t - t0 < DOWN)   g = 1 + (target - 1) * ((t - t0) / DOWN);
+            else if (t < release) g = target;
+            else                  g = target + (1 - target) * Math.min(1, (t - release) / UP);
+            this._duckGain = Math.max(0, Math.min(1, g));
+            this._applyDuckVolume();
+            if (t >= this._duckUntil) this._clearDuck();
+        }, 33);
+    }
+
     // === Music (streamed <audio>, looping) ===
     // Volume = per-track match x music channel x master, silenced by the mute pref.
     _musicVolume(key) {
         const p = this.prefs || DEFAULT_PREFS;
         const track = (BGM_FILES[key] && BGM_FILES[key][1]) || 1;
-        return Math.max(0, Math.min(1, track * p.music * p.master * (p.muted ? 0 : 1)));
+        const duck = (typeof this._duckGain === 'number') ? this._duckGain : 1;
+        return Math.max(0, Math.min(1, track * p.music * p.master * duck * (p.muted ? 0 : 1)));
     }
 
     // One element per track, built on demand and kept forever — a scene restart reuses it,
@@ -346,6 +412,8 @@ export class AudioManager {
 
     // Accepts a track key ('cavern'), a biome id ('garden') or an event name ('bgm:garden').
     playBgm(name) {
+        // A duck whose timer died (page frozen, tab thrown away) must never survive a track change
+        if (!this._duckTimer && this._duckGain !== 1) this._clearDuck();
         const id = String(name || '').replace(/^bgm:/, '');
         const key = BGM_FILES[name] ? name
             : (BIOME_BGM[id] || (id === 'menu' ? 'hall' : null));
@@ -397,6 +465,7 @@ export class AudioManager {
         if (this.game?.sound) this.game.sound.pauseAll?.();
     }
     resumeAll() {
+        if (!this._duckTimer && this._duckGain !== 1) this._clearDuck();
         try { if (this._bgmEl && this._bgmWasPlaying) this._startEl(this._bgmEl, this._bgmKey); } catch (e) {}
         try { this.bgm?.resume(); } catch (e) {}
         if (this.game?.sound) this.game.sound.resumeAll?.();

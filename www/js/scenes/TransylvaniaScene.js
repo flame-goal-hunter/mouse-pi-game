@@ -5,7 +5,7 @@
 
 import { Progress, SKINS, PERMANENT_UPGRADES } from '../storage/ProgressStore.js';
 import { bus } from '../audio/EventBus.js';
-import { UI } from '../audio/SoundKeys.js';
+import { UI, BGM } from '../audio/SoundKeys.js';
 import {
     C, CS, S, R, STROKE, FONT, TXT, EASE, DUR, STAGGER, SHADOW,
     hex, drawPanel, makeButton, staggerIn,
@@ -84,6 +84,8 @@ export class TransylvaniaScene extends Phaser.Scene {
         // If menu FPS jumps with this build, we know BGM was the culprit.
         // try { window.audio?.playBgmPreset?.('menu'); } catch (e) {}
         console.log('[Menu] BGM intentionally disabled in this build for diagnostics');
+        // The hub owns the menu loop whichever way it was entered (boot, exit, win, lose overlay).
+        try { bus.emit(BGM.MENU); } catch (e) {}
         this.events.once('shutdown', () => {
             this.scale.off('resize', onResize);
             if (this._resizeTimer) clearTimeout(this._resizeTimer);
