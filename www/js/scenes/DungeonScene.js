@@ -88,6 +88,12 @@ const WORLD_SVGS = {
     stairs: ['stairs', 72, 80],
 };
 // Relic/upgrade icons: texture key → www/assets/relics/<file>.svg (UI scale, loaded at 64 × dpr like the ui_* kit)
+// UI-resolution twins of two world sprites (d_cheese/d_pie are loaded at their small world size).
+const UI_ICON_ALIAS = { d_cheese: 'ui_cheese', d_pie: 'ui_pie' };
+const uiIconKey = (k) => UI_ICON_ALIAS[k] || k;
+// ui-menu/shop.svg strokes with `currentColor`, which rasterises black in a detached <img> —
+// the same glyph, inlined with the gold stroke so it reads on the violet panel.
+const uiShopSvg = (px) => `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="#e8b54a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8 L5 3 H19 L21 8"/><path d="M3 8 h18 v3 a3 3 0 0 1-6 0 a3 3 0 0 1-6 0 a3 3 0 0 1-6 0 Z"/><path d="M5 13 v8 h14 v-8"/><path d="M10 21 v-5 h4 v5"/></svg>`;
 const RELIC_SVGS = {
     relic_magnet: 'magnet', relic_star_spread: 'star_spread', relic_bounce: 'bounce', relic_crit: 'crit',
     relic_thorns: 'thorns', relic_tornado: 'tornado', relic_crown: 'crown', relic_hourglass: 'hourglass',
@@ -184,7 +190,7 @@ const UPGRADES = [
       apply: (s) => { s.fireCdMul = (s.fireCdMul || 1) * 0.75; } },
     { id: 'piesize',   cap: 1, icon: 'd_pie', emoji: '🥧', name: 'Большие пироги',  desc: '+50% размер снаряда',
       apply: (s) => { s.pieSizeMul = (s.pieSizeMul || 1) * 1.5; } },
-    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', emoji: '🩸', name: 'Вампиризм',       desc: 'Шанс +❤️ с убитого',
+    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', emoji: '🩸', name: 'Вампиризм',       desc: 'Шанс вернуть HP с убитого',
       apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.20; } },
     { id: 'cheese',    cap: 2, icon: 'd_cheese', emoji: '🧀', name: 'Сырный нос',      desc: '+50% сыра за подбор',
       apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.5; } }
@@ -265,6 +271,12 @@ export class DungeonScene extends Phaser.Scene {
         const dpr = window.__GAME_DPR || 1;
         for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: Math.round(64 * dpr), height: Math.round(64 * dpr) });
         for (const [key, file] of Object.entries(RELIC_SVGS)) this.load.svg(key, `assets/relics/${file}.svg`, { width: Math.round(64 * dpr), height: Math.round(64 * dpr) });
+        // UI-size cheese/pie — the world keys are loaded at 48x40 / 40x40 and go soft in a 44 px card slot
+        const uiPx = Math.round(64 * dpr);
+        this.load.svg('ui_cheese', base + 'cheese.svg', { width: uiPx, height: uiPx });
+        this.load.svg('ui_pie',    base + 'pie.svg',    { width: uiPx, height: uiPx });
+        // Phaser's loader refuses data URIs, so the inlined shop glyph goes straight into the texture manager
+        if (!this.textures.exists('ui_shop')) this.textures.addBase64('ui_shop', 'data:image/svg+xml;base64,' + btoa(uiShopSvg(uiPx)));
         this.tilePx = Math.round(NAV_CELL * dpr);
         this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
         for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {
@@ -303,6 +315,9 @@ export class DungeonScene extends Phaser.Scene {
         this._textPool = [];
         this.state = 'intro';
         this._introPanelRect = null;
+        this._pickerPanelRect = null;
+        this._pickerCardRects = null;
+        this._overlayPanelRect = null;
         this._bossIntroDone = false;
         this._shopReopen = false;
         this._hudHidden = false;
@@ -5949,15 +5964,15 @@ export class DungeonScene extends Phaser.Scene {
             Progress.recordStoryWin(totalScore, durationMs);
             bus.emit(SFX.WIN_STORY);
             this.showOverlay(
-                '🎉 БАБУШКА СПАСЕНА! 🎉',
-                `Пи дошёл до дна и освободил бабушку!\n\n` +
-                `🧀 Получено сыра: +${earned}\n` +
-                `🧀 Всего сыра: ${Progress.getCheese()}`,
-                0xffd040, '👵🐭',
-                '▶ ИГРАТЬ ЗАНОВО',
+                'БАБУШКА СПАСЕНА!',
+                'Пи дошёл до дна и освободил бабушку!\n' +
+                `Всего сыра: ${Progress.getCheese()}`,
+                0xffd040, ['d_grandma', this._heroKey()],
+                'ИГРАТЬ ЗАНОВО',
                 () => this.scene.start('DungeonScene', { runMode: 'story', chapter: 1 }),
-                '🏪 В ЛАВКУ',
-                () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); }
+                'В ЛАВКУ',
+                () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); },
+                [{ icon: 'ui_stairs', value: `${this.chapter}` }, { icon: 'ui_cheese', value: `+${earned}` }]
             );
         } else {
             // INTERMEDIATE FLOOR — show upgrade picker, then descend
@@ -5966,78 +5981,105 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     showRelicPicker() {
-        // Pause input briefly
-        const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
         if (choices.length === 0) return;
         bus.emit(UI.MENU_OPEN);
         const els = [];
-        const addEl = (e, dep) => { e.setScrollFactor(0).setDepth(dep || D); els.push(e); return e; };
+        const addEl = (e, dep) => { e.setScrollFactor(0).setDepth(dep != null ? dep : D); els.push(e); return e; };
         addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.86).setOrigin(0).setInteractive());
         if (this.aimIndicator) this.aimIndicator.setVisible(false);
         if (this.aimLine) this.aimLine.setVisible(false);
-        // Panel
-        const panelW = Math.min(W * 0.92, 760);
-        const panelH = Math.min(H * 0.88, 460);
-        const panelEls = this.drawGothicPanel(W/2, H/2, panelW, panelH, {
-            accent: 0xa080ff, bgTop: 0x2a1840, bgBot: 0x10081e,
-            depth: D, theme: ['⚱', '✨', '🦇', '📿']
-        });
-        panelEls.forEach(e => { e.setScrollFactor(0); els.push(e); });
-        addEl(this.add.text(W/2, H/2 - panelH/2 + 30, '⚱ ДРЕВНЯЯ РЕЛИКВИЯ', {
-            fontFamily: 'Arial Black', fontSize: '26px',
-            color: '#ffd040', stroke: '#3a1858', strokeThickness: 6
-        }).setOrigin(0.5));
-        addEl(this.add.text(W/2, H/2 - panelH/2 + 62, 'Выбери одну на весь забег:', {
-            fontFamily: 'Arial', fontSize: '14px', color: '#c0a0e0'
-        }).setOrigin(0.5));
 
-        const cardGap = 20;
-        const cardW = (panelW - 50 - cardGap * 2) / 3;
-        const cardH = panelH - 140;
-        const cardCy = H/2 + 18;
-        const startX = W/2 - (cardW * 3 + cardGap * 2)/2;
+        const cx = W / 2, cy = H / 2;
+        const k = Math.min(1, H / 440);
+        const PAD = Math.max(14, Math.round(20 * k));
+        const panelW = Math.round(Math.min(W * 0.94, 780));
+        const gap = Math.max(10, Math.round(18 * k));
+        const cardW = Math.floor((panelW - PAD * 2 - gap * 2) / 3);
+        const cardPad = Math.max(10, Math.round(14 * k));
+        const icoSize = Math.max(30, Math.round(44 * k));
+        const titleSize = Math.max(17, Math.round(24 * k));
+        const subSize = Math.max(11, Math.round(14 * k));
+        const nameSize = Math.max(12, Math.round(16 * k));
+        const descSize = Math.max(10, Math.round(13 * k));
 
-        choices.forEach((relic, i) => {
-            const cx = startX + i * (cardW + cardGap) + cardW/2;
+        const title = this.add.text(0, 0, 'ДРЕВНЯЯ РЕЛИКВИЯ', {
+            fontFamily: UI_F.display, fontStyle: '700', fontSize: titleSize + 'px',
+            color: '#f6d77a', stroke: '#1a0a2e', strokeThickness: 2
+        }).setOrigin(0.5, 0);
+        const sub = this.add.text(0, 0, 'Выбери одну на весь забег', {
+            fontFamily: UI_F.body, fontSize: subSize + 'px', color: '#b9a6d4'
+        }).setOrigin(0.5, 0);
+
+        const wrapW = cardW - cardPad * 2;
+        const cards = choices.map((relic) => {
             const colors = RARITY_COLORS[relic.rarity] || RARITY_COLORS.common;
+            const rarityTxt = relic.rarity === 'legendary' ? 'ЛЕГЕНДАРНАЯ'
+                            : relic.rarity === 'rare' ? 'РЕДКАЯ' : 'ОБЫЧНАЯ';
+            const pill = this._statPill(null, rarityTxt, {
+                fontSize: Math.max(9, Math.round(11 * k)), depth: D + 6,
+                tint: colors.accent, fillAlpha: 0.18,
+                color: '#' + colors.accent.toString(16).padStart(6, '0')
+            });
+            const ico = this._uiIcon(0, 0, relic.icon, icoSize, D + 8);
+            const nm = this.add.text(0, 0, relic.name, {
+                fontFamily: UI_F.body, fontStyle: '700', fontSize: nameSize + 'px',
+                color: '#f4ecff', align: 'center', wordWrap: { width: wrapW }
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
+            const ds = this.add.text(0, 0, relic.desc, {
+                fontFamily: UI_F.body, fontSize: descSize + 'px', color: '#b9a6d4',
+                align: 'center', lineSpacing: 2, wordWrap: { width: wrapW }
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
             const onPick = () => {
                 this.collectedRelics = [...(this.collectedRelics || []), relic.id];
                 relic.apply(this);
                 bus.emit(SFX.COLLECT_POWERUP);
-                this.showFloatingText(this.player.x, this.player.y - 60, `${relic.emoji} ${relic.name}!`, '#ffd040', 22);
+                this.showFloatingText(this.player.x, this.player.y - 60, relic.name + '!', '#ffd040', 22);
                 if (this.aimIndicator) this.aimIndicator.setVisible(true);
                 if (this.aimLine) this.aimLine.setVisible(true);
                 els.forEach(e => e.destroy());
             };
-            const cardObj = this.drawGothicCard(cx, cardCy, cardW, cardH, {
-                bgTop: colors.fill, bgBot: 0x100818,
-                accent: colors.accent, hoverAccent: 0xffd040,
-                depth: D + 5, onClick: onPick
-            });
+            return { pill, ico, nm, ds, onPick };
+        });
+        // Rows share a height across the three cards so icons, names and descriptions line up
+        const gp = Math.round(9 * k), gn = Math.round(7 * k), gd = Math.round(5 * k);
+        const rowRar = Math.max(...cards.map(c => c.pill.h));
+        const rowName = Math.max(...cards.map(c => c.nm.height));
+        const rowDesc = Math.max(...cards.map(c => c.ds.height));
+        const blockH = rowRar + gp + icoSize + gn + rowName + gd + rowDesc;
+        const cardH = Math.max(150, Math.round(blockH + cardPad * 2));
+
+        const headBlockH = title.height + Math.round(4 * k) + sub.height;
+        const gapHead = Math.round(16 * k);
+        const panelH = Math.round(PAD * 2 + headBlockH + gapHead + cardH);
+        const top = cy - panelH / 2, left = cx - panelW / 2;
+        const panelEls = this.drawGothicPanel(cx, cy, panelW, panelH, { depth: D });
+        panelEls.forEach(e => { e.setScrollFactor(0); els.push(e); });
+        this._pickerPanelRect = { x: left, y: top, w: panelW, h: panelH };
+
+        title.setPosition(cx, top + PAD);
+        addEl(title, D + 6);
+        sub.setPosition(cx, top + PAD + title.height + Math.round(4 * k));
+        addEl(sub, D + 6);
+
+        const cardsCy = top + PAD + headBlockH + gapHead + cardH / 2;
+        const totalW = cardW * 3 + gap * 2;
+        const startX = cx - totalW / 2;
+        this._pickerCardRects = [];
+        cards.forEach((c, i) => {
+            const ccx = startX + i * (cardW + gap) + cardW / 2;
+            const cardObj = this.drawGothicCard(ccx, cardsCy, cardW, cardH, { depth: D + 4, onClick: c.onPick });
             cardObj.els.forEach(e => els.push(e));
-            // Rarity tag
-            const rarityTxt = relic.rarity === 'legendary' ? 'ЛЕГЕНДАРНАЯ'
-                            : relic.rarity === 'rare' ? 'РЕДКАЯ' : 'ОБЫЧНАЯ';
-            els.push(this.add.text(cx, cardCy - cardH * 0.36, rarityTxt, {
-                fontFamily: 'Arial Black', fontSize: '11px',
-                color: '#' + colors.accent.toString(16).padStart(6, '0'),
-                stroke: '#000', strokeThickness: 2
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8));
-            els.push(this.add.text(cx, cardCy - cardH * 0.20, relic.emoji, {
-                fontSize: '48px'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8));
-            els.push(this.add.text(cx, cardCy + cardH * 0.04, relic.name, {
-                fontFamily: 'Arial Black', fontSize: '16px',
-                color: '#ffffff', stroke: '#1a0a3a', strokeThickness: 3, align: 'center',
-                wordWrap: { width: cardW - 14 }
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8));
-            els.push(this.add.text(cx, cardCy + cardH * 0.26, relic.desc, {
-                fontFamily: 'Arial', fontSize: '12px', color: '#e0c0ff',
-                align: 'center', wordWrap: { width: cardW - 14 }
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8));
+            this._pickerCardRects.push({ x: ccx - cardW / 2, y: cardsCy - cardH / 2, w: cardW, h: cardH });
+            let y = cardsCy - blockH / 2;
+            c.pill.move(ccx, y + rowRar / 2);        y += rowRar + gp;
+            c.ico.setPosition(ccx, y + icoSize / 2); y += icoSize + gn;
+            c.nm.setPosition(ccx, y + rowName / 2);  y += rowName + gd;
+            c.ds.setPosition(ccx, y + rowDesc / 2);
+            c.pill.els.forEach(e => els.push(e));
+            els.push(c.ico, c.nm, c.ds);
         });
         this._pinFixed();
     }
@@ -6046,9 +6088,9 @@ export class DungeonScene extends Phaser.Scene {
         // Cache the choices so they survive a shop side-trip
         if (!this._cachedUpgradeChoices) {
             // Count current stacks per upgrade id; filter out capped ones
-            const stacks = {};
-            for (const id of this.upgradeIds) stacks[id] = (stacks[id] || 0) + 1;
-            const available = UPGRADES.filter(u => (stacks[u.id] || 0) < (u.cap || 1));
+            const stacked = {};
+            for (const id of this.upgradeIds) stacked[id] = (stacked[id] || 0) + 1;
+            const available = UPGRADES.filter(u => (stacked[u.id] || 0) < (u.cap || 1));
             const pool = available.length >= 3 ? available.slice() : UPGRADES.slice();
             Phaser.Utils.Array.Shuffle(pool);
             this._cachedUpgradeChoices = pool.slice(0, 3);
@@ -6062,77 +6104,67 @@ export class DungeonScene extends Phaser.Scene {
         if (this.compass) this.compass.clear();
         if (this.compassLabel) this.compassLabel.setVisible(false);
 
-        const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_OVERLAY;
         // Track every overlay element so we can hide them when shop opens
         this._pickerElements = [];
         const addEl = (el, dep) => {
-            el.setScrollFactor(0).setDepth(dep || D);
+            el.setScrollFactor(0).setDepth(dep != null ? dep : D);
             this._pickerElements.push(el);
             return el;
         };
-
-        // Responsive sizes
-        const panelW = Math.min(W * 0.95, 800);
-        const panelH = Math.min(H * 0.95, 520);
-        const s = Math.min(1, Math.min(panelW / 800, panelH / 520));
-        const titleSize = Math.max(18, Math.round(32 * s));
-        const subSize = Math.max(12, Math.round(16 * s));
-        const cardGap = Math.max(10, Math.round(26 * s));
-        const cardW = Math.min(220 * s, (panelW - 50 - cardGap * 2) / 3);
-        const cardH = panelH - Math.round(200 * s);
-        const cardIcoSize = Math.max(32, Math.round(58 * s));
-        const cardNameSize = Math.max(13, Math.round(18 * s));
-        const cardDescSize = Math.max(10, Math.round(13 * s));
-
         addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.85).setOrigin(0));
-        // Gothic panel
-        const panelEls = this.drawGothicPanel(W/2, H/2, panelW, panelH, {
-            accent: 0xa060ff, bgTop: 0x3a1858, bgBot: 0x1a0830,
-            depth: D, theme: ['📜', '🦇', '🕯️', '✨']
-        });
-        panelEls.forEach(e => { e.setScrollFactor(0); this._pickerElements.push(e); });
 
-        const top = H/2 - panelH/2;
-        let cy = top + Math.round(18 * s);
-        addEl(this.add.text(W/2, cy + titleSize/2, `✨ Этаж ${this.chapter} пройден!`, {
-            fontFamily: 'Arial Black', fontSize: titleSize + 'px', color: '#ffffff',
-            stroke: '#5a2080', strokeThickness: Math.max(3, Math.round(5 * s))
-        }).setOrigin(0.5));
-        cy += titleSize + Math.round(6 * s);
-        addEl(this.add.text(W/2, cy + subSize/2, 'Выбери улучшение перед спуском глубже:', {
-            fontFamily: 'Arial', fontSize: subSize + 'px', color: '#d0b0f0'
-        }).setOrigin(0.5));
-        cy += subSize + Math.round(4 * s);
-        addEl(this.add.text(W/2, cy + (subSize - 2)/2,
-            `❤️ ${this.player.hp}/${this.maxHp}   🧀 ${Progress.getCheese()} в банке`,
-            { fontFamily: 'Arial', fontSize: (subSize - 2) + 'px', color: '#9070b0' }
-        ).setOrigin(0.5));
-        cy += subSize + Math.round(14 * s);
+        const stacks = {};
+        for (const id of this.upgradeIds) stacks[id] = (stacks[id] || 0) + 1;
 
-        // SHOP BUTTON — top-right of panel
-        const shopBtnSize = Math.max(14, Math.round(16 * s));
-        const shopBtn = this.add.text(W/2 + panelW/2 - Math.round(14 * s), top + Math.round(14 * s),
-            '🏪 ЛАВКА', {
-                fontFamily: 'Arial Black', fontSize: shopBtnSize + 'px',
-                color: '#ffffff', backgroundColor: '#c89530',
-                padding: { x: Math.round(12 * s), y: Math.round(6 * s) },
-                stroke: '#5a3010', strokeThickness: 2
-            })
-            .setOrigin(1, 0)
-            .setScrollFactor(0).setDepth(D + 12)
-            .setInteractive({ useHandCursor: true })
-            .on('pointerover', () => shopBtn.setBackgroundColor('#f5b048'))
-            .on('pointerout',  () => shopBtn.setBackgroundColor('#c89530'))
-            .on('pointerdown', () => this.openInRunShop());
-        this._pickerElements.push(shopBtn);
+        const cx = W / 2, cy = H / 2;
+        const k = Math.min(1, H / 440);
+        const PAD = Math.max(14, Math.round(20 * k));
+        const panelW = Math.round(Math.min(W * 0.95, 820));
+        const gap = Math.max(10, Math.round(18 * k));
+        const cardW = Math.floor((panelW - PAD * 2 - gap * 2) / 3);
+        const cardPad = Math.max(10, Math.round(14 * k));
+        const icoSize = Math.max(30, Math.round(44 * k));
+        const titleSize = Math.max(17, Math.round(24 * k));
+        const subSize = Math.max(11, Math.round(14 * k));
+        const nameSize = Math.max(12, Math.round(16 * k));
+        const descSize = Math.max(10, Math.round(13 * k));
+        const statSize = Math.max(11, Math.round(14 * k));
 
-        const cardCy = cy + cardH / 2;
-        const totalW = cardW * 3 + cardGap * 2;
-        const startX = W/2 - totalW/2;
-        choices.forEach((upg, i) => {
-            const cx = startX + i * (cardW + cardGap) + cardW/2;
+        const title = this.add.text(0, 0, `Этаж ${this.chapter} пройден`, {
+            fontFamily: UI_F.display, fontStyle: '700', fontSize: titleSize + 'px',
+            color: '#f6d77a', stroke: '#1a0a2e', strokeThickness: 2
+        }).setOrigin(0.5, 0);
+        const sub = this.add.text(0, 0, 'Выбери улучшение перед спуском глубже', {
+            fontFamily: UI_F.body, fontSize: subSize + 'px', color: '#b9a6d4'
+        }).setOrigin(0.5, 0);
+
+        // Stats pills — hp and banked cheese, same body font so the digits line up
+        const hpNow = this.player ? this.player.hp : this.maxHp;
+        const pHp = this._statPill('ui_heart', `${hpNow}/${this.maxHp}`, { fontSize: statSize, depth: D + 4 });
+        const pCh = this._statPill('ui_cheese', `${Progress.getCheese()}`, { fontSize: statSize, depth: D + 4 });
+        const statsGap = Math.round(10 * k);
+        const statsW = pHp.w + statsGap + pCh.w;
+        const statsH = Math.max(pHp.h, pCh.h);
+
+        const wrapW = cardW - cardPad * 2;
+        const cards = choices.map((upg) => {
+            const ico = this._uiIcon(0, 0, upg.icon, icoSize, D + 8);
+            const nm = this.add.text(0, 0, upg.name, {
+                fontFamily: UI_F.body, fontStyle: '700', fontSize: nameSize + 'px',
+                color: '#f4ecff', align: 'center', wordWrap: { width: wrapW }
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
+            const ds = this.add.text(0, 0, upg.desc, {
+                fontFamily: UI_F.body, fontSize: descSize + 'px', color: '#b9a6d4',
+                align: 'center', lineSpacing: 2, wordWrap: { width: wrapW }
+            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
+            const owned = stacks[upg.id] || 0;
+            const cap = upg.cap || 1;
+            const pill = (cap > 1 && owned > 0)
+                ? this._statPill(null, `Ур. ${owned}/${cap}`, {
+                      fontSize: Math.max(9, Math.round(11 * k)), depth: D + 6 })
+                : null;
             const onPick = () => {
                 bus.emit(UI.BUTTON_CLICK);
                 const nextUpgrades = [...this.upgradeIds, upg.id];
@@ -6148,27 +6180,78 @@ export class DungeonScene extends Phaser.Scene {
                     collectedRelics: this.collectedRelics
                 });
             };
-            // Gothic card with gradient + drop shadow + gold inner trim
-            const cardObj = this.drawGothicCard(cx, cardCy, cardW, cardH, {
-                accent: 0xa060ff, bgTop: 0x3a1858, bgBot: 0x1a0830,
-                hoverAccent: 0xffd040, hoverBgTop: 0x4a2870, hoverBgBot: 0x2a1858,
-                depth: D + 5, onClick: onPick
-            });
+            return { ico, nm, ds, pill, onPick };
+        });
+        // Rows share a height across the three cards so icons, names and descriptions line up
+        const gn = Math.round(9 * k), gd = Math.round(5 * k), gp = Math.round(8 * k);
+        const rowName = Math.max(...cards.map(c => c.nm.height));
+        const rowDesc = Math.max(...cards.map(c => c.ds.height));
+        const rowPill = Math.max(0, ...cards.map(c => (c.pill ? c.pill.h : 0)));
+        const blockH = icoSize + gn + rowName + gd + rowDesc + (rowPill ? gp + rowPill : 0);
+        const cardH = Math.max(150, Math.round(blockH + cardPad * 2));
+
+        // ЛАВКА — secondary button pinned to the header's right edge
+        const shopFs = Math.max(12, Math.round(15 * k));
+        const shopIco = Math.round(shopFs * 1.4);
+        const shopGap = Math.round(shopFs * 0.5);
+        const shopBtnH = 48;
+        const shopProbe = this.add.text(0, 0, 'ЛАВКА', {
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: shopFs + 'px' });
+        const shopW = Math.round(shopProbe.width + shopIco + shopGap + shopFs * 2.4);
+        shopProbe.destroy();
+
+        const headBlockH = title.height + Math.round(4 * k) + sub.height;
+        const headerH = Math.max(headBlockH, shopBtnH);
+        const gapA = Math.round(12 * k), gapB = Math.round(14 * k);
+        const panelH = Math.round(PAD * 2 + headerH + gapA + statsH + gapB + cardH);
+        const top = cy - panelH / 2, left = cx - panelW / 2;
+
+        const panelEls = this.drawGothicPanel(cx, cy, panelW, panelH, { depth: D });
+        panelEls.forEach(e => { e.setScrollFactor(0); this._pickerElements.push(e); });
+        this._pickerPanelRect = { x: left, y: top, w: panelW, h: panelH };
+
+        const headTop = top + PAD + Math.round((headerH - headBlockH) / 2);
+        title.setPosition(cx, headTop);
+        addEl(title, D + 6);
+        sub.setPosition(cx, headTop + title.height + Math.round(4 * k));
+        addEl(sub, D + 6);
+
+        // 48 px in from the right edge so the button never sits on the corner ornament (inset 10 + r 16 + stub 16)
+        const shopCx = left + panelW - 48 - shopW / 2;
+        const shopCy = top + PAD + shopBtnH / 2;
+        const shopEls = this.drawGothicButton(shopCx, shopCy, shopW, shopBtnH, 'ЛАВКА', {
+            variant: 'secondary', fontSize: shopFs, depth: D + 12,
+            onClick: () => this.openInRunShop()
+        });
+        shopEls.forEach(e => { e.setScrollFactor(0); this._pickerElements.push(e); });
+        const shopTxt = shopEls.find(e => e.type === 'Text');
+        shopTxt.x += Math.round((shopIco + shopGap) / 2);
+        this._pickerElements.push(
+            this._uiIcon(shopTxt.x - shopTxt.width / 2 - shopGap - shopIco / 2, shopCy, 'ui_shop', shopIco, D + 13));
+
+        const statsCy = top + PAD + headerH + gapA + statsH / 2;
+        pHp.move(cx - statsW / 2 + pHp.w / 2, statsCy);
+        pCh.move(cx - statsW / 2 + pHp.w + statsGap + pCh.w / 2, statsCy);
+        pHp.els.concat(pCh.els).forEach(e => this._pickerElements.push(e));
+
+        const cardsCy = top + PAD + headerH + gapA + statsH + gapB + cardH / 2;
+        const totalW = cardW * 3 + gap * 2;
+        const startX = cx - totalW / 2;
+        this._pickerCardRects = [];
+        cards.forEach((c, i) => {
+            const ccx = startX + i * (cardW + gap) + cardW / 2;
+            const cardObj = this.drawGothicCard(ccx, cardsCy, cardW, cardH, { depth: D + 5, onClick: c.onPick });
             cardObj.els.forEach(e => this._pickerElements.push(e));
-            const ico = this.add.text(cx, cardCy - cardH * 0.28, upg.emoji,
-                { fontSize: cardIcoSize + 'px' })
-                .setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
-            const nm = this.add.text(cx, cardCy + cardH * 0.04, upg.name, {
-                fontFamily: 'Arial Black', fontSize: cardNameSize + 'px',
-                color: '#ffffff', stroke: '#1a0a3a',
-                strokeThickness: Math.max(3, Math.round(4 * s)), align: 'center',
-                wordWrap: { width: cardW - 14 }
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
-            const ds = this.add.text(cx, cardCy + cardH * 0.30, upg.desc, {
-                fontFamily: 'Arial', fontSize: cardDescSize + 'px', color: '#e0c0ff',
-                align: 'center', wordWrap: { width: cardW - 14 }
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
-            this._pickerElements.push(ico, nm, ds);
+            this._pickerCardRects.push({ x: ccx - cardW / 2, y: cardsCy - cardH / 2, w: cardW, h: cardH });
+            let y = cardsCy - blockH / 2;
+            c.ico.setPosition(ccx, y + icoSize / 2); y += icoSize + gn;
+            c.nm.setPosition(ccx, y + rowName / 2);  y += rowName + gd;
+            c.ds.setPosition(ccx, y + rowDesc / 2);
+            if (c.pill) {
+                c.pill.move(ccx, cardsCy - blockH / 2 + blockH - rowPill / 2);
+                c.pill.els.forEach(e => this._pickerElements.push(e));
+            }
+            this._pickerElements.push(c.ico, c.nm, c.ds);
         });
         this._pinFixed();
     }
@@ -6414,26 +6497,73 @@ export class DungeonScene extends Phaser.Scene {
         // Spaced 800 ms after PLAYER_DEATH so the death hit and the overlay sting never stack
         this.time.delayedCall(800, () => bus.emit(SFX.LOSE_STORY));
         const subtitle = (this.runMode === 'endless')
-            ? `Пи дошёл до этажа ${this.chapter} и упал!\n\n` +
-              `🧀 Получено сыра: +${banked}\n` +
-              `🧀 Всего сыра: ${Progress.getCheese()}\n` +
-              (Progress.getEndlessStats().bestFloor === this.chapter ? `🏆 НОВЫЙ РЕКОРД!` : `🏆 Рекорд: этаж ${Progress.getEndlessStats().bestFloor}`)
-            : `Граф Ратула запер Пи в темнице.\n` +
-              `Но половина сыра уцелела!\n\n` +
-              `🧀 Получено сыра: +${banked}\n` +
-              `🧀 Всего сыра: ${Progress.getCheese()}`;
+            ? `Пи дошёл до этажа ${this.chapter} и упал!\n` +
+              (Progress.getEndlessStats().bestFloor === this.chapter ? 'НОВЫЙ РЕКОРД!' : `Рекорд: этаж ${Progress.getEndlessStats().bestFloor}`) + '\n' +
+              `Всего сыра: ${Progress.getCheese()}`
+            : 'Граф Ратула запер Пи в темнице.\n' +
+              'Но половина сыра уцелела!\n' +
+              `Всего сыра: ${Progress.getCheese()}`;
         this.showOverlay(
-            (this.runMode === 'endless') ? '∞ Глубже не пошёл...' : 'Пи попался...',
+            (this.runMode === 'endless') ? 'Глубже не пошёл...' : 'Пи попался...',
             subtitle,
-            0xc04040, (this.runMode === 'endless') ? '💀∞' : '💀',
-            '🔄 ЗАНОВО',
+            0xc04040, 'd_ghost',
+            'ЗАНОВО',
             () => this.scene.start('DungeonScene', { runMode: this.runMode, chapter: 1 }),
-            '🏪 В ЛАВКУ',
-            () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); }
+            'В ЛАВКУ',
+            () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); },
+            [{ icon: 'ui_stairs', value: `${this.chapter}` }, { icon: 'ui_cheese', value: `+${banked}` }]
         );
     }
 
     // === UI HELPERS — flat gold-on-violet, same language as the rebuilt menus ===
+    // Hero sprite the player actually plays as (equipped skin, else default Pi).
+    _heroKey() {
+        const skin = Progress.getCurrentSkin && Progress.getCurrentSkin();
+        if (skin && skin.spriteKey && this.textures.exists(skin.spriteKey)) return skin.spriteKey;
+        return 'd_pi';
+    }
+
+    // Icon image fitted inside a `box`x`box` square, aspect preserved; falls back to a
+    // known-good key so a missing texture can never draw the green __MISSING checker.
+    _uiIcon(x, y, key, box, depth) {
+        let k = uiIconKey(key);
+        if (!k || !this.textures.exists(k)) k = 'ui_paw';
+        const img = this.add.image(x, y, k).setScrollFactor(0);
+        const src = this.textures.get(k).getSourceImage();
+        const f = box / Math.max(1, src.width, src.height);
+        img.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+        if (depth != null) img.setDepth(depth);
+        return img;
+    }
+
+    // Rounded pill: optional icon + label, drawn around (0, 0) so a row can be centred
+    // after the widths are known. `move(x, y)` translates the whole pill.
+    _statPill(iconKey, label, opts = {}) {
+        const D = opts.depth != null ? opts.depth : LAYER.UI_OVERLAY;
+        const fs = opts.fontSize || 14;
+        const ico = iconKey ? (opts.iconSize || Math.round(fs * 1.4)) : 0;
+        const txt = this.add.text(0, 0, label, {
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: fs + 'px',
+            color: opts.color || '#f4ecff'
+        }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(D + 2);
+        const padX = Math.round(fs * 0.72);
+        const gapX = ico ? Math.round(fs * 0.38) : 0;
+        const w = Math.round(padX * 2 + ico + gapX + txt.width);
+        const h = Math.round(Math.max(ico, txt.height) + fs * 0.55);
+        const tint = opts.tint != null ? opts.tint : UI_C.gold;
+        const g = this.add.graphics().setScrollFactor(0).setDepth(D + 1);
+        g.fillStyle(tint, opts.fillAlpha != null ? opts.fillAlpha : 0.14);
+        g.fillRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+        g.lineStyle(1, tint, 0.5);
+        g.strokeRoundedRect(-w / 2, -h / 2, w, h, h / 2);
+        const els = [g];
+        let tx = -w / 2 + padX;
+        if (ico) { els.push(this._uiIcon(tx + ico / 2, 0, iconKey, ico, D + 2)); tx += ico + gapX; }
+        txt.setPosition(tx, 0);
+        els.push(txt);
+        return { els, w, h, move: (x, y) => els.forEach(e => { e.x += x; e.y += y; }) };
+    }
+
     drawGothicPanel(cx, cy, w, h, opts = {}) {
         const radius = opts.radius != null ? opts.radius : 20;
         const D = opts.depth || LAYER.UI_OVERLAY;
@@ -6570,89 +6700,138 @@ export class DungeonScene extends Phaser.Scene {
         return out;
     }
 
-    showOverlay(title, sub, accent, emoji, btnText, btnAction, btnText2, btnAction2) {
+    showOverlay(title, sub, accent, art, btnText, btnAction, btnText2, btnAction2, stats) {
         if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
         if (this.aimIndicator) this.aimIndicator.setVisible(false);
         if (this.aimLine) this.aimLine.setVisible(false);
         if (this.compass) this.compass.clear();
         if (this.compassLabel) this.compassLabel.setVisible(false);
 
-        const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_OVERLAY;
-        const addEl = (el, dep) => el.setScrollFactor(0).setDepth(dep || D);
+        const addEl = (el, dep) => el.setScrollFactor(0).setDepth(dep != null ? dep : D);
 
         const hasSecond = !!(btnText2 && btnAction2);
-        const panelW = Math.min(W * 0.92, 580);
-        const baseH = hasSecond ? 490 : 440;
-        const panelH = Math.min(H * 0.92, baseH);
-        const s = Math.min(1, panelH / baseH);
-        const emojiSize = Math.max(36, Math.round(64 * s));
-        const titleSize = Math.max(18, Math.round(28 * s));
-        const subSize   = Math.max(12, Math.round(16 * s));
-        const btnSize   = Math.max(15, Math.round(20 * s));
+        addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.82).setOrigin(0));
 
-        // Dim backdrop
-        addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.80).setOrigin(0));
+        const cx = W / 2, cy = H / 2;
+        const PAD = 20;
+        const panelW = Math.round(Math.min(W * 0.92, 580));
+        const btnH = 48, btnGap = 12;
+        const sideBySide = hasSecond && panelW >= 420;
+        const btnBlockH = hasSecond ? (sideBySide ? btnH : btnH * 2 + btnGap) : btnH;
+        const wrapW = panelW - PAD * 2;
 
-        // Gothic panel (replaces plain rectangle)
-        const theme = (accent === 0xffd040) ? ['🎉', '👵', '✨', '🐭']
-                    : (accent === 0xc04040) ? ['💀', '⚰️', '🦇', '🕯️']
-                    : (accent === 0x40c060) ? ['✨', '👵', '🎉', '🐭']
-                    : ['🕸️', '🦇', '💀', '🕯️'];
-        const panelEls = this.drawGothicPanel(W/2, H/2, panelW, panelH, {
-            accent, depth: D, theme
-        });
+        let artKeys = (Array.isArray(art) ? art : (art ? [art] : []))
+            .map(uiIconKey).filter(key => this.textures.exists(key));
+        const statRows = (stats || []).filter(st => st && this.textures.exists(uiIconKey(st.icon)));
+
+        const titleObj = this.add.text(0, 0, title, {
+            fontFamily: UI_F.display, fontStyle: '700', color: '#f6d77a',
+            stroke: '#1a0a2e', strokeThickness: 2, align: 'center',
+            wordWrap: { width: wrapW }
+        }).setOrigin(0.5, 0);
+        const subObj = this.add.text(0, 0, sub, {
+            fontFamily: UI_F.body, color: '#b9a6d4', align: 'center',
+            wordWrap: { width: wrapW }
+        }).setOrigin(0.5, 0);
+
+        const gaps = { art: 12, title: 6, sub: 12, block: 16 };
+        const measure = (k) => {
+            titleObj.setFontSize(Math.max(17, Math.round(26 * k)));
+            subObj.setFontSize(Math.max(11, Math.round(15 * k)));
+            subObj.setLineSpacing(Math.round(3 * k));
+            const g = (v) => Math.max(4, Math.round(v * k));
+            const artH = artKeys.length ? Math.max(44, Math.round(82 * k)) : 0;
+            const statFs = Math.max(11, Math.round(15 * k));
+            const statsH = statRows.length ? Math.round(statFs * 1.95) : 0;
+            const total = (artH ? artH + g(gaps.art) : 0) + titleObj.height + g(gaps.title)
+                + subObj.height + (statsH ? g(gaps.sub) + statsH : 0) + g(gaps.block) + btnBlockH;
+            return { total, artH, statFs, statsH, g };
+        };
+        const capH = Math.round(H * 0.9);
+        let k = 1, m = measure(k);
+        for (let i = 0; i < 5 && m.total + PAD * 2 > capH; i++) {
+            const room = capH - PAD * 2 - btnBlockH;
+            const ratio = Math.max(0.5, room / Math.max(1, m.total - btnBlockH));
+            if (ratio >= 0.995) break;
+            k *= ratio;
+            m = measure(k);
+        }
+
+        // Art row — drop trailing sprites if the row would not fit the panel
+        const artGap = Math.round(14 * k);
+        const artSize = (key) => {
+            const s = this.textures.get(key).getSourceImage();
+            const f = m.artH / Math.max(1, s.height);
+            return { w: Math.round(s.width * f), h: Math.round(s.height * f) };
+        };
+        let artSpecs = artKeys.map(artSize);
+        while (artSpecs.length > 1 &&
+               artSpecs.reduce((a, s) => a + s.w, 0) + artGap * (artSpecs.length - 1) > wrapW) {
+            artSpecs.pop(); artKeys = artKeys.slice(0, artSpecs.length);
+        }
+
+        // Stats strip pills, built at the settled scale
+        const pills = statRows.map(st => this._statPill(st.icon, String(st.value), {
+            fontSize: m.statFs, depth: D + 4 }));
+        const pillGap = Math.round(10 * k);
+        const pillsW = pills.reduce((a, p) => a + p.w, 0) + pillGap * Math.max(0, pills.length - 1);
+        const pillsH = pills.length ? Math.max(...pills.map(p => p.h)) : 0;
+
+        const total = (m.artH ? m.artH + m.g(gaps.art) : 0) + titleObj.height + m.g(gaps.title)
+            + subObj.height + (pillsH ? m.g(gaps.sub) + pillsH : 0) + m.g(gaps.block) + btnBlockH;
+        const panelH = Math.min(capH, Math.round(total + PAD * 2));
+        const top = cy - panelH / 2;
+        const panelEls = this.drawGothicPanel(cx, cy, panelW, panelH, { depth: D });
         panelEls.forEach(e => e.setScrollFactor(0));
+        this._overlayPanelRect = { x: cx - panelW / 2, y: top, w: panelW, h: panelH };
 
-        const top = H/2 - panelH/2;
-        let cy = top + Math.round(24 * s);
-        // Emoji - centered, large and dramatic
-        addEl(this.add.text(W/2, cy + emojiSize/2, emoji, { fontSize: emojiSize + 'px' }).setOrigin(0.5));
-        cy += emojiSize + Math.round(4 * s);
+        let y = top + Math.round((panelH - total) / 2);
+        if (m.artH) {
+            const rowW = artSpecs.reduce((a, s) => a + s.w, 0) + artGap * (artSpecs.length - 1);
+            let ax = cx - rowW / 2;
+            artKeys.forEach((key, i) => {
+                const img = this.add.image(ax + artSpecs[i].w / 2, y + m.artH / 2, key)
+                    .setDisplaySize(artSpecs[i].w, artSpecs[i].h);
+                addEl(img, D + 4);
+                ax += artSpecs[i].w + artGap;
+            });
+            y += m.artH + m.g(gaps.art);
+        }
+        titleObj.setPosition(cx, y); addEl(titleObj, D + 4); y += titleObj.height + m.g(gaps.title);
+        subObj.setPosition(cx, y);   addEl(subObj, D + 4);   y += subObj.height;
+        if (pillsH) {
+            y += m.g(gaps.sub);
+            let px = cx - pillsW / 2;
+            pills.forEach(p => { p.move(px + p.w / 2, y + pillsH / 2); px += p.w + pillGap; });
+            y += pillsH;
+        }
+        y += m.g(gaps.block);
 
-        // Title — stroke only
-        const titleObj = this.add.text(W/2, cy + titleSize/2, title, {
-            fontFamily: 'Arial Black', fontSize: titleSize + 'px', color: '#ffffff',
-            stroke: '#1a0a3a', strokeThickness: Math.max(4, Math.round(6 * s)), align: 'center',
-            wordWrap: { width: panelW - 60 }
-        }).setOrigin(0.5);
-        addEl(titleObj);
-        cy += titleSize * 1.4 + Math.round(8 * s);
-
-        // Subtitle text
-        addEl(this.add.text(W/2, cy, sub, {
-            fontFamily: 'Arial', fontSize: subSize + 'px', color: '#f0d8ff',
-            align: 'center', lineSpacing: Math.round(4 * s),
-            wordWrap: { width: panelW - 60 }
-        }).setOrigin(0.5, 0));
-
-        const btnLabel = btnText || '🔄 Заново';
         const rawAction = btnAction || (() => this.scene.restart());
         const action = () => { bus.emit(UI.BUTTON_CLICK); rawAction(); };
-        const btnH = Math.max(42, Math.round(56 * s));
-        const btnW = panelW * 0.65;
-        const btnGap = Math.round(14 * s);
-        const bottomPad = Math.round(28 * s);
-
-        if (hasSecond) {
-            const secondBtnY = H/2 + panelH/2 - bottomPad - btnH / 2;
-            const firstBtnY  = secondBtnY - btnH - btnGap;
-            const els1 = this.drawGothicButton(W/2, firstBtnY, btnW, btnH, btnLabel, {
-                onClick: action, depth: D + 10
-            });
-            els1.forEach(e => e.setScrollFactor(0));
-            const els2 = this.drawGothicButton(W/2, secondBtnY, btnW, btnH, btnText2, {
-                color: 0xc89530, colorTop: 0xf5b048, hover: 0xf5b048, hoverTop: 0xffd070,
-                onClick: () => { bus.emit(UI.BUTTON_CLICK); btnAction2(); }, depth: D + 10
-            });
-            els2.forEach(e => e.setScrollFactor(0));
+        const btnCy = y + btnH / 2;
+        if (hasSecond && sideBySide) {
+            const bw = Math.floor((wrapW - btnGap) / 2);
+            this.drawGothicButton(cx - (bw + btnGap) / 2, btnCy, bw, btnH, btnText, {
+                variant: 'primary', depth: D + 10, onClick: action
+            }).forEach(e => e.setScrollFactor(0));
+            this.drawGothicButton(cx + (bw + btnGap) / 2, btnCy, bw, btnH, btnText2, {
+                variant: 'secondary', depth: D + 10,
+                onClick: () => { bus.emit(UI.BUTTON_CLICK); btnAction2(); }
+            }).forEach(e => e.setScrollFactor(0));
         } else {
-            const btnY = H/2 + panelH/2 - bottomPad - btnH / 2;
-            const els = this.drawGothicButton(W/2, btnY, btnW, btnH, btnLabel, {
-                onClick: action, depth: D + 10
-            });
-            els.forEach(e => e.setScrollFactor(0));
+            const bw = Math.round(Math.min(wrapW, 320));
+            this.drawGothicButton(cx, btnCy, bw, btnH, btnText, {
+                variant: 'primary', depth: D + 10, onClick: action
+            }).forEach(e => e.setScrollFactor(0));
+            if (hasSecond) {
+                this.drawGothicButton(cx, btnCy + btnH + btnGap, bw, btnH, btnText2, {
+                    variant: 'secondary', depth: D + 10,
+                    onClick: () => { bus.emit(UI.BUTTON_CLICK); btnAction2(); }
+                }).forEach(e => e.setScrollFactor(0));
+            }
         }
 
         // Both ENTER and SPACE confirm the primary action — SPACE is the universal "continue" key
