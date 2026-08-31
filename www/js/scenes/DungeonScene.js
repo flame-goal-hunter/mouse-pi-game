@@ -1629,10 +1629,10 @@ export class DungeonScene extends Phaser.Scene {
         if (tile) tile.sprite = spr;
         return spr;
     }
+    // Tile art is sized to the mechanic's hit radius, keeping each SVG's aspect ratio.
     _sizeBiomeTile(spr, type, radius) {
-        if (type === 'butter') spr.setDisplaySize(radius * 3.4, radius * 2.0);
-        else if (type === 'hotpan') spr.setDisplaySize(radius * 2.8, radius * 1.8);
-        else spr.setDisplaySize(radius * 2, radius * 2);
+        const w = radius * 2.2;
+        spr.setDisplaySize(w, w * (spr.height / spr.width));
     }
 
     addWall(x, y, w, h) {
