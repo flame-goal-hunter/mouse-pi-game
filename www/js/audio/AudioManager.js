@@ -3,7 +3,7 @@
 // - 4 channels (master / sfx / music / ui) backed by ProgressStore.audioPrefs
 // - Sampled SFX driven by SoundMap (pitch jitter + retrigger guards)
 // - ProceduralSfx stays as the fallback when a sample is missing from the cache
-// - Looping music from OGG with fade-in / cross-fade
+// - Looping music streamed through an HTMLAudioElement (never decoded to PCM) with fade-in / cross-fade
 // - Listens on EventBus for audio:* events from gameplay code
 // - Handles mobile autoplay (resume on first pointerdown)
 // - Pauses on document.hidden, resumes on visible
@@ -30,15 +30,13 @@ function safeGetPrefs() {
 
 // Queue every mapped sample into a scene loader.
 // Phaser skips keys that are already in the cache, so scene restarts cost nothing.
+// SFX only: they are short and want WebAudio. The four music loops are 55-137 s each and
+// would decode to ~166 MB of PCM in the audio cache — they stream from <audio> instead.
 export function preloadAudio(scene) {
     if (!scene || !scene.load) return;
     for (const [key, entry] of Object.entries(SFX_FILES)) {
         if (scene.cache?.audio?.exists(key)) continue;
         scene.load.audio(key, `assets/audio/sfx/${entry[0]}.ogg`);
-    }
-    for (const [key, entry] of Object.entries(BGM_FILES)) {
-        if (scene.cache?.audio?.exists(key)) continue;
-        scene.load.audio(key, `assets/audio/bgm/${entry[0]}.ogg`);
     }
 }
 
@@ -84,8 +82,10 @@ export class AudioManager {
         this.game = game;
         this.proc = new ProceduralSfx();
         this.bgm  = new ProceduralBgm(this.proc);
-        this._bgmSound = null;         // Phaser looping music
+        this._bgmEls = {};             // track key → HTMLAudioElement (streamed, created on first use)
+        this._bgmEl = null;            // element currently owning the music channel
         this._bgmKey = null;
+        this._bgmWasPlaying = false;   // was music running when the page went hidden?
         this._pendingBgm = null;       // requested before the audio context was unlocked
         this._activePresetName = null; // procedural BGM preset name (fallback only)
         this._unlocked = false;
@@ -147,9 +147,13 @@ export class AudioManager {
             this.game.sound.volume = prefs.master * muteMul;
             this.game.sound.mute = !!prefs.muted;
         }
-        // Don't stomp on a fade in flight — it will land on the new target anyway
-        if (this._bgmSound && !this._bgmSound._fadeTimer) {
-            try { this._bgmSound.setVolume(this._musicVolume()); } catch (e) {}
+        // Mute works even mid-fade; the volume ramp would fight a direct write, so only
+        // re-level when no fade is in flight — a running fade lands on the new target anyway.
+        for (const el of Object.values(this._bgmEls)) {
+            try { el.muted = !!prefs.muted; } catch (e) {}
+        }
+        if (this._bgmEl && !this._bgmEl._fadeTimer) {
+            try { this._bgmEl.volume = this._musicVolume(this._bgmKey); } catch (e) {}
         }
         // Procedural BGM gets the music channel too
         if (this.bgm) {
@@ -196,7 +200,10 @@ export class AudioManager {
         const rate = (opts.rate ?? cfg.rate ?? 1) * (1 + (Math.random() * 2 - 1) * (cfg.jitter || 0));
         const vol = entry[1] * (opts.vol ?? 1) * this._catVolume(cfg.cat || 'sfx');
         try {
-            this.game.sound.play(key, { volume: Math.min(1, vol), rate });
+            // >1 is legal: Phaser's WebAudio volume is a gain node, so a gain above unity is
+            // the only way the 27 RMS-matched samples with vol > 1 reach their intended loudness.
+            // Clamping at 1 silently undid the match and left them ~3x too quiet.
+            this.game.sound.play(key, { volume: Math.min(3, vol), rate });
         } catch (e) {
             this._fallback(event);
         }
@@ -258,30 +265,81 @@ export class AudioManager {
         this.bgm.stop();
     }
 
-    // === Music (sampled, looping) ===
-    _musicVolume() {
+    // === Music (streamed <audio>, looping) ===
+    // Volume = per-track match x music channel x master, silenced by the mute pref.
+    _musicVolume(key) {
         const p = this.prefs || DEFAULT_PREFS;
-        return p.music * (p.muted ? 0 : 1);
+        const track = (BGM_FILES[key] && BGM_FILES[key][1]) || 1;
+        return Math.max(0, Math.min(1, track * p.music * p.master * (p.muted ? 0 : 1)));
     }
 
-    // Manual fade — the manager owns music across scene restarts, so it can't
-    // borrow a scene's tween manager (the tween would die with the scene).
-    _fade(sound, target, ms, onDone) {
-        if (!sound) return;
-        if (sound._fadeTimer) { clearInterval(sound._fadeTimer); sound._fadeTimer = null; }
-        const from = (typeof sound.volume === 'number') ? sound.volume : 0;
+    // One element per track, built on demand and kept forever — a scene restart reuses it,
+    // so the document never holds more than BGM_FILES worth of <audio> tags.
+    _bgmElement(key) {
+        const entry = BGM_FILES[key];
+        if (!entry) return null;
+        let el = this._bgmEls[key];
+        if (el) return el;
+        el = new Audio(`assets/audio/bgm/${entry[0]}.ogg`);
+        el.loop = true;
+        el.preload = 'auto';
+        el.volume = 0;
+        el.muted = !!(this.prefs && this.prefs.muted);
+        el.onerror = () => {
+            delete this._bgmEls[key];
+            if (this._bgmKey === key) {
+                this._stopRamp(el);
+                this._bgmEl = null;
+                this._bgmKey = null;
+                const preset = this._presetFor(key);
+                if (preset) this.playBgmPreset(preset);
+            }
+        };
+        this._bgmEls[key] = el;
+        return el;
+    }
+
+    // The procedural preset that stands in for a track when its file will not load.
+    _presetFor(key) {
+        for (const [biome, k] of Object.entries(BIOME_BGM)) {
+            if (k === key && BGM_PRESETS[biome]) return biome;
+        }
+        return BGM_PRESETS[this._biome] ? this._biome : null;
+    }
+
+    // Manual ramp — the manager owns music across scene restarts, so it can't borrow a
+    // scene's tween manager (the tween would die with the scene). One timer per element,
+    // cancelled whenever a new ramp starts on it.
+    _stopRamp(el) {
+        if (el && el._fadeTimer) { clearInterval(el._fadeTimer); el._fadeTimer = null; }
+    }
+
+    _ramp(el, target, ms, onDone) {
+        if (!el) return;
+        this._stopRamp(el);
+        const from = (typeof el.volume === 'number') ? el.volume : 0;
+        const to = Math.max(0, Math.min(1, target));
         const t0 = performance.now();
         const finish = () => {
-            clearInterval(sound._fadeTimer);
-            sound._fadeTimer = null;
+            this._stopRamp(el);
             if (onDone) { try { onDone(); } catch (e) {} }
         };
-        sound._fadeTimer = setInterval(() => {
-            if (sound.pendingRemove) { finish(); return; }
+        el._fadeTimer = setInterval(() => {
             const k = ms > 0 ? Math.min(1, (performance.now() - t0) / ms) : 1;
-            try { sound.setVolume(from + (target - from) * k); } catch (e) { finish(); return; }
+            try { el.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (e) { finish(); return; }
             if (k >= 1) finish();
         }, 33);
+    }
+
+    // play() rejects when autoplay is still blocked — park the key so the first-gesture
+    // unlock hook can retry it once.
+    _startEl(el, key) {
+        let p = null;
+        try { p = el.play(); } catch (e) { this._pendingBgm = key; return; }
+        if (p && typeof p.catch === 'function') {
+            p.then(() => { if (this._pendingBgm === key) this._pendingBgm = null; })
+             .catch(() => { this._stopRamp(el); try { el.volume = 0; } catch (e) {} this._pendingBgm = key; });
+        }
     }
 
     // Accepts a track key ('cavern'), a biome id ('garden') or an event name ('bgm:garden').
@@ -290,51 +348,54 @@ export class AudioManager {
         const key = BGM_FILES[name] ? name
             : (BIOME_BGM[id] || (id === 'menu' ? 'hall' : null));
         if (!key) return;
-        if (!this.game?.cache?.audio?.exists(key)) {
-            // No sample — keep the floor from being silent with the procedural preset
+        const el = this._bgmElement(key);
+        if (!el) {
+            // No such track — keep the floor from being silent with the procedural preset
             if (BGM_PRESETS[id]) this.playBgmPreset(id);
             return;
         }
-        if (this._bgmKey === key && this._bgmSound && !this._bgmSound.pendingRemove) return;
-        // Defer until the context is allowed to make noise, or the track is lost silently
-        if (!this._unlocked && this.game?.sound?.context?.state === 'suspended') {
-            this._pendingBgm = key;
+        if (this._bgmKey === key && this._bgmEl === el) {
+            // Same track: only nudge it if a blocked autoplay (or a stall) left it paused
+            if (el.paused && !document.hidden) {
+                this._startEl(el, key);
+                this._ramp(el, this._musicVolume(key), 800);
+            }
             return;
         }
         if (this._activePresetName) this.stopBgmPreset();
-        const old = this._bgmSound;
-        if (old) this._fade(old, 0, 600, () => { try { old.stop(); old.destroy(); } catch (e) {} });
-        let sound = null;
-        try {
-            sound = this.game.sound.add(key, { loop: true, volume: 0 });
-            sound.play();
-        } catch (e) {
-            this._bgmSound = null;
-            this._bgmKey = null;
-            return;
+        const old = this._bgmEl;
+        if (old && old !== el) {
+            this._ramp(old, 0, 600, () => { try { old.pause(); old.currentTime = 0; } catch (e) {} });
         }
-        this._bgmSound = sound;
+        this._bgmEl = el;
         this._bgmKey = key;
-        this._fade(sound, this._musicVolume(), 800);
+        this._stopRamp(el);
+        try { el.volume = 0; el.currentTime = 0; } catch (e) {}
+        this._startEl(el, key);
+        this._ramp(el, this._musicVolume(key), 800);
     }
 
     stopBgm() {
         this._pendingBgm = null;
         if (this._activePresetName) this.stopBgmPreset();
-        const old = this._bgmSound;
-        this._bgmSound = null;
+        const old = this._bgmEl;
+        this._bgmEl = null;
         this._bgmKey = null;
+        this._bgmWasPlaying = false;
         if (!old) return;
-        this._fade(old, 0, 600, () => { try { old.stop(); old.destroy(); } catch (e) {} });
+        this._ramp(old, 0, 600, () => { try { old.pause(); old.currentTime = 0; } catch (e) {} });
     }
 
     pauseAll() {
-        try { if (this._bgmSound) this._bgmSound.pause(); } catch (e) {}
+        try {
+            this._bgmWasPlaying = !!(this._bgmEl && !this._bgmEl.paused);
+            if (this._bgmEl) this._bgmEl.pause();
+        } catch (e) {}
         try { this.bgm?.pause(); } catch (e) {}
         if (this.game?.sound) this.game.sound.pauseAll?.();
     }
     resumeAll() {
-        try { if (this._bgmSound) this._bgmSound.resume(); } catch (e) {}
+        try { if (this._bgmEl && this._bgmWasPlaying) this._startEl(this._bgmEl, this._bgmKey); } catch (e) {}
         try { this.bgm?.resume(); } catch (e) {}
         if (this.game?.sound) this.game.sound.resumeAll?.();
     }

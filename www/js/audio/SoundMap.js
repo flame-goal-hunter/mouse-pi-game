@@ -28,6 +28,8 @@ export const SFX_FILES = {
     sting_floor:['sting_floor', 0.7], sting_boss:['sting_boss', 2.2], sting_boss_phase:['sting_boss_phase', 0.75],
 };
 
+// key: [file, volume] — music streams from an HTMLAudioElement (AudioManager), never the
+// Phaser loader: these loops are 55-137 s and would decode to ~166 MB of PCM in the cache.
 export const BGM_FILES = {
     cavern: ['cavern', 0.34], hall: ['hall', 0.34], garden: ['garden', 0.38], throne: ['throne', 0.5],
 };

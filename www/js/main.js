@@ -12,6 +12,7 @@ import { GameScene } from './scenes/GameScene.js';
 import { TransylvaniaScene } from './scenes/TransylvaniaScene.js';
 import { DungeonScene } from './scenes/DungeonScene.js';
 import { initAudioManager } from './audio/AudioManager.js';
+import { Progress } from './storage/ProgressStore.js';
 
 // Read URL parameters for direct game launch
 const urlParams = new URLSearchParams(window.location.search);
@@ -153,7 +154,12 @@ document.addEventListener('visibilitychange', () => {
     } else {
         game.sound.mute = true;
         game.sound.resumeAll();
-        setTimeout(() => { game.sound.mute = false; }, 400);
+        // Restore the stored preference, not `false` — resuming must not un-mute a muted game.
+        setTimeout(() => {
+            let muted = false;
+            try { muted = !!Progress.getAudioPrefs().muted; } catch (e) {}
+            game.sound.mute = muted;
+        }, 400);
         // ProceduralSfx ctx also auto-suspends on Android — resume it too
         try { window.audio?.proc?.resume(); } catch (e) {}
     }
