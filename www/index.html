@@ -118,10 +118,12 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             width: 96vw;
             max-width: 800px;
-            height: 88vh;
+            max-height: 92vh;
+            height: auto;
+            gap: 10px;
             overflow-y: auto;
             background: rgba(30, 30, 50, 0.95);
             border-radius: 24px;
@@ -261,11 +263,13 @@
             align-items: center;
             gap: 0.6vh;
             transition: all 0.15s;
-            min-width: 20vw;
+            min-width: 0;
+            flex: 1 1 0;
         }
 
         .mode-btn .mode-icon {
-            font-size: min(9vw, 40px);
+            font-size: min(6vw, 28px);
+            line-height: 1;
         }
 
         .mode-btn.selected {
@@ -279,6 +283,25 @@
             transform: scale(0.95);
         }
 
+        .mode-btn, .diff-btn, .play-btn {
+            min-height: 48px;
+            touch-action: manipulation;
+        }
+
+        .mode-btn:focus-visible,
+        .diff-btn:focus-visible,
+        .play-btn:focus-visible {
+            outline: 2px solid #e8b54a;
+            outline-offset: 2px;
+        }
+
+        .mode-btn:active,
+        .diff-btn:active,
+        .play-btn:active {
+            transform: scale(.97);
+            transition: transform 150ms cubic-bezier(.2,.8,.3,1);
+        }
+
         .ny-difficulty {
             margin-top: 10px !important;
         }
@@ -290,8 +313,15 @@
             justify-content: space-evenly;
             margin-top: 5px !important;
             width: 100%;
-            flex: 1;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow-y: auto;
             text-align: center;
+        }
+
+        /* The Castle tab opens its own menu in the iframe — this panel never shows. */
+        #transylvaniaOptions {
+            display: none !important;
         }
 
         #adventureOptions .play-btn,
@@ -404,9 +434,13 @@
 
         /* Landscape phone adjustments — only spacing, NOT sizes */
         @media (orientation: landscape) and (max-height: 600px) {
-            .overlay-content { padding: 2vh 4vw; height: 92vh; }
+            #startScreen { padding: 8px; }
+            .overlay-content { padding: 2vh 4vw max(2vh, 12px); max-height: calc(100vh - 16px); height: auto; gap: 6px; }
             .overlay h2 { margin: 0.5vh 0 1.5vh !important; }
             .mode-selector { margin: 1vh 0 !important; }
+            .overlay .small { margin: 0.4vh 0 !important; }
+            .difficulty-selector { margin: 1vh 0 !important; }
+            #snowballMainChoice { gap: min(2vh, 10px); }
             .play-btn { margin-top: 1.5vh !important; }
         }
     </style>
@@ -1358,6 +1392,9 @@
                     } else {
                         cleanupSnowballNetwork();
                     }
+
+                    // The Castle tab IS the entrance — open its own menu straight away.
+                    if (currentGameMode === 'transylvania') startTransylvaniaPreview();
                 };
                 btn.addEventListener('click', handler);
                 btn.addEventListener('touchend', handler);
@@ -7360,6 +7397,14 @@
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Menu is up: paint a flat backdrop instead of the adventure scene (no bleed-through artefacts).
+            const _startScreen = document.getElementById('startScreen');
+            if (!phaserRunning && _startScreen && _startScreen.classList.contains('visible') && _startScreen.style.display !== 'none') {
+                ctx.fillStyle = '#0f0820';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
 
             // New Year platformer maze mode - draw even before game starts
             if (currentGameMode === 'newyear') {
