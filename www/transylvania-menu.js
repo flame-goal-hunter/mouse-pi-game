@@ -443,8 +443,8 @@ function wireEvents() {
     $('#btn-back').addEventListener('click', handleBack);
     $('#card-story').addEventListener('click', () => { playMenuSound('click'); startRun('story'); });
     $('#card-endless').addEventListener('click', () => { playMenuSound('click'); startRun('endless'); });
-    $('#btn-shop').addEventListener('click', () => { playMenuSound('click'); openShop(); });
-    $('#btn-codex').addEventListener('click', () => { playMenuSound('click'); openCodex(); });
+    $('#btn-shop').addEventListener('click', () => openShop());     // openShop plays 'open'
+    $('#btn-codex').addEventListener('click', () => openCodex());   // openCodex plays 'open'
 
     // Close handlers (backdrop + close buttons share data-close attr)
     document.querySelectorAll('[data-close]').forEach(el => {
