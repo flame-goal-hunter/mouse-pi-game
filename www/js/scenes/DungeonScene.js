@@ -77,6 +77,12 @@ const WORLD_SVGS = {
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
     stairs: ['stairs', 72, 80],
 };
+// Relic/upgrade icons: texture key → www/assets/relics/<file>.svg (UI scale, loaded at 64 × dpr like the ui_* kit)
+const RELIC_SVGS = {
+    relic_magnet: 'magnet', relic_star_spread: 'star_spread', relic_bounce: 'bounce', relic_crit: 'crit',
+    relic_thorns: 'thorns', relic_tornado: 'tornado', relic_crown: 'crown', relic_hourglass: 'hourglass',
+    relic_blood_drop: 'blood_drop', relic_gift: 'gift'
+};
 // Weighted decor types with no matching prop_* asset — reuse the closest existing sprite
 const DECOR_ALIAS = { flower: 'moonflower', vine: 'hedge_tuft', plate: 'pot', knife: 'pot', inkwell: 'scroll', chain: 'bone' };
 
@@ -156,21 +162,21 @@ function scaleForFloor(chapter, mode) {
 
 // Upgrade roster — player picks one after every floor. cap = max stacks per run.
 const UPGRADES = [
-    { id: 'hp',        cap: 4, emoji: '❤️', name: 'Крепкое сердце', desc: '+1 максимум HP',
+    { id: 'hp',        cap: 4, icon: 'ui_heart', emoji: '❤️', name: 'Крепкое сердце', desc: '+1 максимум HP',
       apply: (s) => { s.maxHp += 1; if (s.player) s.player.hp = s.maxHp; } },
-    { id: 'dash',      cap: 2, emoji: '💨', name: 'Быстрый рывок',  desc: '−28% кулдаун рывка',
+    { id: 'dash',      cap: 2, icon: 'ui_dash', emoji: '💨', name: 'Быстрый рывок',  desc: '−28% кулдаун рывка',
       apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.72; } },
-    { id: 'speed',     cap: 3, emoji: '⚡', name: 'Лёгкие ноги',     desc: '+15% скорость ходьбы',
+    { id: 'speed',     cap: 3, icon: 'ui_bolt', emoji: '⚡', name: 'Лёгкие ноги',     desc: '+15% скорость ходьбы',
       apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.15; } },
-    { id: 'damage',    cap: 2, emoji: '🔥', name: 'Острый пирог',    desc: '+1 урон пирогом',
+    { id: 'damage',    cap: 2, icon: 'ui_flame', emoji: '🔥', name: 'Острый пирог',    desc: '+1 урон пирогом',
       apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1; } },
-    { id: 'firerate',  cap: 2, emoji: '🎯', name: 'Скорострел',      desc: '−25% перезарядка',
+    { id: 'firerate',  cap: 2, icon: 'ui_target', emoji: '🎯', name: 'Скорострел',      desc: '−25% перезарядка',
       apply: (s) => { s.fireCdMul = (s.fireCdMul || 1) * 0.75; } },
-    { id: 'piesize',   cap: 1, emoji: '🥧', name: 'Большие пироги',  desc: '+50% размер снаряда',
+    { id: 'piesize',   cap: 1, icon: 'd_pie', emoji: '🥧', name: 'Большие пироги',  desc: '+50% размер снаряда',
       apply: (s) => { s.pieSizeMul = (s.pieSizeMul || 1) * 1.5; } },
-    { id: 'lifesteal', cap: 3, emoji: '🩸', name: 'Вампиризм',       desc: 'Шанс +❤️ с убитого',
+    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', emoji: '🩸', name: 'Вампиризм',       desc: 'Шанс +❤️ с убитого',
       apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.20; } },
-    { id: 'cheese',    cap: 2, emoji: '🧀', name: 'Сырный нос',      desc: '+50% сыра за подбор',
+    { id: 'cheese',    cap: 2, icon: 'd_cheese', emoji: '🧀', name: 'Сырный нос',      desc: '+50% сыра за подбор',
       apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.5; } }
 ];
 
@@ -248,6 +254,7 @@ export class DungeonScene extends Phaser.Scene {
         // Level art kit — everything at css × dpr so it is crisp under the camera zoom
         const dpr = window.__GAME_DPR || 1;
         for (const n of UI_ICON_NAMES) this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: Math.round(64 * dpr), height: Math.round(64 * dpr) });
+        for (const [key, file] of Object.entries(RELIC_SVGS)) this.load.svg(key, `assets/relics/${file}.svg`, { width: Math.round(64 * dpr), height: Math.round(64 * dpr) });
         this.tilePx = Math.round(NAV_CELL * dpr);
         this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
         for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {

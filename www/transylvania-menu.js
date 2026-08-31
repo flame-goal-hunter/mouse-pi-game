@@ -26,7 +26,7 @@ const UPGRADE_ICONS = {
     speed1:  'assets/ui/bolt.svg',
     dash1:   'assets/ui/dash.svg',
     dmg1:    'assets/ui/flame.svg',
-    powerup: 'assets/ui/shield.svg'
+    powerup: 'assets/relics/gift.svg'
 };
 const UPGRADE_ICON_DEFAULT = 'assets/ui/target.svg';
 

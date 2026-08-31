@@ -11,6 +11,7 @@ export const RELICS = [
         id: 'pierce',
         rarity: 'common',
         emoji: '🎯',
+        icon: 'ui_target',
         name: 'Меткий пирог',
         desc: 'Пироги пробивают первого врага и летят дальше',
         apply: (s) => { s.relicPierce = (s.relicPierce || 0) + 1; }
@@ -19,6 +20,7 @@ export const RELICS = [
         id: 'magnet',
         rarity: 'common',
         emoji: '🧲',
+        icon: 'relic_magnet',
         name: 'Сырный магнит',
         desc: 'Сыр и сердца сами летят к тебе с расстояния',
         apply: (s) => { s.relicMagnetRange = (s.relicMagnetRange || 0) + 140; }
@@ -27,6 +29,7 @@ export const RELICS = [
         id: 'spread',
         rarity: 'common',
         emoji: '🌟',
+        icon: 'relic_star_spread',
         name: 'Разлёт',
         desc: 'Каждый 4-й пирог стреляет двумя дополнительными в стороны',
         apply: (s) => { s.relicSpreadEvery = (s.relicSpreadEvery || 5) - 1; }   // every Nth fire
@@ -35,6 +38,7 @@ export const RELICS = [
         id: 'sturdy',
         rarity: 'common',
         emoji: '🛡',
+        icon: 'ui_shield',
         name: 'Толстокожий',
         desc: '+0.5с неуязвимости после получения урона',
         apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 500; }
@@ -43,6 +47,7 @@ export const RELICS = [
         id: 'flame_trail',
         rarity: 'common',
         emoji: '🔥',
+        icon: 'ui_flame',
         name: 'Огненный след',
         desc: 'Рывок оставляет горящий след — 1 урон по врагам',
         apply: (s) => { s.relicFlameTrail = true; }
@@ -53,6 +58,7 @@ export const RELICS = [
         id: 'bounce',
         rarity: 'rare',
         emoji: '🪀',
+        icon: 'relic_bounce',
         name: 'Прыгучесть',
         desc: 'Пироги отскакивают от стен один раз',
         apply: (s) => { s.relicBounce = (s.relicBounce || 0) + 1; }
@@ -61,6 +67,7 @@ export const RELICS = [
         id: 'crit',
         rarity: 'rare',
         emoji: '💥',
+        icon: 'relic_crit',
         name: 'Критический сыр',
         desc: '20% шанс x3 урона',
         apply: (s) => { s.relicCritChance = (s.relicCritChance || 0) + 0.20; }
@@ -69,6 +76,7 @@ export const RELICS = [
         id: 'thorns',
         rarity: 'rare',
         emoji: '🌵',
+        icon: 'relic_thorns',
         name: 'Колючий мех',
         desc: 'Враг получает 2 урона за каждое касание',
         apply: (s) => { s.relicThornDmg = (s.relicThornDmg || 0) + 2; }
@@ -77,6 +85,7 @@ export const RELICS = [
         id: 'combo_heart',
         rarity: 'rare',
         emoji: '💞',
+        icon: 'ui_heart',
         name: 'Комбо-сердце',
         desc: 'Каждое 5-е комбо-убийство восстанавливает HP',
         apply: (s) => { s.relicComboHeart = true; }
@@ -85,6 +94,7 @@ export const RELICS = [
         id: 'dash_burst',
         rarity: 'rare',
         emoji: '💨',
+        icon: 'ui_dash',
         name: 'Взрывной рывок',
         desc: 'В конце рывка — мини-взрыв на 80px вокруг Пи',
         apply: (s) => { s.relicDashBurst = true; }
@@ -93,6 +103,7 @@ export const RELICS = [
         id: 'ghost_walk',
         rarity: 'rare',
         emoji: '👻',
+        icon: 'd_ghost',
         name: 'Шаг тени',
         desc: '−50% копится подозрительность врагов',
         apply: (s) => { s.relicGhostWalk = true; }
@@ -103,6 +114,7 @@ export const RELICS = [
         id: 'pie_storm',
         rarity: 'legendary',
         emoji: '🌪',
+        icon: 'relic_tornado',
         name: 'Пироговый шторм',
         desc: 'Стреляешь сразу 5-ю пирогами веером',
         apply: (s) => { s.relicPieStorm = true; }
@@ -111,6 +123,7 @@ export const RELICS = [
         id: 'undying',
         rarity: 'legendary',
         emoji: '💀',
+        icon: 'prop_skull',
         name: 'Несгибаемый',
         desc: 'Раз за забег: при смерти выживаешь на 1 HP',
         apply: (s) => { s.relicUndying = (s.relicUndying || 0) + 1; }
@@ -119,6 +132,7 @@ export const RELICS = [
         id: 'gold_pie',
         rarity: 'legendary',
         emoji: '👑',
+        icon: 'relic_crown',
         name: 'Золотой пирог',
         desc: 'Каждый 10-й пирог огромен и взрывается',
         apply: (s) => { s.relicGoldPieEvery = 10; }
@@ -127,6 +141,7 @@ export const RELICS = [
         id: 'time_warp',
         rarity: 'legendary',
         emoji: '⏳',
+        icon: 'relic_hourglass',
         name: 'Замедление',
         desc: 'Когда HP < 30% — время вокруг тебя замедляется',
         apply: (s) => { s.relicTimeWarp = true; }
@@ -135,6 +150,7 @@ export const RELICS = [
         id: 'cheese_explosion',
         rarity: 'legendary',
         emoji: '🧀',
+        icon: 'd_cheese',
         name: 'Сырный взрыв',
         desc: 'Подбор сыра наносит 2 урона врагам в 100px',
         apply: (s) => { s.relicCheeseBoom = true; }
