@@ -7,18 +7,18 @@
 const STORAGE_KEY = 'mousiePi.progress.v1';
 
 // === SKINS — full Pi transformations.
-// Each skin = its own SVG character + optional accent emoji overlay.
+// Each skin = its own SVG character.
 export const SKINS = [
-    { id: 'blue',          name: 'Обычный',        price: 0,   spriteKey: 'd_pi',               menuKey: 'm_pi',               accent: '',   desc: 'Старый добрый Пи', defaultUnlocked: true },
-    { id: 'brown',         name: 'Деревянный',     price: 80,  spriteKey: 'skin_brown',         menuKey: 'm_skin_brown',         accent: '🪵', desc: 'Воин-пенёк из чащи' },
-    { id: 'pink',          name: 'Розовый',        price: 130, spriteKey: 'skin_pink',          menuKey: 'm_skin_pink',          accent: '🎀', desc: 'Сладкий и стильный' },
-    { id: 'yellow_antler', name: 'Жёлтый с рогами',price: 200, spriteKey: 'skin_yellow_antler', menuKey: 'm_skin_yellow_antler', accent: '',   desc: 'Гордый рогатый странник' },
-    { id: 'robot',         name: 'Робот',          price: 250, spriteKey: 'skin_robot',         menuKey: 'm_skin_robot',         accent: '',   desc: 'Сталь и шестерёнки' },
-    { id: 'green_monster', name: 'Зелёный монстр', price: 500, spriteKey: 'skin_green_monster', menuKey: 'm_skin_green_monster', accent: '',   desc: 'Лесное чудище' },
-    { id: 'shadow',        name: 'Тень',           price: 750, spriteKey: 'skin_shadow',        menuKey: 'm_skin_shadow',        accent: '',   desc: 'Тихий охотник из мрака' },
-    { id: 'devil',         name: 'Дьяволёнок',     price: 800, spriteKey: 'skin_devil',         menuKey: 'm_skin_devil',         accent: '',   desc: 'Рога, хвост и проблемы' },
-    { id: 'angel',         name: 'Ангелочек',      price: 800, spriteKey: 'skin_angel',         menuKey: 'm_skin_angel',         accent: '',   desc: 'Сияет, как нимб' },
-    { id: 'yellow_lion',   name: 'Львёнок',        price: 950, spriteKey: 'skin_yellow_lion',   menuKey: 'm_skin_yellow_lion',   accent: '',   desc: 'Король сырных земель' }
+    { id: 'blue',          name: 'Обычный',        price: 0,   spriteKey: 'd_pi',               menuKey: 'm_pi',               desc: 'Старый добрый Пи', defaultUnlocked: true },
+    { id: 'brown',         name: 'Деревянный',     price: 80,  spriteKey: 'skin_brown',         menuKey: 'm_skin_brown',         desc: 'Воин-пенёк из чащи' },
+    { id: 'pink',          name: 'Розовый',        price: 130, spriteKey: 'skin_pink',          menuKey: 'm_skin_pink',          desc: 'Сладкий и стильный' },
+    { id: 'yellow_antler', name: 'Жёлтый с рогами',price: 200, spriteKey: 'skin_yellow_antler', menuKey: 'm_skin_yellow_antler', desc: 'Гордый рогатый странник' },
+    { id: 'robot',         name: 'Робот',          price: 250, spriteKey: 'skin_robot',         menuKey: 'm_skin_robot',         desc: 'Сталь и шестерёнки' },
+    { id: 'green_monster', name: 'Зелёный монстр', price: 500, spriteKey: 'skin_green_monster', menuKey: 'm_skin_green_monster', desc: 'Лесное чудище' },
+    { id: 'shadow',        name: 'Тень',           price: 750, spriteKey: 'skin_shadow',        menuKey: 'm_skin_shadow',        desc: 'Тихий охотник из мрака' },
+    { id: 'devil',         name: 'Дьяволёнок',     price: 800, spriteKey: 'skin_devil',         menuKey: 'm_skin_devil',         desc: 'Рога, хвост и проблемы' },
+    { id: 'angel',         name: 'Ангелочек',      price: 800, spriteKey: 'skin_angel',         menuKey: 'm_skin_angel',         desc: 'Сияет, как нимб' },
+    { id: 'yellow_lion',   name: 'Львёнок',        price: 950, spriteKey: 'skin_yellow_lion',   menuKey: 'm_skin_yellow_lion',   desc: 'Король сырных земель' }
 ];
 
 // === PERMANENT UPGRADES — bought once, stack each run forever ===

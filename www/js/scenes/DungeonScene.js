@@ -32,7 +32,7 @@ const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', '
 // Depth bands. World/level visuals below, UI band (989+) at the end.
 const LAYER = {
     WORLD:  -100,   // tilemap floor layer (detail overlay at WORLD + 5)
-    TILE:    -90,   // live biome tiles (butter / vines / thorn / hotpan)
+    TILE:    -45,   // live biome tiles (butter / vines / thorn / hotpan) — above decor, so props don't hide hazards
     DECOR:   -50,   // decor prop sprites (under the wall tile layer)
     WALL_TILES: -40,   // tilemap wall layer (above decor sprites); cracks at WALL_TILES + 1
     SCONCE:   70,   // torch sconce sprites
@@ -74,6 +74,7 @@ const WORLD_SVGS = {
     tile_butter: ['tile_butter', 96, 56], tile_vine: ['tile_vine', 56, 56], tile_thorn: ['tile_thorn', 48, 48],
     tile_hotpan_cold: ['tile_hotpan_cold', 56, 36], tile_hotpan_warn: ['tile_hotpan_warn', 56, 36], tile_hotpan_flame: ['tile_hotpan_flame', 56, 36],
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
+    stairs: ['stairs', 72, 80],
 };
 // Weighted decor types with no matching prop_* asset — reuse the closest existing sprite
 const DECOR_ALIAS = { flower: 'moonflower', vine: 'hedge_tuft', plate: 'pot', knife: 'pot', inkwell: 'scroll', chain: 'bone' };
@@ -598,7 +599,7 @@ export class DungeonScene extends Phaser.Scene {
     updateTorches(dt) {
         for (const t of this.torches) {
             if (!t.lit) continue;
-            if (Math.random() < 0.00004) this.extinguishTorch(t);
+            if (Math.random() < 0.0008 / Math.max(1, this.torches.length)) this.extinguishTorch(t);
         }
     }
 
@@ -637,7 +638,11 @@ export class DungeonScene extends Phaser.Scene {
     extinguishTorch(torch) {
         torch.lit = false;
         if (torch.flame) torch.flame.setVisible(false);
-        // Smoke puff
+        // Smoke puff — skip when off-screen
+        const cam = this.cameras.main;
+        const margin = 100;
+        if (torch.x < cam.worldView.x - margin || torch.x > cam.worldView.x + this.viewW + margin ||
+            torch.y < cam.worldView.y - margin || torch.y > cam.worldView.y + this.viewH + margin) return;
         for (let i = 0; i < 8; i++) {
             const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI;
             const sp = Phaser.Math.Between(20, 50);
@@ -1081,6 +1086,9 @@ export class DungeonScene extends Phaser.Scene {
                 } else if (grid[r][c] === 'wall' && this.isBorderWall(r, c)) {
                     fr.push(-1); dr.push(-1);
                     wr.push(this.wallTile(r, c));
+                } else if (grid[r][c] === 'wall' && this._isInsideRoom(r, c)) {
+                    fr.push(-1); dr.push(-1);
+                    wr.push(TILE.WALL);      // pillar interior — plain brick, never a black hole
                 } else { fr.push(-1); dr.push(-1); wr.push(-1); }
             }
             floor.push(fr); detail.push(dr); walls.push(wr);
@@ -1097,6 +1105,11 @@ export class DungeonScene extends Phaser.Scene {
         const wallAbove = grid[r - 1]?.[c] === 'wall' && this.isBorderWall(r - 1, c);
         const floorBelow = grid[r + 1]?.[c] === 'floor';
         return TILE.WALL + (wallAbove ? 0 : 1) + (floorBelow ? 2 : 0);
+    }
+    // True for a wall cell whose centre lies inside a room rect (pillar interiors)
+    _isInsideRoom(r, c) {
+        const x = c * NAV_CELL + NAV_CELL / 2, y = r * NAV_CELL + NAV_CELL / 2;
+        return this.dungeon.rooms.some((rm) => x > rm.x && x < rm.x + rm.w && y > rm.y && y < rm.y + rm.h);
     }
 
     spawnBiomeTiles() {
@@ -1625,12 +1638,12 @@ export class DungeonScene extends Phaser.Scene {
         const key = type === 'hotpan' ? 'tile_hotpan_cold' : (type === 'vines' ? 'tile_vine' : 'tile_' + type);
         if (!this.textures.exists(key)) { console.warn('[DungeonScene] unknown biome tile', type); return; }
         const spr = this._worldImage(x, y, key, LAYER.TILE);
-        this._sizeBiomeTile(spr, type, radius);
+        this._sizeBiomeTile(spr, radius);
         if (tile) tile.sprite = spr;
         return spr;
     }
     // Tile art is sized to the mechanic's hit radius, keeping each SVG's aspect ratio.
-    _sizeBiomeTile(spr, type, radius) {
+    _sizeBiomeTile(spr, radius) {
         const w = radius * 2.2;
         spr.setDisplaySize(w, w * (spr.height / spr.width));
     }
@@ -1739,7 +1752,6 @@ export class DungeonScene extends Phaser.Scene {
             x, y, lit,
             flickerPhase: Math.random() * Math.PI * 2,
             baseRadius: 110 + Phaser.Math.Between(-15, 15),
-            flameH: 0,
             sconce: this._worldImage(x, y + 12, 'torch_sconce', LAYER.SCONCE, 0.5, 1),
             flame: this.add.sprite(x, y - 6, 'flame_sheet', 'f0').setOrigin(0.5, 0.93).setScale(1 / this.dpr).setDepth(LAYER.FLAME),
         };
@@ -2049,7 +2061,7 @@ export class DungeonScene extends Phaser.Scene {
             dashAngle: 0,
             _trailTimer: 0
         };
-        // SKIN — full body tint + accent emoji overlay (replaces old hat-only system)
+        // SKIN — each skin is its own SVG texture, no overlay needed
         this.applySkinToPlayer(Progress.getCurrentSkin());
     }
 
@@ -2080,17 +2092,6 @@ export class DungeonScene extends Phaser.Scene {
         if (skin.id === 'shadow') this.player.sprite.setAlpha(0.85);
         else if (skin.id === 'angel') this.player.sprite.setAlpha(0.95);
         else this.player.sprite.setAlpha(1);
-        // Destroy old accent (optional small overlay still useful for some skins)
-        if (this.player.hat) { this.player.hat.destroy(); this.player.hat = null; }
-        const accent = skin.accent || '';
-        if (accent) {
-            this.player.hat = this.add.text(this.player.x, this.player.y + (skin.accent_offset_y || -36),
-                accent, { fontSize: (skin.accent_size || 22) + 'px' })
-                .setOrigin(0.5).setDepth(201);
-            this.player.hatOffsetY = skin.accent_offset_y || -36;
-        } else {
-            this.player.hatOffsetY = -36;
-        }
     }
 
     toggleCrouch() {
@@ -2369,14 +2370,6 @@ export class DungeonScene extends Phaser.Scene {
         this.animateSprite(this.player, 0.34, speed > 25, 0.22);
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
         this.player.shadow.setScale(speed > 25 ? 0.95 + Math.abs(Math.sin(this.player.walkPhase * 2)) * 0.08 : 1, 1);
-        // Keep accent above Pi, following bob — offset per skin
-        if (this.player.hat) {
-            this.player.hat.setPosition(
-                this.player.x,
-                this.player.sprite.y + (this.player.hatOffsetY != null ? this.player.hatOffsetY : -36)
-            );
-            this.player.hat.setFlipX(this.player.facing < 0);
-        }
 
         if (this.player.invulnTimer > 0) {
             this.player.invulnTimer -= dt * 1000;
@@ -4511,16 +4504,7 @@ export class DungeonScene extends Phaser.Scene {
 
     spawnStairsLabel(x, y) {
         // Small visual ladder/stairs going down beside the exit door, plus floating arrow
-        const g = this.add.graphics().setDepth(124);
-        g.fillStyle(0x4a3850, 1);
-        g.lineStyle(2, 0x1a0a1a, 1);
-        // Stairs as 4 descending rectangles
-        for (let i = 0; i < 4; i++) {
-            const sx = x - 30 + i * 12;
-            const sy = y - 30 + i * 14;
-            g.fillRect(sx, sy, 60 - i * 12, 12);
-            g.strokeRect(sx, sy, 60 - i * 12, 12);
-        }
+        const g = this._worldImage(x, y, 'stairs', 124, 0.5, 0.9);
         // Floating "↓" arrow above
         const arrow = this.add.image(x, y - 70, 'ui_stairs').setDisplaySize(36, 36).setDepth(125);
         this.tweens.add({
