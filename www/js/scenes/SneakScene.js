@@ -11,6 +11,7 @@ import { SNEAK } from '../sneak/SneakMetrics.js';
 import { TEMPLATES, BEATS } from '../sneak/templates/index.js';
 import { assembleNight } from '../sneak/NightAssembler.js';
 import { isFloor } from '../sneak/RoomTemplate.js';
+import { positionAt } from '../sneak/PatrolCycle.js';
 
 const CELL = SNEAK.CELL;
 const DEPTH = { FLOOR: 10, PROP: 40, HOLE: 45, PLAYER: 60, MONSTER: 62, CONE: 55, HUD: 900 };
@@ -48,6 +49,7 @@ export class SneakScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#0b0616');
 
         this.drawRoom();
+        this.setupCamera();
         this.spawnPlayer();
         this.spawnMonster();
 
@@ -61,11 +63,15 @@ export class SneakScene extends Phaser.Scene {
                 const px = x * CELL;
                 const py = y * CELL;
                 if (isFloor(this.tpl, x, y)) {
-                    g.fillStyle(((x + y) % 2 === 0) ? 0x221333 : 0x281838, 1);
+                    g.fillStyle(((x + y) % 2 === 0) ? 0x1a1030 : 0x1e1436, 1);
+                    g.fillRect(px, py, CELL, CELL);
                 } else {
-                    g.fillStyle(0x2a1a3e, 1);
+                    g.fillStyle(0x4a3568, 1);
+                    g.fillRect(px, py, CELL, CELL);
+                    // Светлая верхняя грань даёт стене высоту.
+                    g.fillStyle(0x6a4d90, 1);
+                    g.fillRect(px, py, CELL, 4);
                 }
-                g.fillRect(px, py, CELL, CELL);
             }
         }
 
@@ -83,6 +89,17 @@ export class SneakScene extends Phaser.Scene {
         }
     }
 
+    // Комната видна целиком — механика требует читать весь маршрут патруля.
+    setupCamera() {
+        const w = this.tpl.grid[0].length * CELL;
+        const h = this.tpl.grid.length * CELL;
+        const pad = 24;
+        const zoom = Math.min((this.viewW - pad * 2) / w, (this.viewH - pad * 2) / h, 1.6);
+        const cam = this.cameras.main;
+        cam.setZoom(Math.max(0.5, zoom));
+        cam.centerOn(w / 2, h / 2);
+    }
+
     spawnPlayer() {
         const px = (this.tpl.entry.x + 0.5) * CELL;
         const py = (this.tpl.entry.y + 0.5) * CELL;
@@ -92,8 +109,9 @@ export class SneakScene extends Phaser.Scene {
 
     spawnMonster() {
         if (!this.tpl.patrol || this.tpl.patrol.length < 2) return;
-        this.monster = { t: 0, x: 0, y: 0, angle: 0, suspicion: 0, state: 'patrol' };
-        this.monster.sprite = this.add.image(0, 0, 'd_cat').setDepth(DEPTH.MONSTER).setScale(0.32);
+        const start = positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, 0);
+        this.monster = { t: 0, x: start.x, y: start.y, angle: start.angle, suspicion: 0, state: 'patrol' };
+        this.monster.sprite = this.add.image(start.x, start.y, 'd_cat').setDepth(DEPTH.MONSTER).setScale(0.32);
         this.coneGfx = this.add.graphics().setDepth(DEPTH.CONE);
     }
 
