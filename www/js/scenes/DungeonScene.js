@@ -226,6 +226,8 @@ export class DungeonScene extends Phaser.Scene {
         this.runAlarmCount = data?.runAlarmCount || 0;     // for ghost-run achievement
         this.collectedRelics = data?.collectedRelics || [];
         this.maxHp = PLAYER.maxHp;
+        this._dmgMul = 1;
+        this._bossEngaged = false;
         this.speedMul = 1;
         this.dashCdMul = 1;
         this.fireCdMul = 1;
@@ -1414,7 +1416,7 @@ export class DungeonScene extends Phaser.Scene {
                         while (delta < -Math.PI) delta += Math.PI * 2;
                         const arc = e.def.biteArc || Math.PI / 2;
                         if (Math.abs(delta) < arc / 2 && this.player.invulnTimer <= 0) {
-                            const dmg = this.isPowerupActive('shield') ? 1 : (e.def.damage || 2);
+                            const dmg = this.isPowerupActive('shield') ? 1 : this._scaledDamage(e.def.damage || 2);
                             this.player.hp -= dmg;
                             bus.emit(SFX.TAKE_DAMAGE);
                             this._haptic(HAPTIC.hurt);
@@ -1489,7 +1491,7 @@ export class DungeonScene extends Phaser.Scene {
                 boss._attackState = 'idle';
                 boss._attackCd = 4000;
             }
-        } else if (boss._attackCd <= 0 && !boss.invulnUntil || this.time.now > (boss.invulnUntil || 0)) {
+        } else if (boss._attackCd <= 0 && this.time.now > (boss.invulnUntil || 0)) {
             // Pick attack
             const dx = this.player.x - boss.x, dy = this.player.y - boss.y;
             const dist = Math.hypot(dx, dy);
@@ -2553,7 +2555,7 @@ export class DungeonScene extends Phaser.Scene {
             // Hit player
             if (this.player.invulnTimer <= 0 &&
                 Math.hypot(b.x - this.player.x, b.y - this.player.y) < PLAYER.radius + 6) {
-                let dmg = 1;
+                let dmg = this._scaledDamage(1);
                 if (this.isPowerupActive('shield')) dmg = Math.max(1, Math.floor(dmg / 2));
                 this.player.hp -= dmg;
                 bus.emit(SFX.TAKE_DAMAGE);
@@ -2741,6 +2743,7 @@ export class DungeonScene extends Phaser.Scene {
         // Mode-aware scaling (Story linear, Endless log past ch5)
         const scale = scaleForFloor(this.chapter, this.runMode);
         const chapterMul = scale.hpMul;
+        this._dmgMul = scale.dmgMul;
         // Per-biome density multiplier (library = stealth-light, throne = boss focus)
         const biomeDensity = this.biome.enemyDensityMul || 1.0;
         const baseCount = Math.max(1, Math.round((2 + Math.floor((this.chapter - 1) * 0.7)) * biomeDensity * scale.countMul));
@@ -3841,7 +3844,7 @@ export class DungeonScene extends Phaser.Scene {
     aiSkeleton(e, dt, dx, dy, dist, sees) {
         // Throw bone at range
         e.shootCd = (e.shootCd || 0) - dt * 1000;
-        if (sees && dist > 100 && dist < 500 && e.shootCd <= 0) {
+        if (sees && dist > 100 && dist < 340 && e.shootCd <= 0) {
             e.shootCd = e.def.boneCooldownMs;
             this.spawnEnemyBolt(e.x, e.y, this.player.x, this.player.y, e.def.boneSpeed, 0xe8d4a0, true);
         }
@@ -3903,6 +3906,9 @@ export class DungeonScene extends Phaser.Scene {
                 this.tweens.add({ targets: t, y: e.y - 80, alpha: 0, duration: 800,
                     onComplete: () => t.destroy() });
                 this.cameras.main.shake(150, 0.008);
+                e.lungeCd = 500;          // a beat to react before the first lunge
+                e.vx = 0; e.vy = 0;
+                return;
             } else {
                 e.vx = 0; e.vy = 0;
                 return;
@@ -4337,7 +4343,16 @@ export class DungeonScene extends Phaser.Scene {
         } catch (err) {}
     }
 
+    _scaledDamage(base) {
+        return Math.max(1, Math.floor(base * (this._dmgMul || 1)));
+    }
+
     damageEnemy(e, dmg, kx, ky) {
+        if (e.kind === 'ghost' && !e.solid) {
+            // Phasing — the pie passes straight through. Show why nothing happened.
+            this.poofAt(e.x, e.y, 0xa0c0ff);
+            return;
+        }
         if (e.invulnUntil && this.time.now < e.invulnUntil) {
             // Sparks of "absorbed damage"
             this.poofAt(e.x, e.y, 0x80c0ff);
@@ -4460,7 +4475,7 @@ export class DungeonScene extends Phaser.Scene {
             }
             // Drop a heart sometimes
             const dropChance = (e.kind === 'boss') ? 1.0 : (e.kind === 'zombie' ? 0.35 : 0.22);
-            if (this.player.hp < PLAYER.maxHp && Math.random() < dropChance) {
+            if (this.player.hp < this.maxHp && Math.random() < dropChance) {
                 this.spawnHeart(e.x, e.y);
             }
             if (e.kind === 'slime' && !e.wasSplit && this.biome?.id !== 'kitchen') {
@@ -4853,8 +4868,6 @@ export class DungeonScene extends Phaser.Scene {
         });
         this.exit.glowHoldUntil = this.time.now + 600;  // let the unlock flash win over the bob for its duration
         this.tweens.add({ targets: this.exit.glow, alpha: 0.30, duration: 600 });
-        // Free grandma — only exists on the final floor
-        if (this.captive) this.freeCaptive();
     }
 
     showFloatingText(x, y, text, color, size, icon) {
@@ -4998,7 +5011,7 @@ export class DungeonScene extends Phaser.Scene {
                         this.damageEnemy(e, this.relicThornDmg, e.x - this.player.x, e.y - this.player.y);
                     }
                     // Power-up: shield halves damage (min 1)
-                    let dmg = e.def.damage;
+                    let dmg = this._scaledDamage(e.def.damage);
                     if (this.isPowerupActive('shield')) dmg = Math.max(1, Math.floor(dmg / 2));
                     this.player.hp -= dmg;
                     this._floorDamageTaken = true;   // for boss_no_hit achievement
@@ -5054,11 +5067,34 @@ export class DungeonScene extends Phaser.Scene {
                 this.pickupKey();
             }
         }
-        if (this.exit && this.hasKey) {
-            if (Math.hypot(this.exit.x - this.player.x, this.exit.y - this.player.y) < this.exit.radius + PLAYER.radius) {
-                this.win();
+        if (this.captive && !this.captive.freed) {
+            if (Math.hypot(this.captive.x - this.player.x, this.captive.y - this.player.y) < 74 + PLAYER.radius) {
+                this.freeCaptive();
             }
         }
+        if (this.exit && this.hasKey) {
+            if (Math.hypot(this.exit.x - this.player.x, this.exit.y - this.player.y) < this.exit.radius + PLAYER.radius) {
+                if (this._finaleBlocker()) this._nagFinale();
+                else this.win();
+            }
+        }
+    }
+
+    // On the last floor the door is not the finish line: grandma must be out of the
+    // cage and Dracula must be down. Returns the reason you cannot leave, or null.
+    _finaleBlocker() {
+        if (this.captive && !this.captive.freed) return 'Сначала освободи бабушку!';
+        const boss = this.enemies && this.enemies.find(e => e.kind === 'boss' && !e.dead);
+        if (boss) return 'Дракула не пустит! Победи его.';
+        return null;
+    }
+
+    _nagFinale() {
+        const msg = this._finaleBlocker();
+        if (!msg || this.time.now < (this._finaleNagUntil || 0)) return;
+        this._finaleNagUntil = this.time.now + 2200;
+        this.showFloatingText(this.player.x, this.player.y - 56, msg, '#ffd040', 22);
+        bus.emit(UI.SHOP_DENY);
     }
 
     moveWithWalls(ent, radius, dt) {
@@ -5461,6 +5497,14 @@ export class DungeonScene extends Phaser.Scene {
             color: '#fff0a0', stroke: '#0a0410', strokeThickness: 5, fontStyle: '900',
         }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(D);
         this.keyIcon = this.add.image(0, 0, 'd_key').setOrigin(0, 0).setScrollFactor(0).setDepth(D).setAlpha(0.25);
+        // Boss health bar — hidden until a boss is on the floor
+        this.bossBarBg = this.add.graphics().setScrollFactor(0).setDepth(D).setVisible(false);
+        this.bossBarFill = this.add.graphics().setScrollFactor(0).setDepth(D + 1).setVisible(false);
+        this.bossBarName = this.add.text(0, 0, 'ДРАКУЛА', {
+            fontFamily: FONT, fontSize: '14px', color: '#ffd9e8',
+            stroke: '#0a0410', strokeThickness: 4, fontStyle: '900',
+        }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(D + 1).setVisible(false);
+        this._bossBarShown = 0;
         this.objectiveText = this.add.text(0, 0, 'Найди ключ', {
             fontFamily: FONT, fontSize: '17px', fontStyle: '500',
             color: '#f0d8ff', stroke: '#0a0410', strokeThickness: 3
@@ -5534,6 +5578,12 @@ export class DungeonScene extends Phaser.Scene {
             this.heartIcons[i].setPosition(h.x, h.y).setDisplaySize(h.size, h.size);
         }
         this.keyIcon.setPosition(L.key.x, L.key.y).setDisplaySize(L.key.w, L.key.h);
+        const bw = Math.min(Math.round(this.viewW * 0.58), Math.round(300 * L.s));
+        const bh = Math.round(14 * L.s);
+        // Clear of the cheese counter, which sits centred on the top row
+        const cheeseBottom = L.cheese.textY + L.cheese.fontSize * 0.6;
+        const bTop = Math.max(L.hearts[0].y + L.hearts[0].size, cheeseBottom) + Math.round(22 * L.s);
+        this._bossBar = { x: Math.round((this.viewW - bw) / 2), y: Math.round(bTop), w: bw, h: bh };
         this.cheeseIcon.setPosition(L.cheese.iconX, L.cheese.iconY).setDisplaySize(L.cheese.iconW, L.cheese.iconH);
         this.cheeseText.setPosition(L.cheese.textX, L.cheese.textY).setFontSize(L.cheese.fontSize);
         this.comboText.setPosition(L.combo.x, L.combo.y).setFontSize(L.combo.fontSize);
@@ -5607,6 +5657,7 @@ export class DungeonScene extends Phaser.Scene {
         // Objective text hidden permanently — compass arrow conveys "where to go"
         // COMPASS — points to current objective from screen center
         this.updateCompass();
+        this.updateBossBar();
 
         // Combo expires
         if (this.time.now > this._comboExpire) this._combo = 0;
@@ -6050,13 +6101,65 @@ export class DungeonScene extends Phaser.Scene {
         }
     }
 
+    updateBossBar() {
+        if (!this.bossBarBg || !this._bossBar) return;
+        let boss = this.enemies && this.enemies.find(e => e.kind === 'boss' && !e.dead);
+        // The bar belongs to the fight, not the floor: it appears when Dracula
+        // actually engages and stays until he falls. The compass steps aside for it —
+        // during the fight the objective is right in front of you.
+        if (boss && !this._bossEngaged) {
+            const near = Math.hypot(boss.x - this.player.x, boss.y - this.player.y) < 430;
+            if (near || (boss.alertTimer || 0) > 0) this._bossEngaged = true;
+            else boss = null;
+        }
+        if (!boss) {
+            if (this._bossBarShown) {
+                this._bossBarShown = 0;
+                this._bossEngaged = false;
+                this.bossBarBg.setVisible(false); this.bossBarFill.setVisible(false); this.bossBarName.setVisible(false);
+            }
+            return;
+        }
+        const frac = Math.max(0, Math.min(1, boss.hp / (boss.maxHp || boss.hp || 1)));
+        if (this._bossBarShown === 0) {
+            this.bossBarBg.setVisible(true); this.bossBarFill.setVisible(true); this.bossBarName.setVisible(true);
+        }
+        // Only redraw when the value actually moved — this runs every frame
+        if (this._bossBarShown && Math.abs(this._bossBarFrac - frac) < 0.001) return;
+        this._bossBarShown = 1;
+        this._bossBarFrac = frac;
+        const b = this._bossBar;
+        this.bossBarName.setPosition(b.x + b.w / 2, b.y - 3);
+        this.bossBarBg.clear();
+        this.bossBarBg.fillStyle(0x140820, 0.9);
+        this.bossBarBg.fillRoundedRect(b.x, b.y, b.w, b.h, b.h / 2);
+        this.bossBarBg.lineStyle(2, 0xe8b54a, 0.8);
+        this.bossBarBg.strokeRoundedRect(b.x, b.y, b.w, b.h, b.h / 2);
+        this.bossBarFill.clear();
+        const iw = Math.max(0, (b.w - 6) * frac);
+        if (iw > 2) {
+            // Red while healthy, hotter as he nears death — reads at a glance on a phone
+            const col = frac > 0.5 ? 0xc02040 : (frac > 0.25 ? 0xe05020 : 0xff8020);
+            this.bossBarFill.fillStyle(col, 1);
+            this.bossBarFill.fillRoundedRect(b.x + 3, b.y + 3, iw, b.h - 6, (b.h - 6) / 2);
+        }
+    }
+
     updateCompass() {
         if (!this.compass) return;
+        if (this._bossBarShown) {                 // boss fight owns the top of the screen
+            if (this._compassKey !== null) {
+                this.compass.clear();
+                this.compassLabel.setVisible(false);
+                this._compassKey = null;
+            }
+            return;
+        }
         // Target: key first -> captive (final floor) or exit door (intermediate floor)
         let target, icon;
         if (!this.hasKey && this.keyPickup && !this.keyPickup.taken) {
             target = this.keyPickup; icon = 'key';
-        } else if (this.captive) {
+        } else if (this.captive && !this.captive.freed) {
             target = this.captive; icon = 'grandma';
         } else if (this.exit) {
             target = this.exit; icon = 'exit';
