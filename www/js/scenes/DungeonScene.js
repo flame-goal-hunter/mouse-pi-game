@@ -573,6 +573,7 @@ export class DungeonScene extends Phaser.Scene {
         this.updateCandelabras(totalDt);
         this.updateSpookyEyes();
         if (this.dashBtnBase && this.dashBtnBase.visible) this.updateDashButton();
+        if (this.crouchBtnBase && this.crouchBtnBase.visible) this.updateStealthButtons();
         this.updateHUD();
         if (this.player.hp <= 0) this.lose();
     }
@@ -5814,6 +5815,18 @@ export class DungeonScene extends Phaser.Scene {
         this.dashBtnLabel = this.add.image(0, 0, 'ui_dash').setOrigin(0.5).setScrollFactor(0)
             .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(DASH_R * 0.8, DASH_R * 0.8);
 
+        // === STEALTH BUTTONS (left side) — crouch and distraction book ===
+        const SR = Math.round(DASH_R * 0.86);
+        this.crouchBtn = { R: SR };
+        this.crouchBtnBase = ctl('ctl_dash', SR * 2, 'dash', LAYER.UI_TOUCH_BASE);
+        this.crouchBtnLabel = this.add.image(0, 0, 'ui_paw').setOrigin(0.5).setScrollFactor(0)
+            .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(SR * 0.8, SR * 0.8);
+        this.bookBtn = { R: SR };
+        this.bookBtnBase = ctl('ctl_dash', SR * 2, 'dash', LAYER.UI_TOUCH_BASE);
+        this.bookBtnLabel = this.add.image(0, 0, 'ui_book').setOrigin(0.5).setScrollFactor(0)
+            .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(SR * 0.8, SR * 0.8);
+        this._crouchBtnOn = undefined; this._bookBtnHas = undefined;
+
         this.input.on('pointerdown', (p) => this.touchDown(this._cssPointer(p)));
         this.input.on('pointermove', (p) => this.touchMove(this._cssPointer(p)));
         this.input.on('pointerup', (p) => this.touchUp(this._cssPointer(p)));
@@ -5866,6 +5879,38 @@ export class DungeonScene extends Phaser.Scene {
             this.dashBtnBase.setPosition(this.dashBtn.x, this.dashBtn.y);
             this.dashBtnLabel.setPosition(this.dashBtn.x, this.dashBtn.y);
         }
+        // CROUCH + BOOK — stacked above the movement stick, mirroring dash
+        if (this.crouchBtn && this.joy) {
+            const gap = L.touch.dashGap;
+            const cx = sideOffL;
+            const cy = H - bottomOff - this.joy.R - this.crouchBtn.R - gap;
+            this.crouchBtn.x = cx; this.crouchBtn.y = cy;
+            this.crouchBtnBase.setPosition(cx, cy);
+            this.crouchBtnLabel.setPosition(cx, cy);
+            const by = cy - this.crouchBtn.R - this.bookBtn.R - gap;
+            this.bookBtn.x = cx; this.bookBtn.y = by;
+            this.bookBtnBase.setPosition(cx, by);
+            this.bookBtnLabel.setPosition(cx, by);
+        }
+    }
+
+    // Dim the two stealth buttons to match their state, the way dash shows its cooldown.
+    updateStealthButtons() {
+        if (!this.crouchBtnBase) return;
+        const on = !!(this.player && this.player.crouch);
+        if (this._crouchBtnOn !== on) {
+            this._crouchBtnOn = on;
+            this.crouchBtnBase.setAlpha(on ? 0.95 : 0.72);
+            this.crouchBtnLabel.setAlpha(on ? 1 : 0.55);
+            if (on) this.crouchBtnBase.setTint(0x80c0ff); else this.crouchBtnBase.clearTint();
+        }
+        const has = (this.distractionBooks || 0) > 0;
+        if (this._bookBtnHas !== has) {
+            this._bookBtnHas = has;
+            this.bookBtnBase.setAlpha(has ? 0.72 : 0.35).setTint(has ? 0xffffff : 0x5b6f9e);
+            if (has) this.bookBtnBase.clearTint();
+            this.bookBtnLabel.setAlpha(has ? 1 : 0.3);
+        }
     }
 
     // Redraw dash cooldown indicator (called from update)
@@ -5908,6 +5953,22 @@ export class DungeonScene extends Phaser.Scene {
                     duration: 80, yoyo: true, ease: 'Quad.easeOut'
                 });
             }
+            return;
+        }
+        const tapPulse = (objs) => {
+            for (const o of objs) this.tweens.add({
+                targets: o, scaleX: o.scaleX * 0.85, scaleY: o.scaleY * 0.85,
+                duration: 80, yoyo: true, ease: 'Quad.easeOut'
+            });
+        };
+        if (this.crouchBtn && Math.hypot(p.x - this.crouchBtn.x, p.y - this.crouchBtn.y) < this.crouchBtn.R + 14) {
+            this.toggleCrouch();
+            tapPulse([this.crouchBtnBase, this.crouchBtnLabel]);
+            return;
+        }
+        if (this.bookBtn && Math.hypot(p.x - this.bookBtn.x, p.y - this.bookBtn.y) < this.bookBtn.R + 14) {
+            this.throwDistractionBook();
+            tapPulse([this.bookBtnBase, this.bookBtnLabel]);
             return;
         }
         // Avoid the exit-X button area top-right
@@ -6272,6 +6333,7 @@ export class DungeonScene extends Phaser.Scene {
             ...(this.heartIcons || []), this.cheeseIcon, this.cheeseText, this.keyIcon, this.compass, this.compassLabel,
             this.powerupIcon, this.powerupText, this.suspicionMeter, this.suspicionLabel,
             this.bookCounterIcon, this.bookCounterText, this.crouchIcon, this.exitBtnBg, this.exitBtn,
+            this.crouchBtnBase, this.crouchBtnLabel, this.bookBtnBase, this.bookBtnLabel,
             this.pauseBtnBg, this.pauseBtn, this.pauseHit,
         ];
         for (const o of objs) if (o) o.setVisible(v);
