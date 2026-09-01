@@ -41,7 +41,10 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Same-origin only: multiplayer signalling and any CDN stay on the network.
+  // Multiplayer and health endpoints always go to the network.
+  if (url.pathname.startsWith('/colyseus') || url.pathname.startsWith('/health') ||
+      url.pathname.startsWith('/matchmake')) return;
+  // Same-origin only: any CDN stays on the network.
   if (url.origin !== self.location.origin) return;
 
   // Pages: network first (so a fresh deploy is picked up), falling back to cache offline.

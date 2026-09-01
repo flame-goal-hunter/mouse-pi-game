@@ -3,6 +3,7 @@ import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { SnowballRoom } from './rooms/SnowballRoom.js';
 
 const PORT = Number(process.env.PORT) || 2567;
@@ -18,8 +19,22 @@ app.use((req, res, next) => {
     next();
 });
 
-app.get('/', (_req, res) => {
-    res.send('Mousie Pi snowball server OK');
+// The game itself is served from this same app: one origin for the PWA and the
+// WebSocket, so there is no CORS and no second host to pay for.
+const WWW = fileURLToPath(new URL('../../www', import.meta.url));
+app.use(express.static(WWW, {
+    setHeaders: (res, filePath) => {
+        // The shell must not be cached by the CDN/browser beyond the service worker's control
+        if (filePath.endsWith('sw.js') || filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+        } else {
+            res.setHeader('Cache-Control', 'public, max-age=604800');
+        }
+    },
+}));
+
+app.get('/health', (_req, res) => {
+    res.json({ ok: true, rooms: 'snowball' });
 });
 
 // Colyseus dashboard for debugging (http://localhost:2567/colyseus)
@@ -34,6 +49,6 @@ gameServer.define('snowball', SnowballRoom);
 
 gameServer.listen(PORT).then(() => {
     console.log(`[server] Mousie Pi snowball server listening on port ${PORT}`);
-    console.log(`[server] Connect via ws://localhost:${PORT}`);
+    console.log(`[server] Game + multiplayer on http://localhost:${PORT}`);
     console.log(`[server] Monitor: http://localhost:${PORT}/colyseus`);
 });

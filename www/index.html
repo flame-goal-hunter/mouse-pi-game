@@ -1514,8 +1514,15 @@
                         let serverUrl = localStorage.getItem('colyseusServer');
                         if (!serverUrl) {
                             // First time — ask for server URL. Default = browser host (works on web localhost)
-                            const guess = (location.protocol === 'https:' ? 'wss://' : 'ws://') + (location.hostname || 'localhost') + ':2567';
-                            serverUrl = prompt('Адрес сервера:', guess) || guess;
+                            // Served from the game server itself (Heroku): same host, standard port.
+                            // Only fall back to asking when the page is opened from a file or a static host.
+                            const sameOrigin = location.protocol === 'https:' || location.protocol === 'http:';
+                            const guess = sameOrigin
+                                ? (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host
+                                : 'ws://localhost:2567';
+                            serverUrl = (location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')
+                                ? guess
+                                : (prompt('Адрес сервера:', guess) || guess);
                             localStorage.setItem('colyseusServer', serverUrl);
                         }
                         startOnlineSnowball(serverUrl, nick);

@@ -4,14 +4,15 @@
   "description": "Мышонок Пи - платформер для Android",
   "main": "www/index.html",
   "scripts": {
-    "start": "npx serve www",
+    "start": "node server/src/index.js",
     "build": "echo 'Static HTML - no build needed'",
     "cap:init": "npx cap init \"Мышонок Пи\" com.mousiepi.game --web-dir www",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
     "android:build": "cd android && ./gradlew assembleDebug",
-    "android:release": "cd android && ./gradlew assembleRelease"
+    "android:release": "cd android && ./gradlew assembleRelease",
+    "start:static": "npx serve www"
   },
   "keywords": [
     "game",
@@ -31,6 +32,16 @@
     "@capacitor/core": "^5.0.0",
     "@capacitor/splash-screen": "^5.0.0",
     "@capacitor/status-bar": "^5.0.0",
-    "phaser-navmesh": "^2.3.1"
+    "phaser-navmesh": "^2.3.1",
+    "@colyseus/core": "^0.15.0",
+    "@colyseus/monitor": "^0.15.0",
+    "@colyseus/schema": "^2.0.0",
+    "@colyseus/ws-transport": "^0.15.0",
+    "colyseus": "^0.15.0",
+    "colyseus.js": "^0.15.28",
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
