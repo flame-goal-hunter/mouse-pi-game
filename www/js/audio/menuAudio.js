@@ -5,7 +5,7 @@
 // prefs.master, silenced by prefs.muted. One <audio> per sound, cloned on
 // rapid repeats so overlapping taps don't cut each other off.
 // ============================================
-import { SFX_FILES } from './SoundMap.js';
+import { SFX_FILES, BGM_FILES } from './SoundMap.js';
 import { Progress } from '../storage/ProgressStore.js';
 
 const SOUNDS = {
@@ -78,4 +78,64 @@ export function playMenuSound(name) {
         const p = node.play();
         if (p && typeof p.catch === 'function') p.catch(() => {});
     } catch (e) {}
+}
+
+// ============================================
+// Menu music — the castle theme under the menu, same track the kitchen floors use.
+// Browsers block autoplay, so it starts on the player's first interaction and
+// obeys the same music/master/mute preferences as the game.
+// ============================================
+const BGM_KEY = 'hall';
+let _bgm = null;
+let _fade = null;
+
+function bgmVolume() {
+    const p = safePrefs();
+    if (!p || p.muted) return 0;
+    const base = (BGM_FILES[BGM_KEY] && BGM_FILES[BGM_KEY][1]) || 0.34;
+    const music = typeof p.music === 'number' ? p.music : 1;
+    const master = typeof p.master === 'number' ? p.master : 1;
+    return Math.max(0, Math.min(1, base * music * master));
+}
+
+export function startMenuMusic() {
+    const target = bgmVolume();
+    if (!_bgm) {
+        const file = (BGM_FILES[BGM_KEY] && BGM_FILES[BGM_KEY][0]) || BGM_KEY;
+        _bgm = new Audio(`assets/audio/bgm/${file}.ogg`);
+        _bgm.loop = true;
+        _bgm.preload = 'auto';
+        _bgm.volume = 0;
+    }
+    if (target <= 0) { _bgm.pause(); return; }
+    const play = _bgm.play();
+    if (play && play.catch) play.catch(() => {});
+    if (_fade) clearInterval(_fade);
+    const step = target / 20;
+    _fade = setInterval(() => {                       // ~1 s fade-in, no sudden blast
+        const v = Math.min(target, (_bgm.volume || 0) + step);
+        _bgm.volume = v;
+        if (v >= target) { clearInterval(_fade); _fade = null; }
+    }, 50);
+}
+
+export function refreshMenuMusicVolume() {
+    if (!_bgm) return;
+    const target = bgmVolume();
+    if (_fade) { clearInterval(_fade); _fade = null; }
+    _bgm.volume = target;
+    if (target <= 0) _bgm.pause();
+}
+
+// Autoplay policy: the first touch/click/key anywhere is our permission to start.
+if (typeof window !== 'undefined') {
+    const kick = () => {
+        startMenuMusic();
+        window.removeEventListener('pointerdown', kick);
+        window.removeEventListener('keydown', kick);
+    };
+    window.addEventListener('pointerdown', kick, { once: false });
+    window.addEventListener('keydown', kick, { once: false });
+    // Leaving for a run: stop cleanly so the game's own music takes over.
+    window.addEventListener('pagehide', () => { if (_bgm) { _bgm.pause(); } });
 }
