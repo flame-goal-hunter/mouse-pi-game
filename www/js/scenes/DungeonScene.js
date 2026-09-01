@@ -131,6 +131,11 @@ const PLAYER = {
 
 const PIE = { speed: 580, life: 1400, radius: 10, damage: 1 };
 
+// Feel: aim assist cone/reach, the dash-press buffer, and the haptic pulse lengths (ms)
+const AIM_ASSIST = { cone: Math.PI / 18, range: 420 };   // +-10 deg
+const DASH_BUFFER_MS = 150;
+const HAPTIC = { dash: 12, hurt: 18, hit: 8 };
+
 const ENEMY_DEFS = {
     zombie: { speed: 78,  hp: 4, damage: 1, radius: 30, detectRange: 700, knockback: 220, scale: 0.30, alertMs: 4000 },
     cat:    { speed: 130, hp: 2, damage: 1, radius: 26, detectRange: 600, knockback: 280, scale: 0.30,
@@ -325,6 +330,8 @@ export class DungeonScene extends Phaser.Scene {
         this._pausedTweens = null;
         this._pauseTouchWasVisible = false;
         this._pauseStartedAt = 0;
+        this._dashBufferedAt = 0;
+        this._hapticsOn = Progress.getAudioPrefs().haptics !== false;
         this._shopDrag = null;
         this._shopScroll = [0, 0];
         this._pickerSilent = false;
@@ -1410,6 +1417,7 @@ export class DungeonScene extends Phaser.Scene {
                             const dmg = this.isPowerupActive('shield') ? 1 : (e.def.damage || 2);
                             this.player.hp -= dmg;
                             bus.emit(SFX.TAKE_DAMAGE);
+                            this._haptic(HAPTIC.hurt);
                             this.player.invulnTimer = PLAYER.invulnMs + (this.relicInvulnBonusMs || 0);
                             this.cameras.main.shake(200, 0.014);
                         }
@@ -1561,6 +1569,7 @@ export class DungeonScene extends Phaser.Scene {
                         && this.player.invulnTimer <= 0) {
                         this.player.hp -= 2;
                         bus.emit(SFX.TAKE_DAMAGE);
+                        this._haptic(HAPTIC.hurt);
                         this.player.invulnTimer = PLAYER.invulnMs + (this.relicInvulnBonusMs || 0);
                     }
                 }
@@ -2271,8 +2280,13 @@ export class DungeonScene extends Phaser.Scene {
 
     tryDash() {
         if (this.state !== 'play') return;
-        if (this.player.dashCooldown > 0 || this.player.dashing) return;
+        if (this.player.dashCooldown > 0 || this.player.dashing) {
+            this._dashBufferedAt = this.time.now;   // fires the instant the cooldown ends
+            return;
+        }
+        this._dashBufferedAt = 0;
         bus.emit(SFX.PLAYER_DASH);
+        this._haptic(HAPTIC.dash);
         // Dash cooldown also benefits from "Быстрый рывок" upgrade
         const dashCdMs = PLAYER.dashCooldownMs * (this.dashCdMul || 1);
         // Direction: movement input if any, else aim direction
@@ -2411,6 +2425,7 @@ export class DungeonScene extends Phaser.Scene {
                 if (this.isPowerupActive('shield')) dmg = Math.max(1, Math.floor(dmg / 2));
                 this.player.hp -= dmg;
                 bus.emit(SFX.TAKE_DAMAGE);
+                this._haptic(HAPTIC.hurt);
                 this.player._hazardCd = 800;
                 this.player.invulnTimer = 400;
                 this.cameras.main.shake(120, 0.006);
@@ -2431,6 +2446,11 @@ export class DungeonScene extends Phaser.Scene {
             this.player.vy = approach(this.player.vy, ty, (iy !== 0 ? accel : friction) * dt);
         }
         if (this.player.dashCooldown > 0) this.player.dashCooldown -= dt * 1000;
+        if (this._dashBufferedAt && this.player.dashCooldown <= 0 && !this.player.dashing) {
+            const age = this.time.now - this._dashBufferedAt;
+            this._dashBufferedAt = 0;
+            if (age <= DASH_BUFFER_MS) this.tryDash();
+        }
 
         if (ix > 0.1) this.player.facing = 1;
         else if (ix < -0.1) this.player.facing = -1;
@@ -2537,6 +2557,7 @@ export class DungeonScene extends Phaser.Scene {
                 if (this.isPowerupActive('shield')) dmg = Math.max(1, Math.floor(dmg / 2));
                 this.player.hp -= dmg;
                 bus.emit(SFX.TAKE_DAMAGE);
+                this._haptic(HAPTIC.hurt);
                 this.player.invulnTimer = PLAYER.invulnMs;
                 this.cameras.main.shake(180, 0.010);
                 this._combo = 0;
@@ -2570,16 +2591,14 @@ export class DungeonScene extends Phaser.Scene {
         // Pie Storm relic — 5-way fan instead of triple-shot
         this._pieStormBurst = this.relicPieStorm === true;
         let angle = this.player.aimAngle || 0;
-        // Soft aim assist
-        const SNAP_CONE = Math.PI / 12;
-        const SNAP_RANGE = 500;
-        let bestEnemy = null, bestDelta = SNAP_CONE;
+        // Soft aim assist — snap to the enemy closest to the aim line, inside the cone and in reach
+        let bestEnemy = null, bestDelta = AIM_ASSIST.cone;
         for (const e of this.enemies) {
             if (e.dead) continue;
             const ex = e.x - this.player.x;
             const ey = e.y - this.player.y;
             const d = Math.hypot(ex, ey);
-            if (d > SNAP_RANGE || d < 10) continue;
+            if (d > AIM_ASSIST.range || d < 10) continue;
             const enemyAngle = Math.atan2(ey, ex);
             let delta = Math.abs(angle - enemyAngle);
             if (delta > Math.PI) delta = Math.PI * 2 - delta;
@@ -4866,6 +4885,7 @@ export class DungeonScene extends Phaser.Scene {
                 if (p._hitSet && p._hitSet.has(e)) continue;   // don't re-hit same enemy after pierce
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.def.radius + PIE.radius) {
                     this.poofAt(p.x, p.y, 0xf5b048);
+                    this._haptic(HAPTIC.hit);
                     this.damageEnemy(e, PIE.damage, p.vx, p.vy);
                     const pierces = (this.relicPierce || 0);
                     if (pierces > 0) {
@@ -4959,6 +4979,7 @@ export class DungeonScene extends Phaser.Scene {
                     this.player.hp -= dmg;
                     this._floorDamageTaken = true;   // for boss_no_hit achievement
                     bus.emit(SFX.TAKE_DAMAGE);
+                    this._haptic(HAPTIC.hurt);
                     // Sturdy relic — extra invuln window
                     this.player.invulnTimer = PLAYER.invulnMs + (this.relicInvulnBonusMs || 0);
                     const k = 360, l = d || 1;
@@ -5378,6 +5399,14 @@ export class DungeonScene extends Phaser.Scene {
         for (const o of fixed) (o.depth <= 800 ? this.fxLayer : this.uiLayer).add(o);
         this.uiLayer.sort('depth');
     }
+    // Short vibration pulse; silently absent on desktop and switchable off in the pause screen
+    _haptic(ms) {
+        if (!this._hapticsOn) return;
+        try {
+            if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') navigator.vibrate(ms);
+        } catch (e) {}
+    }
+
     _cssPointer(p) {
         const d = this.dpr;
         return {
@@ -5644,7 +5673,7 @@ export class DungeonScene extends Phaser.Scene {
         this.joyKnob = ctl('ctl_knob_move', JOY_R * 0.9, 'knob', LAYER.UI_TOUCH_KNOB);
 
         // === RIGHT AIM JOYSTICK ===
-        this.aimStick = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
+        this.aimStick = { active: false, live: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
         this.aimStickBase = ctl('ctl_base_aim', JOY_R * 2, 'base', LAYER.UI_TOUCH_BASE);
         this.aimStickHint = this.add.image(0, 0, 'd_pie').setOrigin(0.5).setScrollFactor(0)
             .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(JOY_R * 0.72, JOY_R * 0.72);
@@ -5852,6 +5881,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         if (this.aimStick && this.aimStick.active && this.aimStick.pointerId === p.id) {
             this.aimStick.active = false;
+            this.aimStick.live = false;
             this.aimStick.pointerId = null;
             this.aimStick.dx = 0; this.aimStick.dy = 0;
             const cam = this.cameras.main;
@@ -5879,10 +5909,10 @@ export class DungeonScene extends Phaser.Scene {
             this.joy.dy = dy / len;
             this.joyKnob.setPosition(this.joy.baseX + this.joy.dx * maxR, this.joy.baseY + this.joy.dy * maxR);
         } else {
-            // Within stick — sensitivity curve. Power 0.7 means tiny movements
-            // map to ~22% input instead of ~10%, much more responsive feel.
+            // Within stick — sensitivity curve. Power 0.6 reaches full speed a little
+            // earlier than a linear stick without losing fine control near the centre.
             const t = (len - DEAD) / (maxR - DEAD);
-            const curved = Math.pow(Math.min(1, t), 0.7);
+            const curved = Math.pow(Math.min(1, t), 0.6);
             this.joy.dx = (dx / len) * curved;
             this.joy.dy = (dy / len) * curved;
             this.joyKnob.setPosition(p.x, p.y);
@@ -5893,13 +5923,16 @@ export class DungeonScene extends Phaser.Scene {
         const dy = p.y - this.aimStick.baseY;
         const len = Math.hypot(dx, dy);
         const maxR = this.aimStick.R;
-        // Tinier dead zone for aim (~3%) — precision matters
+        // Dead zone with hysteresis: the thumb has to push past 6% to start aiming, and the
+        // aim only lets go under 3% — a thumb resting near the centre can no longer jitter it.
         const DEAD = maxR * 0.03;
-        if (len < DEAD) {
+        if (len < (this.aimStick.live ? DEAD : maxR * 0.06)) {
+            this.aimStick.live = false;
             this.aimStick.dx = 0; this.aimStick.dy = 0;
             this.aimStickKnob.setPosition(this.aimStick.baseX, this.aimStick.baseY);
             return;
         }
+        this.aimStick.live = true;
         if (len > maxR) {
             this.aimStick.dx = dx / len;
             this.aimStick.dy = dy / len;
@@ -6076,7 +6109,7 @@ export class DungeonScene extends Phaser.Scene {
         // Force-clear stick state when hiding so a stale touch can't drive Pi after we transition away
         if (!visible) {
             if (this.joy) { this.joy.active = false; this.joy.dx = 0; this.joy.dy = 0; this.joy.pointerId = null; }
-            if (this.aimStick) { this.aimStick.active = false; this.aimStick.dx = 0; this.aimStick.dy = 0; this.aimStick.pointerId = null; }
+            if (this.aimStick) { this.aimStick.active = false; this.aimStick.live = false; this.aimStick.dx = 0; this.aimStick.dy = 0; this.aimStick.pointerId = null; }
         }
     }
 
@@ -6959,26 +6992,40 @@ export class DungeonScene extends Phaser.Scene {
             g.y = rcy;
         });
 
-        // --- Mute toggle
+        // --- Sound and vibration toggles, side by side so the row costs the panel no extra height
         const muteCy = rowsTop + rowH * 3 + rowGap * 2 + gapM + muteH / 2;
-        const muteG = addEl(this.add.graphics(), D + 4);
-        muteG.fillStyle(UI_C.surface, 1);
-        muteG.fillRoundedRect(x0, muteCy - muteH / 2, x1 - x0, muteH, 14);
-        muteG.lineStyle(1.5, UI_C.text, 0.14);
-        muteG.strokeRoundedRect(x0, muteCy - muteH / 2, x1 - x0, muteH, 14);
+        const halfGap = 10, halfW = Math.floor((x1 - x0 - halfGap) / 2);
         const muteIcoSize = Math.round(muteH * 0.52);
-        let muteIcon = addEl(this._uiIcon(x0 + 14 + muteIcoSize / 2, muteCy, 'ui_sound', muteIcoSize), D + 5);
-        const muteLabel = addEl(this.add.text(x0 + 14 + muteIcoSize + 12, muteCy, '', {
-            fontFamily: UI_F.body, fontStyle: '700', fontSize: labelFs + 'px', color: '#f4ecff'
-        }).setOrigin(0, 0.5), D + 5);
-        addEl(this.add.rectangle(cx, muteCy, x1 - x0, Math.max(48, muteH), 0xffffff, 0.001)
-            .setInteractive({ useHandCursor: true })
-            .on('pointerup', () => {
-                if (window.audio && window.audio.toggleMute) window.audio.toggleMute();
-                else { Progress.toggleMute(); }
-                bus.emit(UI.BUTTON_CLICK);
-                refresh();
-            }), D + 6);
+        const pillPad = Math.max(8, Math.round(halfW * 0.07));
+        const togglePill = (px, iconKey, onTap) => {
+            const g = addEl(this.add.graphics(), D + 4);
+            g.fillStyle(UI_C.surface, 1);
+            g.fillRoundedRect(px, muteCy - muteH / 2, halfW, muteH, 14);
+            g.lineStyle(1.5, UI_C.text, 0.14);
+            g.strokeRoundedRect(px, muteCy - muteH / 2, halfW, muteH, 14);
+            const icon = addEl(this._uiIcon(px + pillPad + muteIcoSize / 2, muteCy, iconKey, muteIcoSize), D + 5);
+            const label = addEl(this.add.text(px + pillPad + muteIcoSize + 8, muteCy, '', {
+                fontFamily: UI_F.body, fontStyle: '700', fontSize: labelFs + 'px', color: '#f4ecff'
+            }).setOrigin(0, 0.5), D + 5);
+            addEl(this.add.rectangle(px + halfW / 2, muteCy, halfW, Math.max(48, muteH), 0xffffff, 0.001)
+                .setInteractive({ useHandCursor: true })
+                .on('pointerup', () => { onTap(); bus.emit(UI.BUTTON_CLICK); refresh(); }), D + 6);
+            return { icon, label, textW: halfW - pillPad * 2 - muteIcoSize - 8 };
+        };
+        const soundPill = togglePill(x0, 'ui_sound', () => {
+            if (window.audio && window.audio.toggleMute) window.audio.toggleMute();
+            else { Progress.toggleMute(); }
+        });
+        const hapticPill = togglePill(x0 + halfW + halfGap, 'ui_bolt', () => {
+            const on = Progress.getAudioPrefs().haptics === false;
+            Progress.setAudioPref('haptics', on);
+            this._hapticsOn = on;
+            if (on) this._haptic(HAPTIC.hurt);
+        });
+        const setPillLabel = (pill, text, color) => {
+            pill.label.setScale(1).setText(text).setColor(color);
+            if (pill.label.width > pill.textW) pill.label.setScale(pill.textW / pill.label.width);
+        };
 
         const refresh = () => {
             const p = Progress.getAudioPrefs();
@@ -7001,14 +7048,17 @@ export class DungeonScene extends Phaser.Scene {
                 labels[i].setAlpha(dim);
             });
             const key = p.muted ? 'ui_sound_off' : 'ui_sound';
-            if (muteIcon.texture.key !== key) {
-                muteIcon.setTexture(key);
-                const src = muteIcon.texture.getSourceImage();
+            if (soundPill.icon.texture.key !== key) {
+                soundPill.icon.setTexture(key);
+                const src = soundPill.icon.texture.getSourceImage();
                 const f = muteIcoSize / Math.max(1, src.width, src.height);
-                muteIcon.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+                soundPill.icon.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
             }
-            muteIcon.setAlpha(p.muted ? 0.6 : 1);
-            muteLabel.setText(p.muted ? 'Звук выкл' : 'Звук вкл').setColor(p.muted ? '#b9a6d4' : '#f4ecff');
+            soundPill.icon.setAlpha(p.muted ? 0.6 : 1);
+            setPillLabel(soundPill, p.muted ? 'Звук выкл' : 'Звук вкл', p.muted ? '#b9a6d4' : '#f4ecff');
+            const hOn = p.haptics !== false;
+            hapticPill.icon.setAlpha(hOn ? 1 : 0.45);
+            setPillLabel(hapticPill, hOn ? 'Вибро вкл' : 'Вибро выкл', hOn ? '#f4ecff' : '#b9a6d4');
         };
         refresh();
 

@@ -70,7 +70,8 @@ const DEFAULT_STATE = {
         sfx: 0.85,
         music: 0.60,
         ui: 0.80,
-        muted: false
+        muted: false,
+        haptics: true
     },
 
     // === Versioning for migrations ===
