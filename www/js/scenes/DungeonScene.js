@@ -185,13 +185,32 @@ function scaleForFloor(chapter, mode) {
         };
     }
     // Endless past floor 5 — soft log curve so floor 30 ≠ 12x HP
+    // Continuous with the story curve at floor 5 (hp 2.00), so floor 6 is a step up
+    // and not a wall: the old 2.55 made crossing into the endless branch a 70% HP jump.
     const past = chapter - 5;
     return {
-        hpMul:    Math.min(4.5, 2.0 + 0.55 * Math.log2(past + 1)),
+        hpMul:    Math.min(4.5, 2.0 + 0.50 * Math.log2(past + 1) * (past / (past + 1.6))),
         dmgMul:   Math.min(2.2, 1.6 + 0.10 * Math.log2(past + 1)),
         countMul: Math.min(2.4, 1.6 + 0.18 * Math.log2(past + 1))
     };
 }
+
+// How many enemies a floor is allowed, from the floor number alone. The biome still
+// decides WHICH enemies and how they are laid out; it no longer decides how hard the
+// floor is. Without this the run swung 2-3x between neighbouring floors.
+function enemyBudgetForFloor(chapter, mode, isFinal) {
+    let n;
+    if (mode === 'story') n = 14 + 4 * (chapter - 1);                       // 14 18 22 26 30
+    else n = Math.min(70, Math.round(18 + 3.2 * Math.pow(Math.max(0, chapter - 1), 0.8)));
+    if (isFinal) n = Math.round(n * 0.55);   // the boss is the fight, not the crowd
+    return Math.max(6, n);
+}
+
+// Shown once every perk is maxed, so a late-run pick is still worth something.
+const CHEESE_FILLER = {
+    id: 'cheesebag', cap: 99, icon: 'ui_cheese', name: 'Мешок сыра', desc: '+20 сыра в забег',
+    apply: (s) => { s.runCheeseTotal = (s.runCheeseTotal || 0) + 20; }
+};
 
 // Upgrade roster — player picks one after every floor. cap = max stacks per run.
 const UPGRADES = [
@@ -2754,16 +2773,40 @@ export class DungeonScene extends Phaser.Scene {
         if (this.biome.id === 'dungeon' && this.chapter >= 2) weights.skeleton = 1;
         if (this.biome.id === 'throne')  { weights.skeleton = 2; weights.ghost = 1; }
 
+        // Pass 1 — relative shape: which rooms are busier than which.
+        const plan = [];
+        let shapeSum = 0;
         for (let i = 1; i < rooms.length; i++) {
-            // Stealth rooms get a guard instead — handled separately below
             if (this.stealthRoomIdxs?.includes(i)) continue;
+            let share;
+            if (i === exitRoomIdx) share = this.isFinalFloor ? 0 : 1;
+            else if (i === keyRoomIdx) share = keyRoomEnemies;
+            else share = baseCount + (Math.random() < 0.4 ? 1 : 0);
+            plan.push({ i, share });
+            shapeSum += share;
+        }
+        // Pass 2 — stretch that shape to fit the floor's budget.
+        const budget = enemyBudgetForFloor(this.chapter, this.runMode, this.isFinalFloor);
+        const k = shapeSum > 0 ? budget / shapeSum : 0;
+        let placed = 0;
+        for (const slot of plan) {
+            slot.count = Math.max(slot.share > 0 ? 1 : 0, Math.round(slot.share * k));
+            placed += slot.count;
+        }
+        // Rounding drift — trim or top up the busiest rooms until the total matches.
+        const adjustable = plan.filter(sl => sl.i !== exitRoomIdx && sl.count > 0)
+                               .sort((a, b) => b.count - a.count);
+        let drift = placed - budget;
+        for (let guard = 0; drift !== 0 && adjustable.length && guard < 400; guard++) {
+            const sl = adjustable[guard % adjustable.length];
+            if (drift > 0 && sl.count > 1) { sl.count--; drift--; }
+            else if (drift < 0) { sl.count++; drift++; }
+        }
+
+        for (const slot of plan) {
+            const i = slot.i;
             const room = rooms[i];
-            const isExit = (i === exitRoomIdx);
-            const isKey = (i === keyRoomIdx);
-            let enemyCount;
-            if (isExit) enemyCount = this.isFinalFloor ? 0 : 1;
-            else if (isKey) enemyCount = keyRoomEnemies;
-            else enemyCount = baseCount + (Math.random() < 0.4 ? 1 : 0);
+            const enemyCount = slot.count;
 
             for (let j = 0; j < enemyCount; j++) {
                 const kind = weightedPick(weights) || 'zombie';
@@ -2792,13 +2835,15 @@ export class DungeonScene extends Phaser.Scene {
         // 1-2 hidden chambers behind cracked walls (shoot to break)
         this.spawnWeakWalls();
 
-        // BOSS only on final story floor — endless never spawns the boss
-        if (this.isFinalFloor && this.runMode === 'story') {
+        // Boss: the story finale, and every fifth floor of the endless descent so the
+        // run has a rhythm instead of being one flat corridor forever.
+        if ((this.isFinalFloor && this.runMode === 'story') || this.isSubBossFloor) {
             const bossRoom = rooms[exitRoomIdx];
             const boss = this.spawnEnemy('boss', bossRoom.x + bossRoom.w / 2, bossRoom.y + bossRoom.h / 2 - 60);
             // Boss scaling — softer than enemies so it stays beatable on first try
             if (boss && this.chapter > 1) {
-                boss.hp = Math.ceil(boss.def.hp * (1 + (this.chapter - 1) * 0.30));
+                const growth = this.isSubBossFloor ? 0.22 : 0.30;
+                boss.hp = Math.ceil(boss.def.hp * (1 + (this.chapter - 1) * growth));
                 boss.maxHp = boss.hp;
             }
         }
@@ -3367,12 +3412,10 @@ export class DungeonScene extends Phaser.Scene {
             scoreGain = 150;
             msg = `Тихо! +${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#80ff80';
-            // Try to unlock a random locked skin as bonus
-            const lockedSkins = SKINS.filter(sk => !Progress.isSkinUnlocked(sk.id) && sk.id !== 'blue');
-            if (lockedSkins.length > 0 && Math.random() < 0.4) {
-                const skin = lockedSkins[Math.floor(Math.random() * lockedSkins.length)];
-                Progress.unlockSkin(skin.id);
-                this.showFloatingText(c.x, c.y - 90, `Открыт скин: ${skin.name}`, '#80c0ff', 22);
+            // Sneaking well pays off inside the run: a power-up right there in the chest.
+            if (Math.random() < 0.45) {
+                const kinds = ['triple', 'speed', 'shield', 'fire'];
+                this.placePowerup(c.x, c.y - 34, kinds[Math.floor(Math.random() * kinds.length)]);
             }
         } else {
             cheeseGain = 5 + Math.floor(Math.random() * 4);
@@ -5089,6 +5132,10 @@ export class DungeonScene extends Phaser.Scene {
         return null;
     }
 
+    _bossName() {
+        return this.isSubBossFloor && this.runMode === 'endless' ? 'СТРАЖ ЭТАЖА' : 'ДРАКУЛА';
+    }
+
     _nagFinale() {
         const msg = this._finaleBlocker();
         if (!msg || this.time.now < (this._finaleNagUntil || 0)) return;
@@ -5334,7 +5381,9 @@ export class DungeonScene extends Phaser.Scene {
             : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
         const floorLabel = this.isFinalFloor
             ? `Этаж ${this.chapter}/${TOTAL_FLOORS} — ДНО ЗАМКА`
-            : `Этаж ${this.chapter}/${TOTAL_FLOORS}`;
+            : this.runMode === 'endless'
+                ? (this.isSubBossFloor ? `Этаж ${this.chapter} — СТРАЖ` : `Этаж ${this.chapter}`)
+                : `Этаж ${this.chapter}/${TOTAL_FLOORS}`;
 
         const title = addEl(this.add.text(0, 0, 'МЫШОНОК ПИ', {
             fontFamily: UI_F.display, fontStyle: '700', color: '#f6d77a',
@@ -5516,7 +5565,9 @@ export class DungeonScene extends Phaser.Scene {
         // Floor badge (hidden — shown by the floor intro)
         const floorLabel = this.isFinalFloor
             ? this.biome.name
-            : `${this.biome.name} (${this.chapter}/${TOTAL_FLOORS})`;
+            : this.runMode === 'endless'
+                ? `${this.biome.name} (${this.chapter})`
+                : `${this.biome.name} (${this.chapter}/${TOTAL_FLOORS})`;
         this.chapterText = this.add.text(0, 0, floorLabel, {
             fontFamily: FONT, fontSize: '13px',
             color: this.isFinalFloor ? '#ff8060' : '#d0b0f0',
@@ -6122,6 +6173,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         const frac = Math.max(0, Math.min(1, boss.hp / (boss.maxHp || boss.hp || 1)));
         if (this._bossBarShown === 0) {
+            this.bossBarName.setText(this._bossName());
             this.bossBarBg.setVisible(true); this.bossBarFill.setVisible(true); this.bossBarName.setVisible(true);
         }
         // Only redraw when the value actually moved — this runs every frame
@@ -6290,7 +6342,13 @@ export class DungeonScene extends Phaser.Scene {
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
-        if (choices.length === 0) return;
+        if (choices.length === 0) {
+            // Every relic already taken — pay out instead of showing nothing at all.
+            this.runCheeseTotal = (this.runCheeseTotal || 0) + 25;
+            this.score += 300;
+            this.showFloatingText(this.player.x, this.player.y - 60, 'Реликвий больше нет! +25 сыра', '#ffd040', 24, 'ui_cheese');
+            return;
+        }
         bus.emit(UI.MENU_OPEN);
         const els = [];
         const addEl = (e, dep) => { e.setScrollFactor(0).setDepth(dep != null ? dep : D); els.push(e); return e; };
@@ -6397,9 +6455,10 @@ export class DungeonScene extends Phaser.Scene {
             const stacked = {};
             for (const id of this.upgradeIds) stacked[id] = (stacked[id] || 0) + 1;
             const available = UPGRADES.filter(u => (stacked[u.id] || 0) < (u.cap || 1));
-            const pool = available.length >= 3 ? available.slice() : UPGRADES.slice();
-            Phaser.Utils.Array.Shuffle(pool);
-            this._cachedUpgradeChoices = pool.slice(0, 3);
+            Phaser.Utils.Array.Shuffle(available);
+            const picks = available.slice(0, 3);
+            while (picks.length < 3) picks.push(CHEESE_FILLER);   // never re-offer a maxed perk
+            this._cachedUpgradeChoices = picks;
         }
         const choices = this._cachedUpgradeChoices;
         if (!this._pickerSilent) bus.emit(UI.MENU_OPEN);
@@ -7593,6 +7652,12 @@ export class DungeonScene extends Phaser.Scene {
     exitToMenu() {
         // NOTE: renamed from exit() — spawnExitDoor() assigns this.exit = {door object},
         // which previously shadowed this method and caused TypeError on click.
+        // Half the run's cheese banks on the way out: quitting is not free, but the
+        // floors you did clear are not erased either.
+        if (this.state === 'play') {
+            const banked = Math.floor((this.runCheeseTotal || 0) / 2);
+            if (banked > 0) { try { Progress.addCheese(banked); } catch (e) {} }
+        }
         this._leaveToMenu();
     }
 
