@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230"><defs>
+    <style>.outline { stroke: #2a1a0a; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }</style>
+    <linearGradient id="wood" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"  stop-color="#a87850"/>
+      <stop offset="100%" stop-color="#604024"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Tail (brown) -->
+  <path d="M 152 152 Q 178 148 182 125 Q 184 110 175 105" fill="none" stroke="#8a5a30" stroke-width="5" stroke-linecap="round"/>
+  <!-- Feet -->
+  <ellipse cx="72" cy="212" rx="16" ry="9" fill="#422202" class="outline"/>
+  <ellipse cx="128" cy="198" rx="16" ry="9" fill="#604020" class="outline"/>
+  <!-- Body (wooden) -->
+  <ellipse cx="100" cy="160" rx="48" ry="42" fill="url(#wood)" class="outline"/>
+  <!-- Vertical wood plank lines -->
+  <path d="M 80 124 L 80 198" stroke="#4a2810" stroke-width="2" opacity="0.7"/>
+  <path d="M 100 122 L 100 200" stroke="#4a2810" stroke-width="2" opacity="0.7"/>
+  <path d="M 120 124 L 120 198" stroke="#4a2810" stroke-width="2" opacity="0.7"/>
+  <!-- Wood grain swirls -->
+  <ellipse cx="85" cy="160" rx="3" ry="6" fill="none" stroke="#4a2810" stroke-width="1.2" opacity="0.6"/>
+  <ellipse cx="115" cy="170" rx="3" ry="5" fill="none" stroke="#4a2810" stroke-width="1.2" opacity="0.6"/>
+  <!-- Arms -->
+  <ellipse cx="50" cy="156" rx="11" ry="18" fill="url(#wood)" class="outline" transform="rotate(-10 50 156)"/>
+  <ellipse cx="150" cy="160" rx="11" ry="18" fill="url(#wood)" class="outline" transform="rotate(26 150 160)"/>
+  <!-- Ears -->
+  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#8a5830" class="outline"/>
+  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#8a5830" class="outline"/>
+  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#604020"/>
+  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#604020"/>
+  <!-- Head -->
+  <circle cx="100" cy="102" r="43" fill="#8a5830" class="outline"/>
+  <!-- Wood texture on head -->
+  <path d="M 70 100 Q 100 92 130 100" stroke="#4a2810" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 72 116 Q 100 110 128 116" stroke="#4a2810" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <!-- Leaf decoration on top of head (woody warrior crown) -->
+  <ellipse cx="100" cy="60" rx="6" ry="14" fill="#4a8030" stroke="#1a3a0a" stroke-width="2"/>
+  <ellipse cx="86" cy="65" rx="5" ry="10" fill="#4a8030" stroke="#1a3a0a" stroke-width="2" transform="rotate(-30 86 65)"/>
+  <ellipse cx="114" cy="65" rx="5" ry="10" fill="#4a8030" stroke="#1a3a0a" stroke-width="2" transform="rotate(30 114 65)"/>
+  
+</svg>
