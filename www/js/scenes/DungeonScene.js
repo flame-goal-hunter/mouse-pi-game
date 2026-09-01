@@ -129,7 +129,7 @@ const PLAYER = {
     dashInvulnMs: 260
 };
 
-const PIE = { speed: 580, life: 1400, radius: 10, damage: 1 };
+const PIE = { speed: 580, life: 1400, radius: 10, damage: 2 };
 
 // Feel: aim assist cone/reach, the dash-press buffer, and the haptic pulse lengths (ms)
 const AIM_ASSIST = { cone: Math.PI / 18, range: 420 };   // +-10 deg
@@ -552,7 +552,8 @@ export class DungeonScene extends Phaser.Scene {
         this.updateLighting();
         if (this.state !== 'play') return;
         // Substep physics so low FPS doesn't make Pi crawl
-        const totalDt = Math.min(dtMs, 200) / 1000;
+        let totalDt = Math.min(dtMs, 200) / 1000;
+        if (this._hitStopUntil && this.time.now < this._hitStopUntil) totalDt *= 0.05;
         const MAX_STEP = 1 / 30;  // 33ms — physics runs at least 30fps internally
         let remaining = totalDt;
         while (remaining > 0) {
@@ -4391,7 +4392,8 @@ export class DungeonScene extends Phaser.Scene {
         return Math.max(1, Math.floor(base * (this._dmgMul || 1)));
     }
 
-    damageEnemy(e, dmg, kx, ky) {
+    damageEnemy(e, dmg, kx, ky, opts) {
+        const isPie = !!(opts && opts.pie);
         if (e.kind === 'ghost' && !e.solid) {
             // Phasing — the pie passes straight through. Show why nothing happened.
             this.poofAt(e.x, e.y, 0xa0c0ff);
@@ -4402,15 +4404,20 @@ export class DungeonScene extends Phaser.Scene {
             this.poofAt(e.x, e.y, 0x80c0ff);
             return;
         }
-        if (this.isPowerupActive('fire')) dmg *= 2;
-        dmg += this.pieDmgBonus || 0;
-        // Crit relic — chance of x3 damage
+        // Pie perks belong to pies. Pots, candelabras, dashes and thrown books keep
+        // their flat value instead of scaling with the player's pie upgrades.
         let isCrit = false;
-        if (this.relicCritChance && Math.random() < this.relicCritChance) {
-            dmg *= 3; isCrit = true;
-            this.showFloatingText(e.x, e.y - 30, 'КРИТ!', '#ffd040', 22);
+        if (isPie) {
+            if (this.isPowerupActive('fire')) dmg *= 2;
+            dmg += this.pieDmgBonus || 0;
+            if (this.relicCritChance && Math.random() < this.relicCritChance) {
+                dmg *= 3; isCrit = true;
+            }
         }
         e.hp -= dmg;
+        // C3. Show the number: without it a fight is a silent HP guessing game.
+        this.showFloatingText(e.x + Phaser.Math.Between(-10, 10), e.y - 34,
+            isCrit ? `${dmg}!` : `${dmg}`, isCrit ? '#ffd040' : '#ffffff', isCrit ? 24 : 17);
         // Audio feedback — boss gets a heavier hit
         if (e.kind === 'boss') bus.emit(SFX.BOSS_HIT);
         else if (e.kind === 'slime') bus.emit(SFX.SLIME_SQUELCH);
@@ -4967,7 +4974,7 @@ export class DungeonScene extends Phaser.Scene {
                 if (Math.hypot(p.x - e.x, p.y - e.y) < e.def.radius + PIE.radius) {
                     this.poofAt(p.x, p.y, 0xf5b048);
                     this._haptic(HAPTIC.hit);
-                    this.damageEnemy(e, PIE.damage, p.vx, p.vy);
+                    this.damageEnemy(e, PIE.damage, p.vx, p.vy, { pie: true });
                     const pierces = (this.relicPierce || 0);
                     if (pierces > 0) {
                         p._pierceLeft = (p._pierceLeft === undefined) ? pierces : p._pierceLeft - 1;
