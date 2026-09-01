@@ -12,6 +12,7 @@ import { TEMPLATES, BEATS } from '../sneak/templates/index.js';
 import { assembleNight } from '../sneak/NightAssembler.js';
 import { isFloor, inCone } from '../sneak/RoomTemplate.js';
 import { positionAt } from '../sneak/PatrolCycle.js';
+import { cheeseOnCapture, nightReward } from '../sneak/SneakEconomy.js';
 
 const CELL = SNEAK.CELL;
 const DEPTH = { FLOOR: 10, PROP: 40, HOLE: 45, PLAYER: 60, MONSTER: 62, CONE: 55, HUD: 900 };
@@ -25,12 +26,18 @@ export class SneakScene extends Phaser.Scene {
         this.cheeseThisNight = data?.cheeseThisNight || 0;
         this.pies = data?.pies ?? SNEAK.PIES_MIN;
         this.everSeen = data?.everSeen || false;
+        this.winded = data?.winded || false;
+        this.windedUntil = data?.windedUntil || 0;
         this.night = assembleNight(TEMPLATES, BEATS);
         this.room = this.night[this.roomIndex];
         this.tpl = this.room.template;
         this.state = 'play';
         this.holdMs = 0;
         this.holdArmed = true;
+        // Отрисовываются лениво в updateHoleHold/drawSuspicion — без сброса здесь
+        // они остались бы указывать на графику, уничтоженную прошлым restart().
+        this.holdRing = null;
+        this.susBar = null;
         this.monster = null;
         this.player = null;
     }
@@ -55,6 +62,24 @@ export class SneakScene extends Phaser.Scene {
         this.spawnMonster();
 
         this.cursors = this.input.keyboard.createCursorKeys();
+
+        // Правая половина экрана — бросок. Левая отойдёт под стик в Task 14,
+        // поэтому граница задаётся сразу, чтобы обработчики не конфликтовали.
+        this.input.on('pointerdown', (p) => {
+            if (this.state !== 'play' || p.x <= this.viewW / 2) return;
+            const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+            this._pieDownAt = this.time.now;
+            this._pieId = p.id;
+            this._pieTarget = { x: wp.x, y: wp.y };
+        });
+        this.input.on('pointerup', (p) => {
+            if (this.state !== 'play' || !this._pieTarget || p.id !== this._pieId) return;
+            const held = this.time.now - this._pieDownAt;
+            if (held > 500) this.eatPie();
+            else this.throwPie(this._pieTarget.x, this._pieTarget.y);
+            this._pieTarget = null;
+            this._pieId = null;
+        });
     }
 
     drawRoom() {
@@ -88,6 +113,23 @@ export class SneakScene extends Phaser.Scene {
                 this.holes.push({ x: cx, y: cy, pair: h, mouth, circ, glow });
             }
         }
+
+        // Выход — последний элемент exits; вход это первый.
+        const ex = this.tpl.exits[this.tpl.exits.length - 1];
+        this.exitPoint = { x: (ex.x + 0.5) * CELL, y: (ex.y + 0.5) * CELL };
+        this.add.circle(this.exitPoint.x, this.exitPoint.y, CELL * 0.4, 0x80ff80, 0.35)
+            .setDepth(DEPTH.PROP);
+
+        // Реквизит: сыр и пироги подбираются, остальное декоративно.
+        this.pickups = [];
+        for (const p of this.tpl.props) {
+            if (p.type !== 'cheese' && p.type !== 'pie') continue;
+            const cx = (p.x + 0.5) * CELL;
+            const cy = (p.y + 0.5) * CELL;
+            const col = p.type === 'cheese' ? 0xffd040 : 0xf0c060;
+            const spr = this.add.circle(cx, cy, 9, col, 1).setDepth(DEPTH.PROP);
+            this.pickups.push({ type: p.type, x: cx, y: cy, spr, taken: false });
+        }
     }
 
     // Комната видна целиком — механика требует читать весь маршрут патруля.
@@ -120,10 +162,12 @@ export class SneakScene extends Phaser.Scene {
         const dt = Math.min(dtMs, 50) / 1000;
         if (this.state === 'squeeze') return;
         if (this.state !== 'play') return;
+        if (this.winded && this.time.now > this.windedUntil) this.winded = false;
         const actionDown = this.cursors.space.isDown;
         this.updateHoleHold(dt, actionDown);
         if (this.holdMs === 0) this.updatePlayer(dt);
         this.updateMonster(dt);
+        this.checkPickupsAndExit();
     }
 
     nearestHole() {
@@ -185,6 +229,8 @@ export class SneakScene extends Phaser.Scene {
     }
 
     monsterLosesPlayer() {
+        this.winded = true;
+        this.windedUntil = this.time.now + 8000;
         this.monster.state = 'confused';
         this.monster.confusedUntil = this.time.now + SNEAK.HOLE_FORGET_MS;
         this.monster.suspicion = 0;
@@ -198,6 +244,61 @@ export class SneakScene extends Phaser.Scene {
         this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
     }
 
+    throwPie(targetX, targetY) {
+        if (this.pies <= 0 || this.state !== 'play') return;
+        this.pies--;
+        bus.emit(SFX.FIRE_PIE);
+
+        const startX = this.player.x;
+        const startY = this.player.y;
+        const pie = this.add.circle(startX, startY, 7, 0xf0c060, 1).setDepth(DEPTH.PROP);
+        const dist = Math.hypot(targetX - startX, targetY - startY);
+
+        // Отклик на собственное действие — то, чего не хватало боевым режимам.
+        this.player.sprite.setScale(0.34, 0.30);
+        this.tweens.add({ targets: this.player.sprite, scaleX: 0.32, scaleY: 0.32, duration: 100 });
+
+        this.tweens.add({
+            targets: pie,
+            x: targetX, y: targetY,
+            duration: Math.max(120, (dist / 580) * 1000),
+            ease: 'Linear',
+            onComplete: () => { pie.destroy(); this.pieLanded(targetX, targetY); },
+        });
+    }
+
+    pieLanded(x, y) {
+        const m = this.monster;
+        // Роль 1: попадание в монстра — ослепление.
+        if (m && Math.hypot(m.x - x, m.y - y) < CELL * 0.8) {
+            m.state = 'confused';
+            m.confusedUntil = this.time.now + SNEAK.PIE_BLIND_MS;
+            m.suspicion = 0;
+            this.showFloatingText(m.x, m.y - 40, 'ой!', '#ffd040');
+            return;
+        }
+        // Роль 2: попадание в стену или пол — шум, монстр идёт на звук.
+        if (m && m.state !== 'chase') {
+            m.state = 'noise';
+            m.noiseX = x;
+            m.noiseY = y;
+            m.noiseUntil = this.time.now + SNEAK.PIE_NOISE_MS;
+            this.showFloatingText(x, y, '?', '#ffffff');
+        }
+    }
+
+    // Роль 3: удержание кнопки броска — съесть пирог, снять одышку.
+    eatPie() {
+        if (this.pies <= 0 || !this.winded) {
+            if (!this.winded) this.showFloatingText(this.player.x, this.player.y - 30, 'не хочу', '#a090b8');
+            return;
+        }
+        this.pies--;
+        this.winded = false;
+        bus.emit(SFX.COLLECT_POWERUP);
+        this.showFloatingText(this.player.x, this.player.y - 30, 'ням', '#80ff80');
+    }
+
     updateMonster(dt) {
         const m = this.monster;
         if (!m) return;
@@ -208,6 +309,27 @@ export class SneakScene extends Phaser.Scene {
             m.t += dt * 1000;
             const p = positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, m.t);
             m.x = p.x; m.y = p.y; m.angle = p.angle;
+        } else if (m.state === 'noise') {
+            // m.t не тикает всё время noise — маршрут патруля стоит на паузе.
+            // Когда шум стихает, монстр не телепортируется на маршрут, а идёт
+            // к точке, где он его покинул, и только там возвращается в 'patrol'.
+            const overdue = this.time.now > m.noiseUntil;
+            const target = overdue ? positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, m.t) : { x: m.noiseX, y: m.noiseY };
+            const dx = target.x - m.x;
+            const dy = target.y - m.y;
+            const d = Math.hypot(dx, dy);
+            if (overdue && d < CELL * 0.3) {
+                m.state = 'patrol';
+            } else {
+                m.angle = Math.atan2(dy, dx);
+                const step = this.tpl.patrolSpeed * dt;
+                if (d > step) {
+                    m.x += (dx / d) * step;
+                    m.y += (dy / d) * step;
+                } else {
+                    m.x = target.x; m.y = target.y;
+                }
+            }
         } else if (m.state === 'chase') {
             this.chaseStep(dt);
         }
@@ -284,13 +406,106 @@ export class SneakScene extends Phaser.Scene {
         this.susBar.fillRect(m.x - w / 2, m.y - 46, w * m.suspicion, 5);
     }
 
-    // Заглушка: полноценная поимка приходит в Task 12.
     capture() {
         if (this.state !== 'play') return;
         this.state = 'caught';
         bus.emit(SFX.TAKE_DAMAGE);
         this.cameras.main.shake(240, 0.012);
-        this.showFloatingText(this.player.x, this.player.y - 40, 'ПОЙМАЛИ!', '#ff6060');
+
+        const { lost, kept } = cheeseOnCapture(this.cheeseThisNight);
+        Progress.recordSneakRun({ cleared: false, neverSeen: false, cheese: kept });
+
+        this.showOutcome('ПОЙМАЛИ!', `Пи уронил ${lost} сыра и убежал домой.`, kept);
+    }
+
+    reachStairs() {
+        if (this.state !== 'play') return;
+        this.state = 'cleared';
+        const reward = nightReward({
+            collected: this.cheeseThisNight,
+            tookLoot: true,
+            neverSeen: !this.everSeen,
+            firstClear: Progress.getSneakStats().clears === 0,
+        });
+        Progress.recordSneakRun({ cleared: true, neverSeen: !this.everSeen, cheese: reward.total });
+        this.showOutcome('ДОБЫЧА ДОМА!', !this.everSeen ? 'Тебя ни разу не заметили.' : 'Утро настало.', reward.total);
+    }
+
+    // Переход в следующую комнату ночи, состояние переносится через init.
+    nextRoom() {
+        if (this.roomIndex + 1 >= this.night.length) { this.reachStairs(); return; }
+        this.scene.restart({
+            roomIndex: this.roomIndex + 1,
+            cheeseThisNight: this.cheeseThisNight,
+            pies: this.pies,
+            everSeen: this.everSeen,
+            winded: this.winded,
+            windedUntil: this.windedUntil,
+        });
+    }
+
+    // Камера комнаты зумирована и центрирована не на (0,0), а на её собственный
+    // размер — оверлей рисуется через отдельную UI-камеру без зума и скролла,
+    // чтобы быть одного размера и на одном месте в любой из шести комнат.
+    showOutcome(title, sub, cheese) {
+        const w = this.viewW;
+        const h = this.viewH;
+        const worldObjects = this.children.list.slice();
+        const objs = [];
+
+        const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x0b0616, 0.92).setDepth(DEPTH.HUD);
+        objs.push(bg);
+        const panelW = Math.min(320, w - 48);
+        const panel = this.add.rectangle(w / 2, h / 2, panelW, 260, 0x2a1c44, 1)
+            .setStrokeStyle(3, 0x8a68c8).setDepth(DEPTH.HUD + 1);
+        objs.push(panel);
+        const titleT = this.add.text(w / 2, h / 2 - 90, title, {
+            fontFamily: 'Nunito, sans-serif', fontSize: '30px', color: '#ffd040', fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
+        objs.push(titleT);
+        const subT = this.add.text(w / 2, h / 2 - 40, sub, {
+            fontFamily: 'Nunito, sans-serif', fontSize: '16px', color: '#e8dcff', align: 'center',
+            wordWrap: { width: panelW - 32 },
+        }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
+        objs.push(subT);
+        const cheeseT = this.add.text(w / 2, h / 2 + 15, `+${cheese} \u{1F9C0}`, {
+            fontFamily: 'Nunito, sans-serif', fontSize: '26px', color: '#ffd040', fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
+        objs.push(cheeseT);
+        const btnBg = this.add.rectangle(w / 2, h / 2 + 85, 220, 54, 0x6a4d90, 1)
+            .setStrokeStyle(2, 0xd8a850).setDepth(DEPTH.HUD + 2).setInteractive({ useHandCursor: true });
+        objs.push(btnBg);
+        const btnT = this.add.text(w / 2, h / 2 + 85, 'В ЛАВКУ', {
+            fontFamily: 'Nunito, sans-serif', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
+        }).setOrigin(0.5).setDepth(DEPTH.HUD + 3);
+        objs.push(btnT);
+        btnBg.on('pointerdown', () => {
+            bus.emit(BGM.MENU);
+            this.scene.start('TransylvaniaScene', { openShop: true });
+        });
+
+        const uiCam = this.cameras.add(0, 0, w, h);
+        uiCam.ignore(worldObjects);
+        this.cameras.main.ignore(objs);
+    }
+
+    checkPickupsAndExit() {
+        for (const p of this.pickups) {
+            if (p.taken) continue;
+            if (Math.hypot(p.x - this.player.x, p.y - this.player.y) > CELL * 0.7) continue;
+            p.taken = true;
+            p.spr.destroy();
+            if (p.type === 'cheese') {
+                this.cheeseThisNight += 5;
+                this.showFloatingText(p.x, p.y, '+5 \u{1F9C0}', '#ffd040');
+            } else {
+                this.pies = Math.min(SNEAK.PIES_MAX, this.pies + 1);
+                this.showFloatingText(p.x, p.y, '+1 \u{1F967}', '#f0c060');
+            }
+        }
+        if (Math.hypot(this.exitPoint.x - this.player.x, this.exitPoint.y - this.player.y) < CELL * 0.5) {
+            this.nextRoom();
+        }
     }
 
     updatePlayer(dt) {
@@ -301,7 +516,7 @@ export class SneakScene extends Phaser.Scene {
         if (this.cursors.up.isDown) dy -= 1;
         if (this.cursors.down.isDown) dy += 1;
         const len = Math.hypot(dx, dy) || 1;
-        const speed = SNEAK.WALK_SPEED;
+        const speed = this.winded ? SNEAK.WALK_SPEED * 0.7 : SNEAK.WALK_SPEED;
         const nx = this.player.x + (dx / len) * speed * dt;
         const ny = this.player.y + (dy / len) * speed * dt;
         if (dx || dy) this.moveTo(nx, ny);
