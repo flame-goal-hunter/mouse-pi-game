@@ -11,6 +11,7 @@ import { MenuScene } from './scenes/MenuScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { TransylvaniaScene } from './scenes/TransylvaniaScene.js';
 import { DungeonScene } from './scenes/DungeonScene.js';
+import { SneakScene } from './scenes/SneakScene.js';
 import { initAudioManager } from './audio/AudioManager.js';
 import { Progress } from './storage/ProgressStore.js';
 
@@ -54,8 +55,8 @@ window.gameConfig = {
 
 // Choose scenes based on mode - skip menu for solo mode
 const scenes = (mode === 'solo' || mode === 'host' || mode === 'join' || mode === 'online')
-    ? [BootScene, GameScene, TransylvaniaScene, DungeonScene]
-    : [BootScene, MenuScene, GameScene, TransylvaniaScene, DungeonScene];
+    ? [BootScene, GameScene, TransylvaniaScene, DungeonScene, SneakScene]
+    : [BootScene, MenuScene, GameScene, TransylvaniaScene, DungeonScene, SneakScene];
 
 // Phaser configuration (physics handled by Rapier2D, not Phaser)
 // CRITICAL: autoMobilePipeline: false forces the desktop MultiPipeline instead of
@@ -100,6 +101,7 @@ const _boot = () => {
     if (mode === 'transylvania') { const s = _cssSize(); config.scale.width = Math.round(s.w * DPR); config.scale.height = Math.round(s.h * DPR); }
     game = new Phaser.Game(config);
     window.__game = game;
+    window.game = game;
 
     // Single owner of all audio playback (procedural SFX + BGM + EventBus routing)
     window.audio = initAudioManager(game);
