@@ -41,8 +41,8 @@ const LAYER = {
     EYES:     82,   // also used numerically by torch smoke/spark FX
 
     // ---- UI band (scrollFactor 0). Values are the historical magic numbers.
-    UI_TOUCH: 989,        // stick / dash outer halos
-    UI_TOUCH_BASE: 990,   // stick bases, dash base, touch labels
+    UI_TOUCH: 989,        // fixed UI container floor
+    UI_TOUCH_BASE: 990,   // stick bases, dash base
     UI_TOUCH_HINT: 990.5, // stick hints, dash cooldown arc
     UI_TOUCH_KNOB: 991,
     UI_TOUCH_LABEL: 992,  // dash icon
@@ -88,6 +88,15 @@ const WORLD_SVGS = {
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
     stairs: ['stairs', 72, 80],
 };
+// Touch control art: [texture key, file in www/assets/controls, native viewBox px]
+const CONTROL_SVGS = [
+    ['ctl_base_move', 'stick_base_move', 128], ['ctl_base_aim', 'stick_base_aim', 128],
+    ['ctl_knob_move', 'knob_move', 64], ['ctl_knob_aim', 'knob_aim', 64], ['ctl_dash', 'btn_dash', 96],
+];
+// Each control sprite insets its rim inside the viewBox (stroke + drop shadow), so a display size
+// straight from the layout radius would paint smaller than the circle it replaces. Painted fraction:
+const CONTROL_FILL = { base: 120 / 128, knob: 57 / 64, dash: 84 / 96 };
+const controlSize = (paintedDiameter, kind) => paintedDiameter / CONTROL_FILL[kind];
 // Relic/upgrade icons: texture key -> www/assets/relics/<file>.svg (UI scale, loaded at 64 × dpr like the ui_* kit)
 // UI-resolution twins of two world sprites (d_cheese/d_pie are loaded at their small world size).
 const UI_ICON_ALIAS = { d_cheese: 'ui_cheese', d_pie: 'ui_pie' };
@@ -292,6 +301,10 @@ export class DungeonScene extends Phaser.Scene {
         // Phaser's loader refuses data URIs, so the inlined shop glyph goes straight into the texture manager
         if (!this.textures.exists('ui_shop')) this.textures.addBase64('ui_shop', 'data:image/svg+xml;base64,' + btoa(uiShopSvg(uiPx)));
         if (!this.textures.exists('ui_check')) this.textures.addBase64('ui_check', 'data:image/svg+xml;base64,' + btoa(uiCheckSvg(uiPx)));
+        // Touch control art — bases 128, knobs 64, dash button 96 in their own viewBox
+        for (const [key, file, px] of CONTROL_SVGS) {
+            this.load.svg(key, `assets/controls/${file}.svg`, { width: Math.round(px * dpr), height: Math.round(px * dpr) });
+        }
         this.tilePx = Math.round(NAV_CELL * dpr);
         this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
         for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {
@@ -5617,56 +5630,34 @@ export class DungeonScene extends Phaser.Scene {
         const L = computeHudLayout({ W: this.viewW, H: this.viewH, safe: readSafeArea(), maxHp: this.maxHp });
         const JOY_R = L.touch.joyR;
         const DASH_R = L.touch.dashR;
-        const LABEL_FONT = `${L.touch.labelFont}px`;
+        const ctl = (key, painted, kind, depth) => {
+            const px = controlSize(painted, kind);
+            return this.add.image(0, 0, key).setOrigin(0.5).setScrollFactor(0).setDepth(depth).setDisplaySize(px, px);
+        };
+        this._joyIdle = null; this._aimIdle = null;   // Scene instance is reused — force the first alpha apply
 
         // === LEFT MOVEMENT JOYSTICK ===
         this.joy = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
-        // Outer dark backdrop
-        this.joyOuter = this.add.circle(0, 0, JOY_R + 10, 0x000000, 0.35).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
-        // Main base ring
-        this.joyBase = this.add.circle(0, 0, JOY_R, 0xffffff, 0.10).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
-        this.joyBase.setStrokeStyle(4, 0xffffff, 0.55);
-        // 4 direction hints (subtle arrows around the rim)
+        this.joyBase = ctl('ctl_base_move', JOY_R * 2, 'base', LAYER.UI_TOUCH_BASE);
         this.joyHints = this.add.image(0, 0, 'ui_move').setOrigin(0.5).setScrollFactor(0)
-            .setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.15).setDisplaySize(JOY_R * 1.2, JOY_R * 1.2);
-        // Knob — gradient-feel via solid fill + bright stroke
-        this.joyKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xffffff, 0.85).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
-        this.joyKnob.setStrokeStyle(3, 0xa0a0a0, 0.8);
+            .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(JOY_R * 0.72, JOY_R * 0.72);
+        this.joyKnob = ctl('ctl_knob_move', JOY_R * 0.9, 'knob', LAYER.UI_TOUCH_KNOB);
 
         // === RIGHT AIM JOYSTICK ===
         this.aimStick = { active: false, dx: 0, dy: 0, baseX: 0, baseY: 0, pointerId: null, R: JOY_R };
-        this.aimStickOuter = this.add.circle(0, 0, JOY_R + 10, 0x4a1c08, 0.40).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
-        this.aimStickBase = this.add.circle(0, 0, JOY_R, 0xff8050, 0.18).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
-        this.aimStickBase.setStrokeStyle(4, 0xff9a60, 0.65);
+        this.aimStickBase = ctl('ctl_base_aim', JOY_R * 2, 'base', LAYER.UI_TOUCH_BASE);
         this.aimStickHint = this.add.image(0, 0, 'd_pie').setOrigin(0.5).setScrollFactor(0)
-            .setDepth(LAYER.UI_TOUCH_HINT).setAlpha(0.45).setDisplaySize(JOY_R * 0.7, JOY_R * 0.7);
-        this.aimStickKnob = this.add.circle(0, 0, JOY_R * 0.45, 0xff7040, 0.95).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_KNOB);
-        this.aimStickKnob.setStrokeStyle(3, 0xffd0a0, 0.9);
+            .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(JOY_R * 0.72, JOY_R * 0.72);
+        this.aimStickKnob = ctl('ctl_knob_aim', JOY_R * 0.9, 'knob', LAYER.UI_TOUCH_KNOB);
 
         // === DASH BUTTON (separate, clearly above aim stick) ===
         this.dashBtn = { R: DASH_R, ready: true };
-        this.dashBtnOuter = this.add.circle(0, 0, DASH_R + 8, 0x081c4a, 0.45).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
-        this.dashBtnBase = this.add.circle(0, 0, DASH_R, 0x4080ff, 0.60).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE);
-        this.dashBtnBase.setStrokeStyle(4, 0x80c0ff, 0.85);
-        // Cooldown arc (filled wedge when on cooldown)
+        this.dashBtnBase = ctl('ctl_dash', DASH_R * 2, 'dash', LAYER.UI_TOUCH_BASE);
+        // Cooldown arc, drawn on the button's own rim
         this.dashBtnCdArc = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT);
         this._dashArcP = undefined;  // fresh GameObjects — force first redraw (Scene instance is reused)
         this.dashBtnLabel = this.add.image(0, 0, 'ui_dash').setOrigin(0.5).setScrollFactor(0)
             .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(DASH_R * 0.8, DASH_R * 0.8);
-
-        // Labels under the joysticks
-        this.joyLabel = this.add.text(0, 0, 'ХОДЬБА', {
-            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
-            color: '#ffffff', alpha: 0.6
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.55);
-        this.aimLabel = this.add.text(0, 0, 'ПРИЦЕЛ + ОГОНЬ', {
-            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
-            color: '#ffd0a0'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.65);
-        this.dashLabel = this.add.text(0, 0, 'РЫВОК', {
-            fontFamily: 'Arial Black', fontSize: LABEL_FONT,
-            color: '#a0d0ff'
-        }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_TOUCH_BASE).setAlpha(0.75);
 
         this.input.on('pointerdown', (p) => this.touchDown(this._cssPointer(p)));
         this.input.on('pointermove', (p) => this.touchMove(this._cssPointer(p)));
@@ -5717,10 +5708,8 @@ export class DungeonScene extends Phaser.Scene {
             const gap = L.touch.dashGap;
             this.dashBtn.x = W - sideOffR;
             this.dashBtn.y = H - bottomOff - this.aimStick.R - this.dashBtn.R - gap;
-            this.dashBtnOuter.setPosition(this.dashBtn.x, this.dashBtn.y);
             this.dashBtnBase.setPosition(this.dashBtn.x, this.dashBtn.y);
             this.dashBtnLabel.setPosition(this.dashBtn.x, this.dashBtn.y);
-            this.dashLabel.setPosition(this.dashBtn.x, this.dashBtn.y + this.dashBtn.R + 10);
         }
     }
 
@@ -5734,21 +5723,19 @@ export class DungeonScene extends Phaser.Scene {
         this._dashArcP = arcP;
         this.dashBtnCdArc.clear();
         if (cdMs <= 0) {
-            // Ready — bright glow ring
-            this.dashBtnBase.setFillStyle(0x4080ff, 0.70);
-            this.dashBtnBase.setStrokeStyle(4, 0x80d0ff, 1.0);
+            // Ready — full-colour art
+            this.dashBtnBase.clearTint().setAlpha(0.92);
             this.dashBtnLabel.setAlpha(1.0);
         } else {
-            // On cooldown — dimmer + arc shrinking
-            this.dashBtnBase.setFillStyle(0x203060, 0.65);
-            this.dashBtnBase.setStrokeStyle(3, 0x4080a0, 0.7);
-            this.dashBtnLabel.setAlpha(0.45);
+            // On cooldown — drained art + a ring filling on the button's own rim
+            this.dashBtnBase.setTint(0x5b6f9e).setAlpha(0.8);
+            this.dashBtnLabel.setAlpha(0.4);
             const p = 1 - Math.min(1, cdMs / maxCd);   // 0 -> 1 as cooldown ends
             const start = -Math.PI / 2;
             const end = start + Math.PI * 2 * p;
-            this.dashBtnCdArc.lineStyle(5, 0x80c0ff, 0.85);
+            this.dashBtnCdArc.lineStyle(4, 0x9fdcff, 0.9);
             this.dashBtnCdArc.beginPath();
-            this.dashBtnCdArc.arc(this.dashBtn.x, this.dashBtn.y, this.dashBtn.R + 4, start, end, false);
+            this.dashBtnCdArc.arc(this.dashBtn.x, this.dashBtn.y, this.dashBtn.R + 5, start, end, false);
             this.dashBtnCdArc.strokePath();
         }
     }
@@ -5760,15 +5747,12 @@ export class DungeonScene extends Phaser.Scene {
         // Dash button — highest priority, fixed position
         if (this.dashBtn && Math.hypot(p.x - this.dashBtn.x, p.y - this.dashBtn.y) < this.dashBtn.R + 14) {
             this.tryDash();
-            this.tweens.add({
-                targets: this.dashBtnBase, scale: 0.85,
-                duration: 80, yoyo: true, ease: 'Quad.easeOut'
-            });
-            this.tweens.add({
-                targets: this.dashBtnLabel,
-                scaleX: this.dashBtnLabel.scaleX * 0.85, scaleY: this.dashBtnLabel.scaleY * 0.85,
-                duration: 80, yoyo: true, ease: 'Quad.easeOut'
-            });
+            for (const o of [this.dashBtnBase, this.dashBtnLabel]) {
+                this.tweens.add({
+                    targets: o, scaleX: o.scaleX * 0.85, scaleY: o.scaleY * 0.85,
+                    duration: 80, yoyo: true, ease: 'Quad.easeOut'
+                });
+            }
             return;
         }
         // Avoid the exit-X button area top-right
@@ -5803,40 +5787,52 @@ export class DungeonScene extends Phaser.Scene {
     moveJoyTo(x, y) {
         if (!this.joyBase) return;
         this.joyBase.setPosition(x, y);
-        this.joyOuter.setPosition(x, y);
         this.joyHints.setPosition(x, y);
         this.joyKnob.setPosition(x, y);
-        if (this.joyLabel) this.joyLabel.setPosition(x, y + this.joy.R + (this._hudLayout ? this._hudLayout.touch.labelOff : 18));
     }
 
     moveAimStickTo(x, y) {
         if (!this.aimStickBase) return;
         this.aimStickBase.setPosition(x, y);
-        this.aimStickOuter.setPosition(x, y);
         this.aimStickHint.setPosition(x, y);
         this.aimStickKnob.setPosition(x, y);
-        if (this.aimLabel) this.aimLabel.setPosition(x, y + this.aimStick.R + (this._hudLayout ? this._hudLayout.touch.labelOff : 18));
+    }
+
+    // Fade a control between its idle and held look; instant on the first apply of a run
+    _fadeControl(pairs, instant) {
+        for (const [obj, alpha] of pairs) {
+            if (!obj) continue;
+            this.tweens.killTweensOf(obj);
+            if (instant) obj.setAlpha(alpha);
+            else this.tweens.add({ targets: obj, alpha, duration: 150, ease: 'Quad.easeOut' });
+        }
     }
 
     setJoyAlpha(a) {
         if (!this.joyBase) return;
-        // Solid when held, very faded when idle (just a hint)
+        // Solid when held, a faded hint when idle
         const idle = a < 1;
-        this.joyOuter.setAlpha(idle ? 0.35 : 1);
-        this.joyBase.setAlpha(idle ? 0.45 : 1);
-        this.joyHints.setAlpha(idle ? 0.10 : 0.25);
-        this.joyKnob.setAlpha(idle ? 0.45 : 1);
-        if (this.joyLabel) this.joyLabel.setAlpha(idle ? 0.40 : 0.7);
+        if (this._joyIdle === idle) return;
+        const first = this._joyIdle === null;
+        this._joyIdle = idle;
+        this._fadeControl([
+            [this.joyBase, idle ? 0.42 : 1],
+            [this.joyHints, idle ? 0.35 : 0.85],
+            [this.joyKnob, idle ? 0.5 : 1],
+        ], first);
     }
 
     setAimStickAlpha(a) {
         if (!this.aimStickBase) return;
         const idle = a < 1;
-        this.aimStickOuter.setAlpha(idle ? 0.35 : 1);
-        this.aimStickBase.setAlpha(idle ? 0.45 : 1);
-        this.aimStickHint.setAlpha(idle ? 0.20 : 0.55);
-        this.aimStickKnob.setAlpha(idle ? 0.45 : 1);
-        if (this.aimLabel) this.aimLabel.setAlpha(idle ? 0.40 : 0.7);
+        if (this._aimIdle === idle) return;
+        const first = this._aimIdle === null;
+        this._aimIdle = idle;
+        this._fadeControl([
+            [this.aimStickBase, idle ? 0.42 : 1],
+            [this.aimStickHint, idle ? 0.35 : 0.85],
+            [this.aimStickKnob, idle ? 0.5 : 1],
+        ], first);
     }
     touchMove(p) {
         if (this.joy.active && this.joy.pointerId === p.id) this.updateJoyKnob(p);
@@ -6072,9 +6068,9 @@ export class DungeonScene extends Phaser.Scene {
 
     setTouchUIVisible(visible) {
         const items = [
-            this.joyOuter, this.joyBase, this.joyHints, this.joyKnob, this.joyLabel,
-            this.aimStickOuter, this.aimStickBase, this.aimStickHint, this.aimStickKnob, this.aimLabel,
-            this.dashBtnOuter, this.dashBtnBase, this.dashBtnCdArc, this.dashBtnLabel, this.dashLabel
+            this.joyBase, this.joyHints, this.joyKnob,
+            this.aimStickBase, this.aimStickHint, this.aimStickKnob,
+            this.dashBtnBase, this.dashBtnCdArc, this.dashBtnLabel
         ];
         for (const it of items) if (it) it.setVisible(visible);
         // Force-clear stick state when hiding so a stale touch can't drive Pi after we transition away
