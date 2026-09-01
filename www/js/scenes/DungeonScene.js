@@ -28,7 +28,7 @@ const SHAKE_CFG = {
 };
 const POWERUP_ICON = { triple: 'ui_target', speed: 'ui_bolt', shield: 'ui_shield', fire: 'ui_flame' };
 const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };   // texture, w/h factors of labelSize
-const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close'];
+const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close', 'pause', 'sound', 'sound_off'];
 
 // Depth bands. World/level visuals below, UI band (989+) at the end.
 const LAYER = {
@@ -55,6 +55,7 @@ const LAYER = {
     UI_OVERLAY: 2000,     // win/lose overlay, upgrade picker
     UI_SHOP: 2200,
     UI_PICKER: 2300,      // relic picker
+    UI_PAUSE: 2400,       // pause / settings
     UI_INTRO: 2500,       // story / floor intro
     UI_FLASH: 3000,       // flashNoCheese
     UI_DEBUG: 5000,       // fps overlay
@@ -296,6 +297,10 @@ export class DungeonScene extends Phaser.Scene {
         this._hudLayout = null;
         this._shopViews = null;
         this._shopInput = null;
+        this._pauseElements = null;
+        this._pausedTweens = null;
+        this._pauseTouchWasVisible = false;
+        this._pauseStartedAt = 0;
         this._shopDrag = null;
         this._shopScroll = [0, 0];
         this._pickerSilent = false;
@@ -380,9 +385,11 @@ export class DungeonScene extends Phaser.Scene {
                 && !this._pickerElements && !this._shopElements) this.scene.restart();
         });
         this.input.keyboard.on('keydown-ESC', () => {
-            // Close modals first; only exit the run when nothing is open
+            // Close modals first; mid-floor ESC opens the pause screen (quitting lives inside it)
             if (this._shopElements) { this.closeInRunShop?.(); return; }
+            if (this._pauseElements) { this.closePauseMenu(); return; }
             if (this._pickerElements) return;  // don't quit while picker is open
+            if (this.state === 'play') { this.openPauseMenu(); return; }
             this.exitToMenu();
         });
         this.input.keyboard.on('keydown-SHIFT', () => this.tryDash());
@@ -5333,6 +5340,12 @@ export class DungeonScene extends Phaser.Scene {
         this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
             .setInteractive(new Phaser.Geom.Circle(32, 32, 44), Phaser.Geom.Circle.Contains)
             .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.exitToMenu(); });
+        // Pause button — same disc beside the exit one, with its own 52 px tap rect
+        this.pauseBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
+        this.pauseBtn = this.add.image(0, 0, 'ui_pause').setOrigin(0.5).setScrollFactor(0).setDepth(D);
+        this.pauseHit = this.add.rectangle(0, 0, 52, 52, 0xffffff, 0.001).setScrollFactor(0).setDepth(D + 1)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.openPauseMenu(); });
         this.repositionHUD();
     }
 
@@ -5377,6 +5390,21 @@ export class DungeonScene extends Phaser.Scene {
         this.exitBtnBg.strokeCircle(0, 0, L.exit.r);
         this.exitBtnBg.setPosition(L.exit.cx, L.exit.cy);
         this.exitBtn.setPosition(L.exit.cx, L.exit.cy).setDisplaySize(L.exit.iconSize, L.exit.iconSize);
+        // Pause disc: left of the exit one, or under it when the cheese counter is that close
+        const pGap = Math.round(10 * L.s), pR = L.exit.r;
+        let pcx = L.exit.cx - L.exit.r - pGap - pR, pcy = L.exit.cy;
+        const chRect = L.rects.find(r => r.name === 'cheese');
+        if (chRect && pcx - pR < chRect.x + chRect.w + Math.round(8 * L.s)) {
+            pcx = L.exit.cx; pcy = L.exit.cy + L.exit.r + pGap + pR;
+        }
+        this.pauseBtnBg.clear();
+        this.pauseBtnBg.fillStyle(0x140820, 0.92);
+        this.pauseBtnBg.fillCircle(0, 0, pR);
+        this.pauseBtnBg.lineStyle(2, 0xe8b54a, 0.75);
+        this.pauseBtnBg.strokeCircle(0, 0, pR);
+        this.pauseBtnBg.setPosition(pcx, pcy);
+        this.pauseBtn.setPosition(pcx, pcy).setDisplaySize(Math.round(L.exit.iconSize * 0.52), Math.round(L.exit.iconSize * 0.52));
+        this.pauseHit.setPosition(pcx, pcy);
         // Compass: label size / ring radius depend on the screen — force a redraw
         this._compassKey = null;
         if (this.joy) this.positionJoystick();
@@ -5923,6 +5951,7 @@ export class DungeonScene extends Phaser.Scene {
             ...(this.heartIcons || []), this.cheeseIcon, this.cheeseText, this.keyIcon, this.compass, this.compassLabel,
             this.powerupIcon, this.powerupText, this.suspicionMeter, this.suspicionLabel,
             this.bookCounterIcon, this.bookCounterText, this.crouchIcon, this.exitBtnBg, this.exitBtn,
+            this.pauseBtnBg, this.pauseBtn, this.pauseHit,
         ];
         for (const o of objs) if (o) o.setVisible(v);
         this._hudHidden = !v;
@@ -6662,6 +6691,230 @@ export class DungeonScene extends Phaser.Scene {
             this._pickerSilent = true;
             this.showUpgradePicker();
         }
+    }
+
+    // =================================================================
+    // PAUSE / SETTINGS — the only place to change volume or mute
+    // =================================================================
+    openPauseMenu() {
+        if (this.state !== 'play' || this._pauseElements || this._pickerElements || this._shopElements) return;
+        bus.emit(UI.MENU_OPEN);
+        this.state = 'paused';                       // update() early-returns on anything but 'play'
+        // A hit-stop in flight would restore its scaled clock after the resume — end it here
+        if (this._hitStopTimeout) { clearTimeout(this._hitStopTimeout); this._hitStopTimeout = null; }
+        this._hitStopUntil = 0;
+        this.time.timeScale = 1;
+        this.tweens.timeScale = 1;
+        // Pause the tweens that are running now, not the manager: the pause screen's own
+        // button-press tweens have to keep playing or their onComplete never fires.
+        this._pausedTweens = this.tweens.getTweens().filter(t => t.isPlaying && t.isPlaying());
+        this._pausedTweens.forEach(t => { try { t.pause(); } catch (e) {} });
+        this.time.paused = true;                     // freezes this.time.now and every timer event
+        try { window.audio && window.audio.pauseAll && window.audio.pauseAll(); } catch (e) {}
+        this._pauseStartedAt = this.time.now;         // Clock.now keeps ticking while paused
+        this._pauseTouchWasVisible = !!(this.joyBase && this.joyBase.visible);
+        this.setTouchUIVisible(false);
+        if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
+        this._buildPauseScreen();
+    }
+
+    closePauseMenu(silent) {
+        if (!this._pauseElements) return;
+        if (!silent) bus.emit(UI.MENU_CLOSE);
+        this._pauseElements.forEach(e => e.destroy());
+        this._pauseElements = null;
+        this.time.paused = false;
+        this.time.timeScale = 1;
+        this.tweens.timeScale = 1;
+        if (this._pausedTweens) {
+            this._pausedTweens.forEach(t => { try { if (t.parent) t.resume(); } catch (e) {} });
+            this._pausedTweens = null;
+        }
+        try { window.audio && window.audio.resumeAll && window.audio.resumeAll(); } catch (e) {}
+        // Clock.now runs on regardless of time.paused, so hand back the deadlines it ate
+        const held = Math.max(0, this.time.now - (this._pauseStartedAt || this.time.now));
+        if (held > 0) {
+            if (this.activePowerup) this.activePowerup.endTime += held;
+            this._comboExpire += held;
+            for (const cl of this.flourClouds || []) cl.endTime += held;
+            for (const e of this.enemies || []) {
+                if (e.invulnUntil) e.invulnUntil += held;
+                if (e._kneeling) e._kneeling += held;
+            }
+            if (this.exit && this.exit.glowHoldUntil) this.exit.glowHoldUntil += held;
+        }
+        this._pauseStartedAt = 0;
+        if (this.state === 'paused') this.state = 'play';
+        if (this._pauseTouchWasVisible) this.setTouchUIVisible(true);
+        this._pauseTouchWasVisible = false;
+    }
+
+    _buildPauseScreen() {
+        const W = this.viewW, H = this.viewH;
+        const D = LAYER.UI_PAUSE;
+        const k = Math.min(1, H / 440);
+        const tight = H < 380;
+        this._pauseElements = [];
+        const addEl = (el, dep) => {
+            el.setScrollFactor(0).setDepth(dep != null ? dep : D);
+            this._pauseElements.push(el);
+            return el;
+        };
+        addEl(this.add.rectangle(0, 0, W, H, 0x080310, 0.72).setOrigin(0).setInteractive());
+
+        const PAD = tight ? 14 : Math.max(14, Math.round(20 * k));
+        const panelW = Math.round(Math.min(W * 0.9, 460));
+        const titleFs = Math.max(18, Math.round(26 * k));
+        const labelFs = Math.max(12, Math.round(15 * k));
+        const rowH = tight ? 44 : 52;
+        const muteH = tight ? 46 : 50;
+        const btnH = 48;
+        const step = 48;
+
+        const title = this.add.text(0, 0, 'ПАУЗА', {
+            fontFamily: UI_F.display, fontStyle: '700', fontSize: titleFs + 'px',
+            color: '#f6d77a', stroke: '#1a0a2e', strokeThickness: 2
+        }).setOrigin(0.5, 0);
+        const ROWS = [['master', 'Общая'], ['sfx', 'Эффекты'], ['music', 'Музыка']];
+        const labels = ROWS.map(([, name]) => this.add.text(0, 0, name, {
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: labelFs + 'px', color: '#f4ecff'
+        }).setOrigin(0, 0.5));
+        const labelW = Math.ceil(Math.max(...labels.map(t => t.width)));
+
+        // Spend whatever height is left on the five gaps, so the panel fits even on a 320 px screen
+        const fixedH = PAD * 2 + title.height + rowH * 3 + muteH + btnH;
+        const gap = Math.max(3, Math.min(12, Math.floor((Math.round(H * 0.90) - fixedH) / 5)));
+        const gapT = gap, rowGap = gap, gapM = gap, gapB = gap;
+        const panelH = Math.round(fixedH + gap * 5);
+        const cx = W / 2, cy = H / 2;
+        const left = Math.round(cx - panelW / 2), top = Math.round(cy - panelH / 2);
+        this.drawGothicPanel(cx, cy, panelW, panelH, { depth: D })
+            .forEach(e => { e.setScrollFactor(0); this._pauseElements.push(e); });
+
+        title.setPosition(cx, top + PAD);
+        addEl(title, D + 6);
+
+        // --- Volume rows: label, −, five segments, +
+        // One content inset for every row: wide enough to clear the corner accents
+        // (inset 10 + arc 16 + stub 16) whenever the panel can spare it.
+        const CP = panelW >= 420 ? Math.max(PAD, 44) : PAD;
+        const x0 = left + CP, x1 = left + panelW - CP;
+        const minusCx = x0 + labelW + 10 + step / 2;
+        const plusCx = x1 - step / 2;
+        const barX0 = minusCx + step / 2 + 10, barX1 = plusCx - step / 2 - 10;
+        const barW = Math.max(60, barX1 - barX0);
+        const segGap = 5, segN = 5;
+        const segW = (barW - segGap * (segN - 1)) / segN;
+        const segH = Math.max(16, Math.round(rowH * 0.42));
+
+        const stepper = (scx, scy, glyph, onTap) => {
+            const g = this.add.graphics();
+            const draw = (hot) => {
+                g.clear();
+                g.fillStyle(UI_C.surface2, hot ? 1 : 0.8);
+                g.fillRoundedRect(-step / 2, -step / 2, step, step, 12);
+                g.lineStyle(2, hot ? UI_C.goldBright : UI_C.gold, 0.9);
+                g.strokeRoundedRect(-step / 2, -step / 2, step, step, 12);
+            };
+            draw(false);
+            g.setPosition(scx, scy);
+            addEl(g, D + 4);
+            addEl(this.add.text(scx, scy - 1, glyph, {
+                fontFamily: UI_F.body, fontStyle: '700', fontSize: Math.round(step * 0.46) + 'px', color: '#f4ecff'
+            }).setOrigin(0.5), D + 5);
+            addEl(this.add.rectangle(scx, scy, step, step, 0xffffff, 0.001)
+                .setInteractive({ useHandCursor: true })
+                .on('pointerdown', () => { draw(true); onTap(); })
+                .on('pointerup', () => draw(false))
+                .on('pointerout', () => draw(false)), D + 6);
+        };
+
+        const rowsTop = top + PAD + title.height + gapT;
+        const bars = [];
+        ROWS.forEach(([key, name], i) => {
+            const rcy = rowsTop + i * (rowH + rowGap) + rowH / 2;
+            labels[i].setPosition(x0, rcy);
+            addEl(labels[i], D + 6);
+            const g = addEl(this.add.graphics(), D + 5);
+            bars.push({ key, g });
+            const setLevel = (d) => {
+                const p = Progress.getAudioPrefs();
+                const lvl = Math.max(0, Math.min(segN, Math.round((p[key] != null ? p[key] : 1) * segN) + d));
+                Progress.setAudioPref(key, lvl / segN);
+                try { window.audio && window.audio.applyPrefs && window.audio.applyPrefs(Progress.getAudioPrefs()); } catch (e) {}
+                bus.emit(UI.BUTTON_CLICK);
+                refresh();
+            };
+            stepper(minusCx, rcy, '−', () => setLevel(-1));
+            stepper(plusCx, rcy, '+', () => setLevel(1));
+            g.y = rcy;
+        });
+
+        // --- Mute toggle
+        const muteCy = rowsTop + rowH * 3 + rowGap * 2 + gapM + muteH / 2;
+        const muteG = addEl(this.add.graphics(), D + 4);
+        muteG.fillStyle(UI_C.surface, 1);
+        muteG.fillRoundedRect(x0, muteCy - muteH / 2, x1 - x0, muteH, 14);
+        muteG.lineStyle(1.5, UI_C.text, 0.14);
+        muteG.strokeRoundedRect(x0, muteCy - muteH / 2, x1 - x0, muteH, 14);
+        const muteIcoSize = Math.round(muteH * 0.52);
+        let muteIcon = addEl(this._uiIcon(x0 + 14 + muteIcoSize / 2, muteCy, 'ui_sound', muteIcoSize), D + 5);
+        const muteLabel = addEl(this.add.text(x0 + 14 + muteIcoSize + 12, muteCy, '', {
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: labelFs + 'px', color: '#f4ecff'
+        }).setOrigin(0, 0.5), D + 5);
+        addEl(this.add.rectangle(cx, muteCy, x1 - x0, Math.max(48, muteH), 0xffffff, 0.001)
+            .setInteractive({ useHandCursor: true })
+            .on('pointerup', () => {
+                if (window.audio && window.audio.toggleMute) window.audio.toggleMute();
+                else { Progress.toggleMute(); }
+                bus.emit(UI.BUTTON_CLICK);
+                refresh();
+            }), D + 6);
+
+        const refresh = () => {
+            const p = Progress.getAudioPrefs();
+            const dim = p.muted ? 0.45 : 1;
+            bars.forEach(({ key, g }, i) => {
+                const lvl = Math.round((p[key] != null ? p[key] : 1) * segN);
+                g.clear();
+                for (let s = 0; s < segN; s++) {
+                    const sx = barX0 + s * (segW + segGap);
+                    if (s < lvl) {
+                        g.fillStyle(UI_C.gold, dim);
+                        g.fillRoundedRect(sx, -segH / 2, segW, segH, 5);
+                    } else {
+                        g.fillStyle(UI_C.surface2, 1);
+                        g.fillRoundedRect(sx, -segH / 2, segW, segH, 5);
+                        g.lineStyle(1.5, UI_C.text, 0.16);
+                        g.strokeRoundedRect(sx, -segH / 2, segW, segH, 5);
+                    }
+                }
+                labels[i].setAlpha(dim);
+            });
+            const key = p.muted ? 'ui_sound_off' : 'ui_sound';
+            if (muteIcon.texture.key !== key) {
+                muteIcon.setTexture(key);
+                const src = muteIcon.texture.getSourceImage();
+                const f = muteIcoSize / Math.max(1, src.width, src.height);
+                muteIcon.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+            }
+            muteIcon.setAlpha(p.muted ? 0.6 : 1);
+            muteLabel.setText(p.muted ? 'Звук выкл' : 'Звук вкл').setColor(p.muted ? '#b9a6d4' : '#f4ecff');
+        };
+        refresh();
+
+        // --- Continue / quit
+        const btnW = Math.floor((x1 - x0 - 12) / 2);
+        const btnCy = top + panelH - PAD - btnH / 2;
+        this.drawGothicButton(cx - btnW / 2 - 6, btnCy, btnW, btnH, 'ПРОДОЛЖИТЬ', {
+            variant: 'primary', fontSize: Math.max(13, Math.round(16 * k)), depth: D + 8,
+            onClick: () => this.closePauseMenu()
+        }).forEach(e => { e.setScrollFactor(0); this._pauseElements.push(e); });
+        this.drawGothicButton(cx + btnW / 2 + 6, btnCy, btnW, btnH, 'В МЕНЮ', {
+            variant: 'secondary', fontSize: Math.max(13, Math.round(16 * k)), depth: D + 8,
+            onClick: () => { this.closePauseMenu(true); this.exitToMenu(); }
+        }).forEach(e => { e.setScrollFactor(0); this._pauseElements.push(e); });
+        this._pinFixed();
     }
 
     flashNoCheese(x, y) {
