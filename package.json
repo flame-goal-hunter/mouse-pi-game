@@ -12,7 +12,8 @@
     "cap:open:android": "npx cap open android",
     "android:build": "cd android && ./gradlew assembleDebug",
     "android:release": "cd android && ./gradlew assembleRelease",
-    "start:static": "npx serve www"
+    "start:static": "npx serve www",
+    "heroku-postbuild": "node tools/stamp_sw.mjs"
   },
   "keywords": [
     "game",
@@ -23,16 +24,16 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@capacitor/android": "^5.0.0",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^5.0.0",
-    "serve": "^14.0.0"
-  },
-  "dependencies": {
-    "@capacitor/android": "^5.0.0",
     "@capacitor/core": "^5.0.0",
     "@capacitor/splash-screen": "^5.0.0",
     "@capacitor/status-bar": "^5.0.0",
     "phaser-navmesh": "^2.3.1",
+    "serve": "^14.0.0"
+  },
+  "dependencies": {
     "@colyseus/core": "^0.15.0",
     "@colyseus/monitor": "^0.15.0",
     "@colyseus/schema": "^2.0.0",
