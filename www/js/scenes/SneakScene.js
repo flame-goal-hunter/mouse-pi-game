@@ -10,7 +10,7 @@ import { preloadAudio } from '../audio/AudioManager.js';
 import { SNEAK } from '../sneak/SneakMetrics.js';
 import { TEMPLATES, BEATS } from '../sneak/templates/index.js';
 import { assembleNight } from '../sneak/NightAssembler.js';
-import { isFloor } from '../sneak/RoomTemplate.js';
+import { isFloor, inCone } from '../sneak/RoomTemplate.js';
 import { positionAt } from '../sneak/PatrolCycle.js';
 
 const CELL = SNEAK.CELL;
@@ -123,6 +123,7 @@ export class SneakScene extends Phaser.Scene {
         const actionDown = this.cursors.space.isDown;
         this.updateHoleHold(dt, actionDown);
         if (this.holdMs === 0) this.updatePlayer(dt);
+        this.updateMonster(dt);
     }
 
     nearestHole() {
@@ -195,6 +196,101 @@ export class SneakScene extends Phaser.Scene {
             fontFamily: 'Nunito, sans-serif', fontSize: '22px', color,
         }).setOrigin(0.5).setDepth(DEPTH.HUD);
         this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
+    }
+
+    updateMonster(dt) {
+        const m = this.monster;
+        if (!m) return;
+
+        if (m.state === 'confused' && this.time.now > m.confusedUntil) m.state = 'patrol';
+
+        if (m.state === 'patrol' || m.state === 'confused') {
+            m.t += dt * 1000;
+            const p = positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, m.t);
+            m.x = p.x; m.y = p.y; m.angle = p.angle;
+        } else if (m.state === 'chase') {
+            this.chaseStep(dt);
+        }
+
+        // Подозрение растёт только когда игрок в конусе и не спрятан.
+        const sees = !this.player.hidden && m.state !== 'confused'
+            && inCone(this.player.x, this.player.y, m.x, m.y, m.angle, SNEAK.CONE_RANGE, SNEAK.CONE_ANGLE);
+        if (sees) {
+            m.suspicion = Math.min(1, m.suspicion + SNEAK.SUSPICION_RISE * dt);
+            if (m.suspicion >= 1 && m.state !== 'chase') {
+                m.state = 'chase';
+                this.everSeen = true;
+                bus.emit(SFX.TAKE_DAMAGE);
+                this.showFloatingText(m.x, m.y - 40, '!', '#ff6060');
+            }
+        } else if (m.state !== 'chase') {
+            m.suspicion = Math.max(0, m.suspicion - SNEAK.SUSPICION_FALL * dt);
+        }
+
+        m.sprite.setPosition(m.x, m.y);
+        this.drawCone();
+        this.drawSuspicion();
+
+        if (m.state === 'chase' && !this.player.hidden
+            && Math.hypot(m.x - this.player.x, m.y - this.player.y) < CELL * 0.7) {
+            this.capture();
+        }
+    }
+
+    // Монстр быстр по прямой и медлен в повороте — правило баланса режима.
+    chaseStep(dt) {
+        const m = this.monster;
+        const dx = this.player.x - m.x;
+        const dy = this.player.y - m.y;
+        const want = Math.atan2(dy, dx);
+        let delta = want - m.angle;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+        while (delta < -Math.PI) delta += Math.PI * 2;
+
+        const turning = Math.abs(delta) > 0.35;
+        const speed = turning ? SNEAK.CHASE_TURN : SNEAK.CHASE_SPEED;
+        const maxTurn = (Math.PI / (SNEAK.TURN_BRAKE_MS / 1000)) * dt;
+        m.angle += Math.max(-maxTurn, Math.min(maxTurn, delta));
+
+        m.x += Math.cos(m.angle) * speed * dt;
+        m.y += Math.sin(m.angle) * speed * dt;
+    }
+
+    drawCone() {
+        const m = this.monster;
+        this.coneGfx.clear();
+        if (m.state === 'confused') return;
+        const half = SNEAK.CONE_ANGLE / 2;
+        const alpha = m.state === 'chase' ? 0.30 : 0.16;
+        this.coneGfx.fillStyle(m.state === 'chase' ? 0xff6060 : 0xd8a850, alpha);
+        this.coneGfx.beginPath();
+        this.coneGfx.moveTo(m.x, m.y);
+        this.coneGfx.arc(m.x, m.y, SNEAK.CONE_RANGE, m.angle - half, m.angle + half);
+        this.coneGfx.closePath();
+        this.coneGfx.fillPath();
+    }
+
+    // Полоска подозрения над монстром — требование доступности: ребёнок
+    // должен понимать, что происходит, а не угадывать.
+    drawSuspicion() {
+        const m = this.monster;
+        if (!this.susBar) this.susBar = this.add.graphics().setDepth(DEPTH.HUD);
+        this.susBar.clear();
+        if (m.suspicion <= 0.02) return;
+        const w = 36;
+        this.susBar.fillStyle(0x000000, 0.5);
+        this.susBar.fillRect(m.x - w / 2, m.y - 46, w, 5);
+        this.susBar.fillStyle(m.suspicion >= 1 ? 0xff6060 : 0xffd040, 1);
+        this.susBar.fillRect(m.x - w / 2, m.y - 46, w * m.suspicion, 5);
+    }
+
+    // Заглушка: полноценная поимка приходит в Task 12.
+    capture() {
+        if (this.state !== 'play') return;
+        this.state = 'caught';
+        bus.emit(SFX.TAKE_DAMAGE);
+        this.cameras.main.shake(240, 0.012);
+        this.showFloatingText(this.player.x, this.player.y - 40, 'ПОЙМАЛИ!', '#ff6060');
     }
 
     updatePlayer(dt) {
