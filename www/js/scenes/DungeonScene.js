@@ -368,7 +368,7 @@ export class DungeonScene extends Phaser.Scene {
         // Combo state
         this._combo = 0;
         this._comboExpire = 0;
-        this._stepDist = 0;
+        this._dustTint = null;
 
         this.dungeon = this.generateDungeon();
         this.computeRoomGoals();    // pick key/exit rooms BEFORE walls so pillars skip them
@@ -2035,29 +2035,37 @@ export class DungeonScene extends Phaser.Scene {
         const back = !!(entity._facingBack && entity.walkFramesBack);
         const walkFrames = back ? entity.walkFramesBack : entity.walkFrames;
         const standFrame = (back && entity.standFrameBack) ? entity.standFrameBack : entity.standFrame;
+        entity._footContact = false;
         if (isMoving) {
-            entity.walkPhase = (entity.walkPhase || 0) + (walkSpeed || 0.20);
-            // Lively walk: bigger bounce + waddle + squash
-            const bob = Math.sin(entity.walkPhase * 2) * 9;
-            const tilt = Math.sin(entity.walkPhase) * 11;
-            const stretch = Math.abs(Math.sin(entity.walkPhase * 2)) * 0.13;
-            const waddle = Math.sin(entity.walkPhase) * 2.4 * facing;
-            // === DIRECTIONAL CUES — pronounced lean + squash so direction reads at a glance ===
             const vx = entity.vx || 0, vy = entity.vy || 0;
             const sp = Math.hypot(vx, vy);
-            // Y-squash: UP = much shorter (away), DOWN = much taller (toward camera) — ±12%
-            const ySquash = sp > 5 ? Math.max(-0.12, Math.min(0.12, vy / 400)) : 0;
-            // Strong lean: backward when going up, forward when going down — ±15°
-            const dirLean = sp > 5 ? Math.max(-15, Math.min(15, vy / 14)) : 0;
-            // Horizontal lean: leans into walking direction — ±8°
-            const xLean = sp > 5 ? Math.max(-8, Math.min(8, vx / 20)) : 0;
-            // X-squash removed — combined with walk-stretch it made sprites look pinched
+            // Cadence follows real speed, so a slow or crouched walk steps slowly instead of
+            // flailing. Frame-time normalised so the cycle is not faster on a 120 Hz screen.
+            const rate = entity.speedRef ? Math.max(0.4, Math.min(1.25, sp / entity.speedRef)) : 1;
+            const dtScale = Math.min(2.5, (this.game.loop.delta || 16.667) / 16.667);
+            const prevPhase = entity.walkPhase || 0;
+            entity.walkPhase = prevPhase + (walkSpeed || 0.20) * rate * dtScale;
+            // One footfall per half cycle — the body is at its lowest exactly when the leg
+            // frame swaps, so the sound, the dust and the visible step all land together.
+            if (Math.floor(entity.walkPhase / Math.PI) !== Math.floor(prevPhase / Math.PI)) entity._footContact = true;
+            // Grounded walk: small bob, small lean. Big amplitudes read as bouncing, not walking.
+            const bob = Math.cos(entity.walkPhase * 2) * 2.5;        // lowest on the footfall
+            const tilt = Math.sin(entity.walkPhase) * 3;
+            const squash = Math.cos(entity.walkPhase * 2) * 0.05;    // squash on contact, stretch mid-air
+            const waddle = Math.sin(entity.walkPhase) * 1.0 * facing;
+            // === DIRECTIONAL CUES — a slight lean + squash so the direction still reads ===
+            // Y-squash: UP = shorter (away), DOWN = taller (toward camera) — ±5%
+            const ySquash = sp > 5 ? Math.max(-0.05, Math.min(0.05, vy / 400)) : 0;
+            // Lean: backward when going up, forward when going down — ±5°
+            const dirLean = sp > 5 ? Math.max(-5, Math.min(5, vy / 48)) : 0;
+            // Horizontal lean: leans into walking direction — ±4°
+            const xLean = sp > 5 ? Math.max(-4, Math.min(4, vx / 60)) : 0;
             sprite.y = entity.y + bob;
             sprite.x = entity.x + waddle;
             // tilt (walk cycle) * facing + lean (directional)
             sprite.angle = (tilt * facing) + dirLean + xLean;
-            sprite.scaleX = baseScale * facing * (1 - stretch * 0.5);  // gentler horizontal squash
-            sprite.scaleY = baseScale * (1 + stretch + ySquash);
+            sprite.scaleX = baseScale * facing * (1 + squash * 0.6);
+            sprite.scaleY = baseScale * (1 - squash + ySquash);
             // Swap walk-cycle frames if entity has them (legs visibly move)
             if (walkFrames) {
                 const idx = Math.floor(entity.walkPhase / Math.PI) % walkFrames.length;
@@ -2133,6 +2141,7 @@ export class DungeonScene extends Phaser.Scene {
             invulnTimer: 0,
             fireTimer: 0,
             walkPhase: 0,
+            speedRef: PLAYER.speed,
             aimAngle: 0,
             standFrame: 'd_pi',
             walkFrames: ['d_pi_walk1', 'd_pi_walk2'],
@@ -2460,19 +2469,15 @@ export class DungeonScene extends Phaser.Scene {
         this.moveWithWalls(this.player, PLAYER.radius, dt);
 
         const speed = Math.hypot(this.player.vx, this.player.vy);
-        // Footsteps on a distance cadence: 240 px/s ÷ 92 px ≈ 2.6 steps/s at full speed.
-        // Crouching = half the rate and quieter.
-        if (!this.player.dashing && speed > 25) {
-            this._stepDist = (this._stepDist || 0) + speed * dt;
-            const stride = this.player.crouch ? 184 : 92;
-            if (this._stepDist >= stride) {
-                this._stepDist = 0;
-                bus.emit(SFX.FOOTSTEP, this.player.crouch ? { vol: 0.45 } : undefined);
-            }
+        this.animateSprite(this.player, 0.34, speed > 25, 0.13);
+        // Sound and dust ride the walk cycle's own footfall — ~2.5 steps/s at full speed,
+        // proportionally slower (and quieter) while crouching, which is also slower.
+        if (this.player._footContact && !this.player.dashing) {
+            bus.emit(SFX.FOOTSTEP, this.player.crouch ? { vol: 0.45 } : undefined);
+            this._stepDust(this.player.x, this.player.y + 28, this.player.facing || 1);
         }
-        this.animateSprite(this.player, 0.34, speed > 25, 0.22);
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
-        this.player.shadow.setScale(speed > 25 ? 0.95 + Math.abs(Math.sin(this.player.walkPhase * 2)) * 0.08 : 1, 1);
+        this.player.shadow.setScale(speed > 25 ? 1 + Math.cos(this.player.walkPhase * 2) * 0.05 : 1, 1);
 
         if (this.player.invulnTimer > 0) {
             this.player.invulnTimer -= dt * 1000;
@@ -5135,6 +5140,31 @@ export class DungeonScene extends Phaser.Scene {
         img.setActive(false).setVisible(false);
         if (this._iconPool.length < 16) this._iconPool.push(img);
         else img.destroy();
+    }
+
+    // A couple of tiny floor puffs under the hero at the moment his foot lands
+    _stepDust(x, y, facing) {
+        const cam = this.cameras.main;
+        if (x < cam.worldView.x - 40 || x > cam.worldView.x + this.viewW + 40 ||
+            y < cam.worldView.y - 40 || y > cam.worldView.y + this.viewH + 40) return;
+        if (this._dustTint == null) {
+            const b = (this.biome && this.biome.floorColorB) || 0x2a2038;
+            const lift = v => Math.min(255, Math.round(v + (255 - v) * 0.55));
+            this._dustTint = (lift((b >> 16) & 255) << 16) | (lift((b >> 8) & 255) << 8) | lift(b & 255);
+        }
+        const n = Math.random() < 0.5 ? 2 : 3;
+        for (let i = 0; i < n; i++) {
+            const px = x + Phaser.Math.Between(-8, 8);
+            const py = y + Phaser.Math.Between(-2, 4);
+            const p = this._getPooledCircle(px, py, Phaser.Math.Between(2, 3), this._dustTint, 0.24).setDepth(198);
+            this.tweens.add({
+                targets: p,
+                x: px - facing * Phaser.Math.Between(5, 14),
+                y: py - Phaser.Math.Between(2, 7),
+                alpha: 0, scale: 1.7, duration: 340, ease: 'Quad.easeOut',
+                onComplete: () => this._releaseCircle(p)
+            });
+        }
     }
 
     poofAt(x, y, color) {
