@@ -30,6 +30,7 @@ export class SneakScene extends Phaser.Scene {
         this.tpl = this.room.template;
         this.state = 'play';
         this.holdMs = 0;
+        this.holdArmed = true;
         this.monster = null;
         this.player = null;
     }
@@ -117,8 +118,83 @@ export class SneakScene extends Phaser.Scene {
 
     update(_time, dtMs) {
         const dt = Math.min(dtMs, 50) / 1000;
+        if (this.state === 'squeeze') return;
         if (this.state !== 'play') return;
-        this.updatePlayer(dt);
+        const actionDown = this.cursors.space.isDown;
+        this.updateHoleHold(dt, actionDown);
+        if (this.holdMs === 0) this.updatePlayer(dt);
+    }
+
+    nearestHole() {
+        let best = null;
+        let bestD = Infinity;
+        for (const h of this.holes) {
+            const d = Math.hypot(h.x - this.player.x, h.y - this.player.y);
+            if (d < bestD) { bestD = d; best = h; }
+        }
+        return bestD <= CELL * 0.9 ? best : null;
+    }
+
+    // Удержание кнопки действия HOLE_HOLD_MS у пасти норы.
+    updateHoleHold(dt, actionDown) {
+        if (!actionDown) this.holdArmed = true;
+        const near = this.nearestHole();
+        if (!near || !actionDown || this.player.hidden || !this.holdArmed) {
+            this.holdMs = 0;
+            if (this.holdRing) { this.holdRing.destroy(); this.holdRing = null; }
+            return;
+        }
+        this.holdMs += dt * 1000;
+        const t = Math.min(1, this.holdMs / SNEAK.HOLE_HOLD_MS);
+        if (!this.holdRing) {
+            this.holdRing = this.add.graphics().setDepth(DEPTH.HUD);
+        }
+        this.holdRing.clear();
+        this.holdRing.lineStyle(3, 0xd8a850, 0.9);
+        this.holdRing.beginPath();
+        this.holdRing.arc(near.x, near.y, CELL * 0.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * t);
+        this.holdRing.strokePath();
+        if (this.holdMs >= SNEAK.HOLE_HOLD_MS) this.enterHole(near);
+    }
+
+    enterHole(hole) {
+        this.holdMs = 0;
+        if (this.holdRing) { this.holdRing.destroy(); this.holdRing = null; }
+        this.player.hidden = true;
+        this.state = 'squeeze';
+        this.holdArmed = false;
+        bus.emit(SFX.PLAYER_DASH);
+        const other = (hole.mouth === hole.pair.a) ? hole.pair.b : hole.pair.a;
+        const tx = (other.x + 0.5) * CELL;
+        const ty = (other.y + 0.5) * CELL;
+        this.tweens.add({
+            targets: this.player.sprite,
+            x: tx, y: ty, scale: 0.18,
+            duration: SNEAK.HOLE_SQUEEZE_MS,
+            ease: 'Quad.easeInOut',
+            onComplete: () => {
+                this.player.x = tx;
+                this.player.y = ty;
+                this.player.sprite.setScale(0.32);
+                this.player.hidden = false;
+                this.state = 'play';
+                if (this.monster && this.monster.state === 'chase') this.monsterLosesPlayer();
+            },
+        });
+    }
+
+    monsterLosesPlayer() {
+        this.monster.state = 'confused';
+        this.monster.confusedUntil = this.time.now + SNEAK.HOLE_FORGET_MS;
+        this.monster.suspicion = 0;
+        this.showFloatingText(this.monster.x, this.monster.y - 40, '?', '#ffd040');
+    }
+
+    showFloatingText(x, y, text, color) {
+        const t = this.add.text(x, y, text, {
+            fontFamily: 'Nunito, sans-serif', fontSize: '22px', color,
+        }).setOrigin(0.5).setDepth(DEPTH.HUD);
+        this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
     }
 
     updatePlayer(dt) {
