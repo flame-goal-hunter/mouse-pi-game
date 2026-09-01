@@ -15,9 +15,8 @@
 
 1. Запушить репозиторий на GitHub (приватный — исходники никуда не публикуются).
 2. Heroku → приложение → **Deploy** → *Deployment method* = **GitHub** → авторизовать и выбрать репозиторий.
-3. В *Automatic deploys* выбрать **ту ветку, где лежит игра** (сейчас это `network_mode`,
-   а не `main` — Heroku по умолчанию предложит `main`, это надо поменять руками),
-   и включить автодеплой, либо жать *Deploy Branch* вручную.
+3. В *Automatic deploys* оставить ветку **`main`** (она уже основная в репозитории и
+   содержит актуальную игру) и включить автодеплой, либо жать *Deploy Branch* вручную.
 4. Один раз: **Resources → Change dyno type → Basic** (иначе дино засыпает и первый заход ждёт пробуждения).
 
 Больше ничего настраивать не нужно: Heroku сам увидит `Procfile`, поставит зависимости
@@ -26,13 +25,9 @@
 При каждом деплое `heroku-postbuild` штампует версию кеша service worker номером коммита,
 поэтому у всех, кто уже установил игру, она обновится сама — вручную ничего править не надо.
 
-### Если удобнее держать игру в `main`
-
-```bash
-git checkout master && git merge network_mode      # или переименовать ветку
-git push origin master:main
-```
-Тогда в Heroku можно оставить ветку `main` по умолчанию.
+Репозиторий: `https://github.com/flame-goal-hunter/mouse-pi-game` (приватный).
+Основная ветка — `main`. Ветки `master`, `network_mode` и остальные оставлены как история;
+деплоить из них не нужно.
 
 ## Вариант B — деплой напрямую из терминала
 
@@ -47,7 +42,7 @@ heroku create mousie-pi          # → https://mousie-pi-<hash>.herokuapp.com
 heroku ps:type web=basic
 
 # 4. Выложить текущую ветку
-git push heroku network_mode:main
+git push heroku main:main
 
 # 5. Открыть
 heroku open
@@ -55,8 +50,8 @@ heroku open
 
 ## Обновление после правок
 
-- **Вариант A:** просто `git push origin <ветка>` — Heroku подхватит сам (если включён автодеплой).
-- **Вариант B:** `git push heroku network_mode:main`.
+- **Вариант A:** просто `git push` из ветки `main` — Heroku подхватит сам (если включён автодеплой).
+- **Вариант B:** `git push heroku main:main`.
 
 Версию кеша service worker вручную поднимать **не нужно** — `tools/stamp_sw.mjs` подставляет
 номер коммита на каждой сборке.
