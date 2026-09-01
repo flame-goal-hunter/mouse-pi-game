@@ -839,17 +839,22 @@ export class DungeonScene extends Phaser.Scene {
     generateLibrary() {
         const rooms = [];
         const corridors = [];
-        // 3 rows × 4 columns of long thin rooms
-        const ROWS = 3, COLS = 4;
+        // Grid of long thin reading aisles — shape varies per floor
+        const ROWS = Phaser.Math.Between(2, 4), COLS = Phaser.Math.Between(3, 5);
         const ROOM_W = Math.floor((WORLD_W - 200) / COLS) - 20;
-        const ROOM_H = 220;
-        const VGAP = 180;   // tall vertical gap between rows
+        const ROOM_H = Phaser.Math.Between(190, 250);
+        const VGAP = Math.max(120, Math.floor((WORLD_H - ROWS * ROOM_H - 160) / Math.max(1, ROWS - 1)));
         const HGAP = 30;    // small horizontal gap = thin bookshelves
         const startX = 100;
         const startY = (WORLD_H - (ROWS * ROOM_H + (ROWS - 1) * VGAP)) / 2;
-        // Build the grid of long-shape rooms
+        // One interior cell is walled off on bigger grids so the floor is not a perfect lattice
+        const holeR = (ROWS > 2 && COLS > 3) ? Phaser.Math.Between(0, ROWS - 1) : -1;
+        const holeC = (holeR >= 0) ? Phaser.Math.Between(1, COLS - 2) : -1;
+        const cellId = {};
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
+                if (r === holeR && c === holeC) continue;
+                cellId[r + ',' + c] = rooms.length;
                 rooms.push({
                     x: startX + c * (ROOM_W + HGAP),
                     y: startY + r * (ROOM_H + VGAP),
@@ -857,16 +862,37 @@ export class DungeonScene extends Phaser.Scene {
                 });
             }
         }
-        // Connect: horizontal neighbours (within row) + vertical connectors at ends
+        // Connect: horizontal neighbours (within row) + vertical connectors at the ends
+        const at = (r, c) => cellId[r + ',' + c];
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS - 1; c++) {
-                corridors.push({ from: r * COLS + c, to: r * COLS + c + 1 });
+                const a = at(r, c), b = at(r, c + 1);
+                if (a !== undefined && b !== undefined) corridors.push({ from: a, to: b });
             }
         }
         for (let r = 0; r < ROWS - 1; r++) {
-            // Connect rows at left and right ends to form 'aisles'
-            corridors.push({ from: r * COLS,             to: (r + 1) * COLS });
-            corridors.push({ from: r * COLS + COLS - 1,  to: (r + 1) * COLS + COLS - 1 });
+            for (const c of [0, COLS - 1]) {
+                const a = at(r, c), b = at(r + 1, c);
+                if (a !== undefined && b !== undefined) corridors.push({ from: a, to: b });
+            }
+        }
+        // A random middle rung so the aisles are not always walked end to end
+        if (ROWS > 1 && COLS > 2) {
+            const c = Phaser.Math.Between(1, COLS - 2);
+            const r = Phaser.Math.Between(0, ROWS - 2);
+            const a = at(r, c), b = at(r + 1, c);
+            if (a !== undefined && b !== undefined) corridors.push({ from: a, to: b });
+        }
+        // Any cell cut off by the hole gets stitched to its vertical neighbour
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const id = at(r, c);
+                if (id === undefined) continue;
+                const linked = corridors.some(k => k.from === id || k.to === id);
+                if (linked) continue;
+                const alt = at(r > 0 ? r - 1 : r + 1, c);
+                if (alt !== undefined) corridors.push({ from: id, to: alt });
+            }
         }
         return { rooms, corridors };
     }
@@ -878,33 +904,34 @@ export class DungeonScene extends Phaser.Scene {
         const rooms = [];
         const corridors = [];
 
-        // Central cooking hub
-        const hubW = 560, hubH = 440;
+        // Central cooking hub — proportions vary per floor
+        const hubW = Phaser.Math.Between(500, 620), hubH = Phaser.Math.Between(400, 500);
         const hubX = (WORLD_W - hubW) / 2;
         const hubY = (WORLD_H - hubH) / 2;
         rooms.push({ x: hubX, y: hubY, w: hubW, h: hubH, id: 0, kind: 'hub' });
 
         // 4 alcoves (N/S/E/W of hub)
-        const alcoveW = 380, alcoveH = 320;
+        const alcoveW = Phaser.Math.Between(340, 420), alcoveH = Phaser.Math.Between(290, 360);
+        const jit = () => Phaser.Math.Between(-50, 50);
         // Pantry — north of hub (top), shifted slightly left
         rooms.push({
-            x: hubX + hubW * 0.10, y: hubY - alcoveH - 130,
+            x: hubX + hubW * 0.10 + jit(), y: hubY - alcoveH - 130,
             w: alcoveW, h: alcoveH, id: 1, kind: 'pantry'
         });
         // Stove Row — east of hub (right)
         rooms.push({
-            x: hubX + hubW + 130, y: hubY + hubH * 0.10,
+            x: hubX + hubW + 130, y: hubY + hubH * 0.10 + jit(),
             w: alcoveW, h: alcoveH, id: 2, kind: 'stove'
         });
         // Pot Wash — south of hub (bottom)
         rooms.push({
-            x: hubX + hubW * 0.45 - alcoveW / 2 + alcoveW * 0.50,
+            x: hubX + hubW * 0.45 - alcoveW / 2 + alcoveW * 0.50 + jit(),
             y: hubY + hubH + 130,
             w: alcoveW, h: alcoveH, id: 3, kind: 'wash'
         });
         // Cold Cellar — west of hub (left)
         rooms.push({
-            x: hubX - alcoveW - 130, y: hubY + hubH * 0.30,
+            x: hubX - alcoveW - 130, y: hubY + hubH * 0.30 + jit(),
             w: alcoveW, h: alcoveH, id: 4, kind: 'cellar'
         });
 
@@ -937,22 +964,26 @@ export class DungeonScene extends Phaser.Scene {
     generateGarden() {
         const rooms = [];
         const corridors = [];
-        const positions = [
-            // Center-cross layout
-            { x: WORLD_W * 0.5,  y: WORLD_H * 0.5,  w: 520, h: 520 },     // central plaza
-            { x: WORLD_W * 0.18, y: WORLD_H * 0.5,  w: 380, h: 380 },     // left garden
-            { x: WORLD_W * 0.82, y: WORLD_H * 0.5,  w: 380, h: 380 },     // right garden
-            { x: WORLD_W * 0.5,  y: WORLD_H * 0.18, w: 380, h: 380 },     // top garden
-            { x: WORLD_W * 0.5,  y: WORLD_H * 0.82, w: 380, h: 380 }      // bottom garden
-        ];
-        for (const p of positions) {
-            rooms.push({ x: p.x - p.w/2, y: p.y - p.h/2, w: p.w, h: p.h, id: rooms.length });
+        // Central plaza with a ring of beds around it — count and angle vary per floor
+        const plaza = Phaser.Math.Between(460, 560);
+        rooms.push({ x: WORLD_W * 0.5 - plaza / 2, y: WORLD_H * 0.5 - plaza / 2,
+                     w: plaza, h: plaza, id: 0 });
+        const spokes = Phaser.Math.Between(4, 6);
+        const spin = Math.random() * Math.PI * 2;
+        const rx = WORLD_W * 0.33, ry = WORLD_H * 0.33;
+        for (let i = 0; i < spokes; i++) {
+            const a = spin + (i / spokes) * Math.PI * 2;
+            const w = Phaser.Math.Between(320, 420), h = Phaser.Math.Between(320, 420);
+            const cx = Phaser.Math.Clamp(WORLD_W * 0.5 + Math.cos(a) * rx, w / 2 + 80, WORLD_W - w / 2 - 80);
+            const cy = Phaser.Math.Clamp(WORLD_H * 0.5 + Math.sin(a) * ry, h / 2 + 80, WORLD_H - h / 2 - 80);
+            rooms.push({ x: cx - w / 2, y: cy - h / 2, w, h, id: rooms.length });
         }
-        // Spoke layout: center (0) connects to all
+        // Spoke layout: the plaza connects to every bed
         for (let i = 1; i < rooms.length; i++) corridors.push({ from: 0, to: i });
-        // Add 1-2 outer connections for loops
-        corridors.push({ from: 1, to: 3 });
-        corridors.push({ from: 2, to: 4 });
+        // Plus a couple of hedge paths around the ring so it is not purely a star
+        for (let i = 1; i < rooms.length; i++) {
+            if (Math.random() < 0.45) corridors.push({ from: i, to: i === rooms.length - 1 ? 1 : i + 1 });
+        }
         return { rooms, corridors };
     }
 
@@ -966,14 +997,20 @@ export class DungeonScene extends Phaser.Scene {
         rooms.push({ x: 700, y: WORLD_H / 2 - 220, w: 380, h: 440, id: 1 });
         // Throne arena (HUGE — for boss + grandma)
         rooms.push({ x: WORLD_W - 1100, y: WORLD_H / 2 - 380, w: 900, h: 760, id: 2 });
-        // Side alcoves for stealth/key
-        rooms.push({ x: 700, y: 200, w: 300, h: 280, id: 3 });
-        rooms.push({ x: 700, y: WORLD_H - 480, w: 300, h: 280, id: 4 });
-        // Connections: entrance -> antechamber -> arena, alcoves off the antechamber
         corridors.push({ from: 0, to: 1 });
         corridors.push({ from: 1, to: 2 });
-        corridors.push({ from: 1, to: 3 });
-        corridors.push({ from: 1, to: 4 });
+        // Side alcoves for stealth / the key — position and count vary per floor
+        const alcoves = Phaser.Math.Between(2, 3);
+        for (let i = 0; i < alcoves; i++) {
+            const w = Phaser.Math.Between(280, 340), h = Phaser.Math.Between(250, 320);
+            const top = (i % 2 === 0);
+            const x = Phaser.Math.Between(560, 900);
+            const y = top ? Phaser.Math.Between(140, 260)
+                          : Phaser.Math.Between(WORLD_H - 260 - h, WORLD_H - 160 - h);
+            const id = rooms.length;
+            rooms.push({ x, y, w, h, id });
+            corridors.push({ from: 1, to: id });
+        }
         return { rooms, corridors };
     }
 
@@ -2759,6 +2796,7 @@ export class DungeonScene extends Phaser.Scene {
         const keyRoomIdx = this.keyRoomIdx;
         // Reset per-floor stealth state
         this._alarmedRooms = new Set();
+        this._everAlarmedRooms = new Set();
         this._roomAlarmCooldowns = {};
 
         // Mode-aware scaling (Story linear, Endless log past ch5)
@@ -3202,6 +3240,14 @@ export class DungeonScene extends Phaser.Scene {
                     this.spawnEnemyBolt(e.x, e.y, this.player.x, this.player.y, e.def.plateSpeed || 240, 0xf0e0c0, true);
                 }
             }
+            // Skeletons keep their bones when they patrol a cone (throne floor)
+            if (e.kind === 'skeleton') {
+                e.shootCd = (e.shootCd || 0) - dt * 1000;
+                if (e.shootCd <= 0 && dist > 100 && dist < 340) {
+                    e.shootCd = e.def.boneCooldownMs || 2000;
+                    this.spawnEnemyBolt(e.x, e.y, this.player.x, this.player.y, e.def.boneSpeed || 320, 0xe8d4a0, true);
+                }
+            }
             // Render the angry red cone — always redraw when alarmed (no dirty-flag skip)
             const origDef = e.def;
             e.def = { ...origDef, coneAngle: e.coneAngle, coneRange: e.coneRange };
@@ -3276,7 +3322,8 @@ export class DungeonScene extends Phaser.Scene {
         e.alarmed = true;
         e.suspicion = 1.0;
         if (!this._alarmedRooms) this._alarmedRooms = new Set();
-        if (e.roomId !== undefined) this._alarmedRooms.add(e.roomId);
+        if (!this._everAlarmedRooms) this._everAlarmedRooms = new Set();
+        if (e.roomId !== undefined) { this._alarmedRooms.add(e.roomId); this._everAlarmedRooms.add(e.roomId); }
         this.runAlarmCount = (this.runAlarmCount || 0) + 1;
         bus.emit(SFX.ALARM_TRIGGER);
         // Red camera flash — player feels "I'm caught"
@@ -3406,7 +3453,9 @@ export class DungeonScene extends Phaser.Scene {
         c.sprite.setTexture('chest_open');
         // Chest reward depends on per-room alarm scope: if THIS room is unalarmed, big bonus
         const chestRoomId = this._findRoomIdForPoint(c.x, c.y);
-        const stealthSuccess = !this._alarmedRooms || !this._alarmedRooms.has(chestRoomId);
+        // Was this room EVER alarmed on this floor — waiting out the 12s guard cooldown
+        // no longer restores the sneak bonus.
+        const stealthSuccess = !this._everAlarmedRooms || !this._everAlarmedRooms.has(chestRoomId);
         // Big bonus if you sneaked past unalarmed, small bonus otherwise
         let cheeseGain, scoreGain, msg, msgColor;
         if (stealthSuccess) {
