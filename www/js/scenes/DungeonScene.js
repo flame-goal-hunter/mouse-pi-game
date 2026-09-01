@@ -94,6 +94,8 @@ const uiIconKey = (k) => UI_ICON_ALIAS[k] || k;
 // ui-menu/shop.svg strokes with `currentColor`, which rasterises black in a detached <img> —
 // the same glyph, inlined with the gold stroke so it reads on the violet panel.
 const uiShopSvg = (px) => `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="#e8b54a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8 L5 3 H19 L21 8"/><path d="M3 8 h18 v3 a3 3 0 0 1-6 0 a3 3 0 0 1-6 0 a3 3 0 0 1-6 0 Z"/><path d="M5 13 v8 h14 v-8"/><path d="M10 21 v-5 h4 v5"/></svg>`;
+// ui-menu/check.svg also strokes with `currentColor`; inlined in the ok-green so «НАДЕТ»/«МАКС» read at a glance.
+const uiCheckSvg = (px) => `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="#5cd67a" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 L9 18 L20 6"/></svg>`;
 const RELIC_SVGS = {
     relic_magnet: 'magnet', relic_star_spread: 'star_spread', relic_bounce: 'bounce', relic_crit: 'crit',
     relic_thorns: 'thorns', relic_tornado: 'tornado', relic_crown: 'crown', relic_hourglass: 'hourglass',
@@ -277,6 +279,7 @@ export class DungeonScene extends Phaser.Scene {
         this.load.svg('ui_pie',    base + 'pie.svg',    { width: uiPx, height: uiPx });
         // Phaser's loader refuses data URIs, so the inlined shop glyph goes straight into the texture manager
         if (!this.textures.exists('ui_shop')) this.textures.addBase64('ui_shop', 'data:image/svg+xml;base64,' + btoa(uiShopSvg(uiPx)));
+        if (!this.textures.exists('ui_check')) this.textures.addBase64('ui_check', 'data:image/svg+xml;base64,' + btoa(uiCheckSvg(uiPx)));
         this.tilePx = Math.round(NAV_CELL * dpr);
         this.load.svg('tiles_' + this.biome.id, `assets/tiles/${this.biome.id}.svg`, { width: TILES_PER_SHEET * this.tilePx, height: this.tilePx });
         for (const [key, [file, w, h]] of Object.entries(WORLD_SVGS)) {
@@ -291,6 +294,11 @@ export class DungeonScene extends Phaser.Scene {
         this.tweens.timeScale = 1;
         this._hitStopUntil = 0;
         this._hudLayout = null;
+        this._shopViews = null;
+        this._shopInput = null;
+        this._shopDrag = null;
+        this._shopScroll = [0, 0];
+        this._pickerSilent = false;
         this.dpr = window.__GAME_DPR || 1;
         this.tilePx = Math.round(NAV_CELL * this.dpr);
         // 3-frame flame sheet (loaded as one SVG) → frames f0..f2; global anim created once
@@ -6096,7 +6104,8 @@ export class DungeonScene extends Phaser.Scene {
             this._cachedUpgradeChoices = pool.slice(0, 3);
         }
         const choices = this._cachedUpgradeChoices;
-        bus.emit(UI.MENU_OPEN);
+        if (!this._pickerSilent) bus.emit(UI.MENU_OPEN);
+        this._pickerSilent = false;
 
         if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
         if (this.aimIndicator) this.aimIndicator.setVisible(false);
@@ -6256,211 +6265,410 @@ export class DungeonScene extends Phaser.Scene {
         this._pinFixed();
     }
 
+    // Clipped, drag-scrollable viewport: a Container behind a geometry mask.
+    // Coordinates are CSS px like the rest of the UI; the mask is drawn in the
+    // fixed-layer space (uiLayer is offset by _layerOffset for the dpr camera zoom).
+    _scrollView(x, y, w, h, depth) {
+        const o = this._layerOffset();
+        const cont = this.add.container(x, y).setScrollFactor(0).setDepth(depth);
+        const mask = this.make.graphics({ add: false });
+        mask.setScrollFactor(0);
+        mask.fillStyle(0xffffff, 1);
+        mask.fillRect(o.x + x, o.y + y, w, h);
+        cont.setMask(mask.createGeometryMask());
+        const bar = this.add.graphics().setScrollFactor(0).setDepth(depth + 20);
+        const st = { cont, mask, bar, view: { x, y, w, h }, contentH: h, off: 0 };
+        st.apply = () => {
+            const max = Math.max(0, st.contentH - h);
+            st.off = Math.max(0, Math.min(max, st.off));
+            cont.y = y - st.off;
+            bar.clear();
+            if (max <= 1) return;
+            const trackH = h - 8;
+            const thumbH = Math.max(24, Math.round(trackH * (h / st.contentH)));
+            const ty = y + 4 + (trackH - thumbH) * (st.off / max);
+            bar.fillStyle(UI_C.text, 0.10);
+            bar.fillRoundedRect(x + w - 5, y + 4, 4, trackH, 2);
+            bar.fillStyle(UI_C.gold, 0.8);
+            bar.fillRoundedRect(x + w - 5, ty, 4, thumbH, 2);
+        };
+        return st;
+    }
+
     // === IN-RUN SHOP — opens over the upgrade picker between floors ===
     openInRunShop() {
         const reopen = this._shopReopen;   // a purchase refreshes the panel — no second ui_open
         this._shopReopen = false;
-        if (!reopen) bus.emit(UI.MENU_OPEN);
+        if (!reopen) { bus.emit(UI.MENU_OPEN); this._shopScroll = [0, 0]; }
         if (this._pickerElements) this._pickerElements.forEach(e => e.setVisible(false));
-        const cam = this.cameras.main;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_SHOP;
+        const k = Math.min(1, H / 440);
+        const cheese = Progress.getCheese();
+        this._shopDragged = false;
 
         this._shopElements = [];
+        this._shopViews = [];
         const addEl = (el, dep) => {
-            el.setScrollFactor(0).setDepth(dep || D);
+            el.setScrollFactor(0).setDepth(dep != null ? dep : D);
             this._shopElements.push(el);
             return el;
         };
 
-        const panelW = Math.min(W * 0.95, 780);
-        const panelH = Math.min(H * 0.95, 520);
-        const s = Math.min(1, Math.min(panelW / 780, panelH / 520));
+        const PAD = Math.max(12, Math.round(18 * k));
+        const panelW = Math.round(Math.min(W * 0.95, 780));
+        const panelH = Math.round(Math.min(H * 0.94, 560));
+        const left = Math.round(W / 2 - panelW / 2), top = Math.round(H / 2 - panelH / 2);
 
-        // Interactive backdrop — tap outside the panel to close, also blocks pass-through to picker cards
+        // Backdrop — a tap beside the panel closes the shop; taps on the panel do nothing
         addEl(this.add.rectangle(0, 0, W, H, 0x000000, 0.86).setOrigin(0)
             .setInteractive()
-            .on('pointerdown', () => this.closeInRunShop()));
-        // Gothic shop panel
-        const shopPanelEls = this.drawGothicPanel(W/2, H/2, panelW, panelH, {
-            accent: 0xd49920, bgTop: 0x4a2010, bgBot: 0x1a0808,
-            depth: D, theme: ['🪙', '🐭', '🛍️', '🍯']
-        });
-        shopPanelEls.forEach(e => { e.setScrollFactor(0); this._shopElements.push(e); });
+            .on('pointerdown', (p) => {
+                const px = p.x / this.dpr, py = p.y / this.dpr;
+                if (px >= left && px <= left + panelW && py >= top && py <= top + panelH) return;
+                this.closeInRunShop();
+            }));
+        // No corner fleurons here — the columns use the full box and would cover them
+        this.drawGothicPanel(W / 2, H / 2, panelW, panelH, { depth: D, corners: false })
+            .forEach(e => { e.setScrollFactor(0); this._shopElements.push(e); });
 
-        // Title — stroke only (no setShadow, see DungeonScene perf notes)
-        addEl(this.add.text(W/2, H/2 - panelH/2 + Math.round(28 * s),
-            '🏪 ЛАВКА ДЯДЮШКИ', {
-                fontFamily: 'Arial Black', fontSize: Math.max(20, Math.round(30 * s)) + 'px',
-                color: '#ffd060', stroke: '#5a3010', strokeThickness: 6
-            }).setOrigin(0.5));
+        // --- Header row: title | balance pill | close
+        const headH = 48;
+        const headCy = top + PAD + headH / 2;
+        const titleSize = Math.max(18, Math.round(24 * k));
+        addEl(this.add.text(left + PAD + 6, headCy, 'ЛАВКА', {
+            fontFamily: UI_F.display, fontStyle: '700', fontSize: titleSize + 'px',
+            color: '#f6d77a', stroke: '#1a0a2e', strokeThickness: 2
+        }).setOrigin(0, 0.5), D + 6);
 
-        // Balance top-right
-        const balanceText = addEl(this.add.text(W/2 + panelW/2 - 20, H/2 - panelH/2 + 24,
-            `🧀 ${Progress.getCheese()}`, {
-                fontFamily: 'Arial Black', fontSize: Math.max(16, Math.round(22 * s)) + 'px',
-                color: '#ffe080', stroke: '#1a0a3a', strokeThickness: 4
-            }).setOrigin(1, 0.5));
-
-        // Close X — top-left, sized for thumb tap (48dp Material minimum)
-        const closeBtn = addEl(this.add.text(W/2 - panelW/2 + 18, H/2 - panelH/2 + 22, '✕', {
-            fontFamily: 'Arial Black', fontSize: '28px',
-            color: '#ffffff', backgroundColor: '#7a3a3a', padding: { x: 14, y: 10 }
-        }).setOrigin(0, 0)
+        const closeR = 22;
+        const closeCx = left + panelW - PAD - closeR;
+        const closeG = addEl(this.add.graphics(), D + 6);
+        closeG.fillStyle(UI_C.surface2, 1);
+        closeG.fillCircle(0, 0, closeR);
+        closeG.lineStyle(2, UI_C.gold, 0.7);
+        closeG.strokeCircle(0, 0, closeR);
+        closeG.setPosition(closeCx, headCy);
+        addEl(this._uiIcon(closeCx, headCy, 'ui_close', Math.round(closeR * 1.1)), D + 7);
+        addEl(this.add.rectangle(closeCx, headCy, 52, 52, 0xffffff, 0.001)
             .setInteractive({ useHandCursor: true })
-            .on('pointerdown', () => this.closeInRunShop()), D + 5);
+            .on('pointerup', () => this.closeInRunShop()), D + 8);
 
-        // Hint below title
-        addEl(this.add.text(W/2, H/2 - panelH/2 + Math.round(60 * s),
-            'Покупки применятся со следующего этажа', {
-                fontFamily: 'Arial', fontSize: Math.max(11, Math.round(13 * s)) + 'px',
-                color: '#a070c0'
-            }).setOrigin(0.5));
+        const bal = this._statPill('ui_cheese', String(cheese), {
+            fontSize: Math.max(13, Math.round(16 * k)), depth: D + 6 });
+        bal.move(closeCx - closeR - 10 - bal.w / 2, headCy);
+        bal.els.forEach(e => this._shopElements.push(e));
 
-        // Two columns: hats left, upgrades right
-        const colGap = Math.max(10, Math.round(20 * s));
-        const colW = (panelW - 60) / 2;
-        const leftX = W/2 - panelW/2 + 30;
-        const rightX = leftX + colW + colGap;
-        const topY = H/2 - panelH/2 + Math.round(95 * s);
+        // --- Body: two columns in landscape, one scroller when the panel is narrow
+        let bodyTop = top + PAD + headH + Math.round(10 * k);
+        if (panelH >= 380) {
+            const hint = addEl(this.add.text(W / 2, bodyTop, 'Покупки применятся со следующего этажа', {
+                fontFamily: UI_F.body, fontSize: Math.max(10, Math.round(12 * k)) + 'px', color: '#b9a6d4'
+            }).setOrigin(0.5, 0), D + 6);
+            bodyTop += hint.height + Math.round(8 * k);
+        }
+        const bodyBot = top + panelH - PAD;
+        const twoCol = panelW >= 700;
+        const colGap = 20;
+        const headSize = Math.max(12, Math.round(14 * k));
+        const colW = twoCol ? Math.floor((panelW - PAD * 2 - colGap) / 2) : (panelW - PAD * 2);
 
-        addEl(this.add.text(leftX + colW/2, topY, '🐭 СКИНЫ', {
-            fontFamily: 'Arial Black', fontSize: Math.max(14, Math.round(18 * s)) + 'px',
-            color: '#ffffff', stroke: '#d49920', strokeThickness: 3
-        }).setOrigin(0.5));
-
-        const refreshShop = () => {
-            balanceText.setText(`🧀 ${Progress.getCheese()}`);
+        const secHead = (cont, cx, y, label) => {
+            const t = this.add.text(cx, y, label, {
+                fontFamily: UI_F.display, fontStyle: '700', fontSize: headSize + 'px',
+                color: '#e8b54a'
+            }).setOrigin(0.5, 0);
+            cont.add(t);
+            return t.height;
         };
 
-        // === RESPONSIVE SKIN GRID ===
-        const isMobile = W < 700;
-        const skinCols = isMobile ? 2 : 3;
-        const skinGap = 8;
-        const cardW = (colW - skinGap * (skinCols - 1)) / skinCols;
-        const cardH = isMobile ? Math.max(100, cardW * 0.95) : Math.max(120, cardW * 1.0);
-        const gridStartY = topY + Math.round(26 * s);
+        // --- Skin card: name, SVG preview, price pill / «НАДЕТ»; gold ring when equipped
+        const equippedId = Progress.getCurrentSkin().id;
+        const buildSkins = (col, contW, y0) => {
+            const cols = Math.max(2, Math.min(4, Math.round(contW / 130)));
+            const gap = 8;
+            const cardW = Math.floor((contW - gap * (cols - 1)) / cols);
+            const preview = Math.round(Math.max(38, Math.min(58, cardW * 0.40)));
+            const nameFs = Math.max(10, Math.round(12 * k));
+            const pillFs = Math.max(10, Math.round(11 * k));
+            const pillH = Math.round(pillFs * 2.1);
+            const skins = Progress.getAllSkins();
+            const names = skins.map(s => this.add.text(0, 0, s.name, {
+                fontFamily: UI_F.body, fontStyle: '700', fontSize: nameFs + 'px',
+                color: '#f4ecff', align: 'center', wordWrap: { width: cardW - 12 }
+            }).setOrigin(0.5, 0));
+            const nameH = Math.max(...names.map(t => t.height));
+            const cardH = Math.max(96, 8 + nameH + 4 + preview + 6 + pillH + 8);
+            let y = y0;
+            skins.forEach((skin, i) => {
+                const cxLocal = (i % cols) * (cardW + gap) + cardW / 2;
+                const cyLocal = y0 + Math.floor(i / cols) * (cardH + gap) + cardH / 2;
+                y = y0 + (Math.floor(i / cols) + 1) * (cardH + gap);
+                const unlocked = Progress.isSkinUnlocked(skin.id);
+                const equipped = unlocked && skin.id === equippedId;
+                const affordable = unlocked || cheese >= skin.price;
 
-        const skinList = Progress.getAllSkins();
-        skinList.forEach((skin, i) => {
-            const col = i % skinCols;
-            const row = Math.floor(i / skinCols);
-            const cx = leftX + col * (cardW + skinGap) + cardW / 2;
-            const cy = gridStartY + row * (cardH + skinGap) + cardH / 2;
-            if (cy + cardH / 2 > H/2 + panelH/2 - 16) return;
+                const card = this.add.container(cxLocal, cyLocal);
+                const g = this.add.graphics();
+                g.fillStyle(equipped ? UI_C.surface2 : UI_C.surface, 1);
+                g.fillRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 14);
+                if (equipped) g.lineStyle(2, UI_C.gold, 0.95);
+                else g.lineStyle(1.5, UI_C.text, 0.14);
+                g.strokeRoundedRect(-cardW / 2, -cardH / 2, cardW, cardH, 14);
+                card.add(g);
 
-            const unlocked = Progress.isSkinUnlocked(skin.id);
-            const current = Progress.getCurrentSkin();
-            const equipped = current.id === skin.id;
-            const bg = unlocked ? (equipped ? 0x3a5028 : 0x2a1248) : 0x301818;
-            const accentColor = unlocked ? (equipped ? 0x80ff60 : 0xa060ff) : 0x804040;
+                const top0 = -cardH / 2;
+                card.add(names[i].setPosition(0, top0 + 8));
 
-            const card = addEl(this.add.rectangle(cx, cy, cardW - 2, cardH - 2, bg, 0.95)
-                .setStrokeStyle(2, accentColor)
-                .setInteractive({ useHandCursor: true }), D + 1);
+                const img = this.add.image(0, top0 + 8 + nameH + 4 + preview / 2, skin.spriteKey && this.textures.exists(skin.spriteKey) ? skin.spriteKey : 'd_pi');
+                const src = img.texture.getSourceImage();
+                const f = preview / Math.max(1, src.width, src.height);
+                img.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+                card.add(img);
 
-            // Skin name — top
-            addEl(this.add.text(cx, cy - cardH/2 + 14, skin.name, {
-                fontFamily: 'Arial Black', fontSize: '11px',
-                color: '#ffffff', align: 'center',
-                wordWrap: { width: cardW - 8 }
-            }).setOrigin(0.5, 0), D + 2);
+                const badgeCy = cardH / 2 - 8 - pillH / 2;
+                if (equipped) {
+                    const ico = this._uiIcon(0, 0, 'ui_check', Math.round(pillFs * 1.3));
+                    const txt = this.add.text(0, 0, 'НАДЕТ', {
+                        fontFamily: UI_F.body, fontStyle: '700', fontSize: pillFs + 'px', color: '#5cd67a'
+                    }).setOrigin(0, 0.5);
+                    const tw = ico.displayWidth + 5 + txt.width;
+                    ico.setPosition(-tw / 2 + ico.displayWidth / 2, badgeCy);
+                    txt.setPosition(-tw / 2 + ico.displayWidth + 5, badgeCy);
+                    card.add(ico); card.add(txt);
+                } else if (unlocked) {
+                    const p = this._statPill(null, 'НАДЕТЬ', { fontSize: pillFs, tint: UI_C.text, color: '#b9a6d4' });
+                    p.move(0, badgeCy);
+                    p.els.forEach(e => card.add(e));
+                } else {
+                    const p = this._statPill('ui_cheese', String(skin.price), { fontSize: pillFs, color: '#f6d77a' });
+                    p.move(0, badgeCy);
+                    p.els.forEach(e => card.add(e));
+                }
+                if (!affordable) card.setAlpha(0.5);
 
-            // Real skin sprite preview — uses each skin's own SVG
-            const previewY = cy - cardH * 0.06;
-            const previewKey = (skin.spriteKey && this.textures.exists(skin.spriteKey)) ? skin.spriteKey : 'd_pi';
-            const piPreview = addEl(this.add.image(cx, previewY, previewKey)
-                .setOrigin(0.5, 0.5).setScale(0.32), D + 2);
-            if (skin.id === 'shadow') piPreview.setAlpha(0.85);
-            if (skin.id === 'angel') piPreview.setAlpha(0.95);
-
-            // Price / state — bottom
-            const subText = unlocked ? (equipped ? '✓ НАДЕТ' : 'Надеть') : `🧀 ${skin.price}`;
-            const subColor = unlocked ? (equipped ? '#80ff80' : '#a0a0c0') : '#ffd060';
-            addEl(this.add.text(cx, cy + cardH/2 - 12, subText, {
-                fontFamily: 'Arial Black', fontSize: '11px', color: subColor
-            }).setOrigin(0.5, 1), D + 3);
-
-            card.on('pointerdown', () => {
-                if (!unlocked) {
-                    if (!Progress.spendCheese(skin.price)) {
-                        this.flashNoCheese(W/2, H/2);
+                const hit = this.add.rectangle(0, 0, cardW, cardH, 0xffffff, 0.001)
+                    .setInteractive({ useHandCursor: true });
+                hit.on('pointerdown', () => card.setScale(0.97));
+                hit.on('pointerout', () => card.setScale(1));
+                hit.on('pointerup', (p) => {
+                    card.setScale(1);
+                    if (!this._shopTap(col.view, p)) return;
+                    if (!unlocked) {
+                        if (!Progress.spendCheese(skin.price)) { this.flashNoCheese(W / 2, H / 2); return; }
+                        Progress.unlockSkin(skin.id);
+                        bus.emit(UI.SHOP_BUY);
+                    } else if (equipped) {
+                        bus.emit(UI.BUTTON_CLICK);
                         return;
+                    } else {
+                        bus.emit(UI.BUTTON_CLICK);
                     }
-                    Progress.unlockSkin(skin.id);
-                    bus.emit(UI.SHOP_BUY);
-                } else {
-                    bus.emit(UI.BUTTON_CLICK);
-                }
-                Progress.setSkin(skin.id);
-                this.applySkinToPlayer(Progress.getCurrentSkin());
-                this._shopReopen = true;
-                this.closeInRunShop();
-                this.openInRunShop();
+                    Progress.setSkin(skin.id);
+                    this.applySkinToPlayer(Progress.getCurrentSkin());
+                    this._reopenShop();
+                });
+                card.add(hit);
+                col.cont.add(card);
             });
+            return y;
+        };
+
+        // --- Upgrade row: icon, name + Ур. N/max, description, price pill or «МАКС»
+        const buildUpgrades = (col, contW, y0) => {
+            const rowFs = Math.max(11, Math.round(13 * k));
+            const descFs = Math.max(9, Math.round(11 * k));
+            const icoSize = Math.round(Math.max(28, 34 * k));
+            let y = y0;
+            PERMANENT_UPGRADES.forEach((upg) => {
+                const lvl = Progress.getUpgradeLevel(upg.id);
+                const maxed = lvl >= upg.maxLevel;
+                const affordable = maxed || cheese >= upg.price;
+                const padX = 12;
+
+                let badge;
+                if (maxed) {
+                    badge = { w: 0, els: [] };
+                    const ico = this._uiIcon(0, 0, 'ui_check', Math.round(rowFs * 1.3));
+                    const txt = this.add.text(0, 0, 'МАКС', {
+                        fontFamily: UI_F.body, fontStyle: '700', fontSize: rowFs + 'px', color: '#5cd67a'
+                    }).setOrigin(0, 0.5);
+                    badge.w = ico.displayWidth + 5 + txt.width;
+                    badge.place = (cx, cy) => {
+                        ico.setPosition(cx - badge.w / 2 + ico.displayWidth / 2, cy);
+                        txt.setPosition(cx - badge.w / 2 + ico.displayWidth + 5, cy);
+                    };
+                    badge.els = [ico, txt];
+                } else {
+                    const p = this._statPill('ui_cheese', String(upg.price), { fontSize: rowFs, color: '#f6d77a' });
+                    badge = { w: p.w, els: p.els, place: (cx, cy) => p.move(cx, cy) };
+                }
+
+                const textW = contW - padX * 2 - icoSize - 10 - badge.w - 10;
+                const nameTxt = this.add.text(0, 0, `${upg.name}   Ур. ${lvl}/${upg.maxLevel}`, {
+                    fontFamily: UI_F.body, fontStyle: '700', fontSize: rowFs + 'px', color: '#f4ecff',
+                    wordWrap: { width: textW }
+                }).setOrigin(0, 0);
+                const descTxt = this.add.text(0, 0, upg.desc, {
+                    fontFamily: UI_F.body, fontSize: descFs + 'px', color: '#b9a6d4',
+                    wordWrap: { width: textW }
+                }).setOrigin(0, 0);
+                const blockH = nameTxt.height + 3 + descTxt.height;
+                const rowH = Math.max(60, blockH + 18);
+
+                const cyLocal = y + rowH / 2;
+                const row = this.add.container(contW / 2, cyLocal);
+                const g = this.add.graphics();
+                g.fillStyle(maxed ? UI_C.surface2 : UI_C.surface, 1);
+                g.fillRoundedRect(-contW / 2, -rowH / 2, contW, rowH, 14);
+                g.lineStyle(1.5, maxed ? UI_C.gold : UI_C.text, maxed ? 0.6 : 0.14);
+                g.strokeRoundedRect(-contW / 2, -rowH / 2, contW, rowH, 14);
+                row.add(g);
+                row.add(this._uiIcon(-contW / 2 + padX + icoSize / 2, 0, upg.icon, icoSize));
+                const tx = -contW / 2 + padX + icoSize + 10;
+                nameTxt.setPosition(tx, -blockH / 2);
+                descTxt.setPosition(tx, -blockH / 2 + nameTxt.height + 3);
+                row.add(nameTxt); row.add(descTxt);
+                badge.place(contW / 2 - padX - badge.w / 2, 0);
+                badge.els.forEach(e => row.add(e));
+                if (!affordable) row.setAlpha(0.5);
+
+                const hit = this.add.rectangle(0, 0, contW, rowH, 0xffffff, 0.001)
+                    .setInteractive({ useHandCursor: true });
+                hit.on('pointerdown', () => { if (!maxed) row.setScale(0.98); });
+                hit.on('pointerout', () => row.setScale(1));
+                hit.on('pointerup', (p) => {
+                    row.setScale(1);
+                    if (maxed || !this._shopTap(col.view, p)) return;
+                    if (Progress.buyUpgrade(upg.id)) {
+                        bus.emit(UI.SHOP_BUY);
+                        this._reopenShop();
+                    } else {
+                        this.flashNoCheese(W / 2, H / 2);
+                    }
+                });
+                row.add(hit);
+                col.cont.add(row);
+                y += rowH + 8;
+            });
+            return y;
+        };
+
+        const viewH = Math.max(80, bodyBot - bodyTop - Math.round(headSize * 1.6));
+        if (twoCol) {
+            const lx = left + PAD, rx = left + PAD + colW + colGap;
+            const headY = bodyTop;
+            const viewY = bodyTop + Math.round(headSize * 1.6);
+            const a = this._scrollView(lx, viewY, colW, viewH, D + 4);
+            const b = this._scrollView(rx, viewY, colW, viewH, D + 4);
+            this._shopViews = [a, b];
+            addEl(this.add.text(lx + colW / 2, headY, 'СКИНЫ', {
+                fontFamily: UI_F.display, fontStyle: '700', fontSize: headSize + 'px', color: '#e8b54a'
+            }).setOrigin(0.5, 0), D + 6);
+            addEl(this.add.text(rx + colW / 2, headY, 'АПГРЕЙДЫ', {
+                fontFamily: UI_F.display, fontStyle: '700', fontSize: headSize + 'px', color: '#e8b54a'
+            }).setOrigin(0.5, 0), D + 6);
+            a.contentH = buildSkins(a, colW - 8, 0);
+            b.contentH = buildUpgrades(b, colW - 8, 0);
+        } else {
+            const v = this._scrollView(left + PAD, bodyTop, colW, Math.max(80, bodyBot - bodyTop), D + 4);
+            this._shopViews = [v];
+            const cw = colW - 8;
+            let y = 0;
+            y += secHead(v.cont, cw / 2, y, 'СКИНЫ') + 6;
+            y = buildSkins(v, cw, y) + 6;
+            y += secHead(v.cont, cw / 2, y, 'АПГРЕЙДЫ') + 6;
+            v.contentH = buildUpgrades(v, cw, y);
+        }
+        // Input hit-testing reads each object's own scrollFactor, so every descendant of a
+        // pinned container needs it too — without this the backdrop swallows every card tap.
+        const fixSF = (o) => { o.setScrollFactor(0); if (o.list) o.list.forEach(fixSF); };
+        this._shopViews.forEach((v, i) => {
+            fixSF(v.cont);
+            v.off = (this._shopScroll && this._shopScroll[i]) || 0;
+            v.apply();
+            this._shopElements.push(v.cont, v.bar, v.mask);
         });
 
-        addEl(this.add.text(rightX + colW/2, topY, '💪 АПГРЕЙДЫ', {
-            fontFamily: 'Arial Black', fontSize: Math.max(14, Math.round(18 * s)) + 'px',
-            color: '#ffffff', stroke: '#d49920', strokeThickness: 3
-        }).setOrigin(0.5));
-
-        const upgItemH = Math.max(50, Math.round(64 * s));
-        PERMANENT_UPGRADES.forEach((upg, i) => {
-            const y = topY + Math.round(28 * s) + i * (upgItemH + 6);
-            if (y + upgItemH > H/2 + panelH/2 - 16) return;
-            const lvl = Progress.getUpgradeLevel(upg.id);
-            const maxed = lvl >= upg.maxLevel;
-            const bg = maxed ? 0x3a5028 : 0x2a1248;
-            const accent = maxed ? 0x80ff60 : 0xa060ff;
-            const card = addEl(this.add.rectangle(rightX + colW/2, y, colW, upgItemH, bg, 0.92)
-                .setStrokeStyle(2, accent)
-                .setInteractive({ useHandCursor: true }), D + 1);
-            addEl(this.add.text(rightX + 16, y, upg.emoji,
-                { fontSize: Math.max(20, Math.round(26 * s)) + 'px' }).setOrigin(0, 0.5), D + 2);
-            addEl(this.add.text(rightX + 50, y - 14, `${upg.name}  (${lvl}/${upg.maxLevel})`, {
-                fontFamily: 'Arial Black', fontSize: Math.max(11, Math.round(13 * s)) + 'px',
-                color: '#ffffff'
-            }).setOrigin(0, 0.5), D + 2);
-            addEl(this.add.text(rightX + 50, y + 2, upg.desc, {
-                fontFamily: 'Arial', fontSize: Math.max(9, Math.round(11 * s)) + 'px',
-                color: '#d0b0f0', wordWrap: { width: colW - 70 }
-            }).setOrigin(0, 0.5), D + 2);
-            const price = maxed ? 'МАКС' : `🧀 ${upg.price}`;
-            addEl(this.add.text(rightX + 50, y + 18, price, {
-                fontFamily: 'Arial Black', fontSize: Math.max(10, Math.round(11 * s)) + 'px',
-                color: maxed ? '#80ff80' : '#ffd060'
-            }).setOrigin(0, 0.5), D + 2);
-
-            card.on('pointerdown', () => {
-                if (maxed) return;
-                if (Progress.buyUpgrade(upg.id)) {
-                    bus.emit(UI.SHOP_BUY);
-                    this._shopReopen = true;
-                    this.closeInRunShop();
-                    this.openInRunShop();
-                } else {
-                    this.flashNoCheese(W/2, H/2);
-                }
-            });
-        });
+        // Drag / wheel scrolling — a drag suppresses the tap that follows it
+        const down = (p) => {
+            const px = p.x / this.dpr, py = p.y / this.dpr;
+            const col = this._shopViews.find(v => this._inRect(v.view, px, py));
+            this._shopDrag = col ? { col, y0: py, off0: col.off } : null;
+            this._shopDragged = false;
+        };
+        const move = (p) => {
+            const d = this._shopDrag;
+            if (!d || !p.isDown) return;
+            const py = p.y / this.dpr;
+            if (Math.abs(py - d.y0) > 6) this._shopDragged = true;
+            if (this._shopDragged) { d.col.off = d.off0 - (py - d.y0); d.col.apply(); }
+        };
+        const up = () => { this._shopDrag = null; this._shopDragged = false; };
+        const wheel = (p, objs, dx, dy) => {
+            const px = p.x / this.dpr, py = p.y / this.dpr;
+            const col = this._shopViews.find(v => this._inRect(v.view, px, py)) || this._shopViews[0];
+            if (!col) return;
+            col.off += dy * 0.5;
+            col.apply();
+        };
+        this.input.on('pointerdown', down);
+        this.input.on('pointermove', move);
+        this.input.on('pointerup', up);
+        this.input.on('wheel', wheel);
+        this._shopInput = () => {
+            this.input.off('pointerdown', down);
+            this.input.off('pointermove', move);
+            this.input.off('pointerup', up);
+            this.input.off('wheel', wheel);
+        };
         this._pinFixed();
     }
 
+    _inRect(r, x, y) { return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }
+
+    // A card tap only counts inside its column's viewport (the mask hides the rest but
+    // input still reaches it) and never right after a drag.
+    _shopTap(view, p) {
+        if (this._shopDragged) return false;
+        return this._inRect(view, p.x / this.dpr, p.y / this.dpr);
+    }
+
+    // Rebuild the shop in place after a purchase, keeping the scroll position
+    _reopenShop() {
+        this._shopScroll = this._shopViews ? this._shopViews.map(v => v.off) : [0, 0];
+        this._shopReopen = true;
+        this.closeInRunShop();
+        this.openInRunShop();
+    }
+
     closeInRunShop() {
-        if (this._shopElements && !this._shopReopen) bus.emit(UI.MENU_CLOSE);
+        const reopen = this._shopReopen;
+        if (this._shopElements && !reopen) bus.emit(UI.MENU_CLOSE);
+        if (this._shopInput) { this._shopInput(); this._shopInput = null; }
+        this._shopDrag = null;
+        if (this._shopViews) {
+            this._shopViews.forEach(v => { v.cont.clearMask(); });
+            this._shopViews = null;
+        }
         if (this._shopElements) {
             this._shopElements.forEach(e => e.destroy());
             this._shopElements = null;
         }
-        if (this._pickerElements) this._pickerElements.forEach(e => e.setVisible(true));
+        // The picker's hp / cheese pills went stale while the shop was open — rebuild it
+        if (!reopen && this._pickerElements) {
+            this._pickerElements.forEach(e => e.destroy());
+            this._pickerElements = null;
+            this._pickerSilent = true;
+            this.showUpgradePicker();
+        }
     }
 
     flashNoCheese(x, y) {
         bus.emit(UI.SHOP_DENY);
-        const t = this.add.text(x, y, 'Не хватает сыра!', {
-            fontFamily: 'Arial Black', fontSize: '24px',
-            color: '#ff4040', stroke: '#1a0a0a', strokeThickness: 4
+        const t = this.add.text(x, y, 'Не хватает сыра', {
+            fontFamily: UI_F.body, fontStyle: '900', fontSize: '22px',
+            color: '#ff4a5c', stroke: '#1a0a2e', strokeThickness: 4
         }).setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_FLASH);
         this.tweens.add({
             targets: t, y: y - 60, alpha: 0,
@@ -6581,7 +6789,9 @@ export class DungeonScene extends Phaser.Scene {
         panel.lineStyle(2, UI_C.gold, 0.55);
         panel.strokeRoundedRect(x0, y0, w, h, radius);
         out.push(panel);
-        // Corner accents — small gold arcs with two short stubs
+        // Corner accents — small gold arcs with two short stubs (opts.corners === false for
+        // list panels whose content reaches into the corners)
+        if (opts.corners === false) return out;
         const acc = this.add.graphics().setScrollFactor(0).setDepth(D);
         acc.lineStyle(2, UI_C.gold, 0.75);
         const inset = 10, r = 16, len = 16;
