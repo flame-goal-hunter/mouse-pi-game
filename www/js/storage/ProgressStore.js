@@ -55,6 +55,13 @@ const DEFAULT_STATE = {
             bestFloor: 0,
             bestScore: 0,
             lastRunDate: null
+        },
+        sneak: {
+            runs: 0,
+            clears: 0,
+            captures: 0,
+            ghostNights: 0,
+            lastRunDate: null
         }
     },
     lastRunMode: 'story',
@@ -228,6 +235,23 @@ export const Progress = {
         if (floor >= 30 && !s.achievementsUnlocked.includes('endless_30')) s.achievementsUnlocked.push('endless_30');
         if (floor >= 20 && !s.skinsUnlocked.includes('devil')) s.skinsUnlocked.push('devil');
         save();
+    },
+    recordSneakRun({ cleared, neverSeen, cheese }) {
+        const s = load();
+        s.stats.sneak.runs++;
+        if (cleared) s.stats.sneak.clears++;
+        else s.stats.sneak.captures++;
+        if (neverSeen) s.stats.sneak.ghostNights++;
+        s.stats.sneak.lastRunDate = Date.now();
+        if (cheese > 0) {
+            s.cheeseBank += cheese;
+            s.cheeseEarnedAllTime += cheese;
+        }
+        save();
+    },
+    getSneakStats() {
+        const s = load();
+        return (s.stats && s.stats.sneak) || { runs: 0, clears: 0, captures: 0, ghostNights: 0, lastRunDate: null };
     },
     getStoryStats() {
         const s = load();
