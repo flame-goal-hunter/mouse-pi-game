@@ -9,11 +9,15 @@
     <meta name="theme-color" content="#1a1a2e">
     <meta name="screen-orientation" content="landscape">
     <title>Мышонок Пи</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <link rel="icon" href="assets/icons/icon-256.png">
+    <link rel="stylesheet" href="assets/fonts/nunito.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="js/storage/FavoritesManager.js"></script>
     <!-- Phaser is loaded in game-phaser.html iframe -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&display=swap');
+        /* Comfortaa + Nunito ship with the game (assets/fonts/nunito.css) — no network needed */
 
         * {
             margin: 0;
@@ -10812,6 +10816,40 @@
         setupControls();
         generateLevel();
         gameLoop();
+    </script>
+    <!-- ===== Install as an app (Chrome/Android) ===== -->
+    <button id="installBtn" type="button" hidden
+            style="position:fixed;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));
+                   z-index:1200;min-height:48px;padding:0 18px;border-radius:14px;border:2px solid #e8b54a;
+                   background:#e8b54a;color:#2a1206;font:700 15px 'Nunito',sans-serif;cursor:pointer;
+                   box-shadow:0 6px 18px rgba(0,0,0,.45)">Установить игру</button>
+    <script>
+    (function () {
+        // Service worker: enables the Chrome install prompt and offline play.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('sw.js').catch(function () {});
+            });
+        }
+        var deferred = null;
+        var btn = document.getElementById('installBtn');
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            deferred = e;
+            if (btn) btn.hidden = false;
+        });
+        if (btn) btn.addEventListener('click', function () {
+            if (!deferred) { btn.hidden = true; return; }
+            deferred.prompt();
+            deferred.userChoice.finally(function () { deferred = null; btn.hidden = true; });
+        });
+        window.addEventListener('appinstalled', function () { if (btn) btn.hidden = true; });
+        // Already installed (opened from the home screen): never show the button.
+        if (window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+            if (btn) btn.hidden = true;
+        }
+    })();
     </script>
 </body>
 </html>
