@@ -73,7 +73,7 @@ const UI_F = {
 // Tile indices in www/assets/tiles/<biome>.svg (see tools/gen_tiles.py)
 const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10, WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13, EMPTY: 14, WEAK_CRACK: 15 };
 const TILES_PER_SHEET = 16;
-// World sprites: key → [file, cssW, cssH] (loaded at cssSize × dpr, displayed at 1/dpr)
+// World sprites: key -> [file, cssW, cssH] (loaded at cssSize × dpr, displayed at 1/dpr)
 const WORLD_SVGS = {
     prop_skull: ['skull', 24, 24], prop_bone: ['bone', 24, 16], prop_mushroom: ['mushroom', 24, 24], prop_cobweb: ['cobweb', 32, 32],
     prop_pot: ['pot', 28, 24], prop_sack: ['sack', 26, 26], prop_book: ['book', 24, 16], prop_candle: ['candle', 20, 32],
@@ -88,7 +88,7 @@ const WORLD_SVGS = {
     badge_alert: ['badge_alert', 16, 24], badge_sleep: ['badge_sleep', 24, 24], badge_anger: ['badge_anger', 20, 20], badge_ear: ['badge_ear', 20, 20], badge_sparkle: ['badge_sparkle', 20, 20],
     stairs: ['stairs', 72, 80],
 };
-// Relic/upgrade icons: texture key → www/assets/relics/<file>.svg (UI scale, loaded at 64 × dpr like the ui_* kit)
+// Relic/upgrade icons: texture key -> www/assets/relics/<file>.svg (UI scale, loaded at 64 × dpr like the ui_* kit)
 // UI-resolution twins of two world sprites (d_cheese/d_pie are loaded at their small world size).
 const UI_ICON_ALIAS = { d_cheese: 'ui_cheese', d_pie: 'ui_pie' };
 const uiIconKey = (k) => UI_ICON_ALIAS[k] || k;
@@ -181,21 +181,21 @@ function scaleForFloor(chapter, mode) {
 
 // Upgrade roster — player picks one after every floor. cap = max stacks per run.
 const UPGRADES = [
-    { id: 'hp',        cap: 4, icon: 'ui_heart', emoji: '❤️', name: 'Крепкое сердце', desc: '+1 максимум HP',
+    { id: 'hp',        cap: 4, icon: 'ui_heart', name: 'Крепкое сердце', desc: '+1 максимум HP',
       apply: (s) => { s.maxHp += 1; if (s.player) s.player.hp = s.maxHp; } },
-    { id: 'dash',      cap: 2, icon: 'ui_dash', emoji: '💨', name: 'Быстрый рывок',  desc: '−28% кулдаун рывка',
+    { id: 'dash',      cap: 2, icon: 'ui_dash', name: 'Быстрый рывок',  desc: '−28% кулдаун рывка',
       apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.72; } },
-    { id: 'speed',     cap: 3, icon: 'ui_bolt', emoji: '⚡', name: 'Лёгкие ноги',     desc: '+15% скорость ходьбы',
+    { id: 'speed',     cap: 3, icon: 'ui_bolt', name: 'Лёгкие ноги',     desc: '+15% скорость ходьбы',
       apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.15; } },
-    { id: 'damage',    cap: 2, icon: 'ui_flame', emoji: '🔥', name: 'Острый пирог',    desc: '+1 урон пирогом',
+    { id: 'damage',    cap: 2, icon: 'ui_flame', name: 'Острый пирог',    desc: '+1 урон пирогом',
       apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1; } },
-    { id: 'firerate',  cap: 2, icon: 'ui_target', emoji: '🎯', name: 'Скорострел',      desc: '−25% перезарядка',
+    { id: 'firerate',  cap: 2, icon: 'ui_target', name: 'Скорострел',      desc: '−25% перезарядка',
       apply: (s) => { s.fireCdMul = (s.fireCdMul || 1) * 0.75; } },
-    { id: 'piesize',   cap: 1, icon: 'd_pie', emoji: '🥧', name: 'Большие пироги',  desc: '+50% размер снаряда',
+    { id: 'piesize',   cap: 1, icon: 'd_pie', name: 'Большие пироги',  desc: '+50% размер снаряда',
       apply: (s) => { s.pieSizeMul = (s.pieSizeMul || 1) * 1.5; } },
-    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', emoji: '🩸', name: 'Вампиризм',       desc: 'Шанс вернуть HP с убитого',
+    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', name: 'Вампиризм',       desc: 'Шанс вернуть HP с убитого',
       apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.20; } },
-    { id: 'cheese',    cap: 2, icon: 'd_cheese', emoji: '🧀', name: 'Сырный нос',      desc: '+50% сыра за подбор',
+    { id: 'cheese',    cap: 2, icon: 'd_cheese', name: 'Сырный нос',      desc: '+50% сыра за подбор',
       apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.5; } }
 ];
 
@@ -306,7 +306,7 @@ export class DungeonScene extends Phaser.Scene {
         this._pickerSilent = false;
         this.dpr = window.__GAME_DPR || 1;
         this.tilePx = Math.round(NAV_CELL * this.dpr);
-        // 3-frame flame sheet (loaded as one SVG) → frames f0..f2; global anim created once
+        // 3-frame flame sheet (loaded as one SVG) -> frames f0..f2; global anim created once
         const fs = this.textures.get('flame_sheet');
         const fw = Math.floor(fs.source[0].width / 3), fh = fs.source[0].height;   // from the real raster size (exact for any dpr)
         for (let i = 0; i < 3; i++) if (!fs.has('f' + i)) fs.add('f' + i, 0, i * fw, 0, fw, fh);
@@ -326,6 +326,7 @@ export class DungeonScene extends Phaser.Scene {
         // and shutdown destroys all pooled display objects.
         this._circlePool = [];
         this._textPool = [];
+        this._iconPool = [];
         this.state = 'intro';
         this._introPanelRect = null;
         this._pickerPanelRect = null;
@@ -441,7 +442,7 @@ export class DungeonScene extends Phaser.Scene {
         this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
         this._createFixedLayers();
         this.cameras.main.setZoom(this.dpr);
-        // Phaser 3.70 Shake scales its offset by camera.width·zoom and the matrix scales it by zoom again → dpr² too strong.
+        // Phaser 3.70 Shake scales its offset by camera.width·zoom and the matrix scales it by zoom again -> dpr² too strong.
         {
             const cam = this.cameras.main, k = 1 / (this.dpr * this.dpr), origShake = cam.shake;
             cam.shake = (duration, intensity, ...rest) => origShake.call(cam, duration, (intensity == null ? 0.05 : intensity) * k, ...rest);
@@ -914,7 +915,7 @@ export class DungeonScene extends Phaser.Scene {
         // Side alcoves for stealth/key
         rooms.push({ x: 700, y: 200, w: 300, h: 280, id: 3 });
         rooms.push({ x: 700, y: WORLD_H - 480, w: 300, h: 280, id: 4 });
-        // Connections: entrance → antechamber → arena, alcoves off the antechamber
+        // Connections: entrance -> antechamber -> arena, alcoves off the antechamber
         corridors.push({ from: 0, to: 1 });
         corridors.push({ from: 1, to: 2 });
         corridors.push({ from: 1, to: 3 });
@@ -1270,7 +1271,7 @@ export class DungeonScene extends Phaser.Scene {
         this.flourClouds = this.flourClouds || [];
         const cloud = { x: sack.x, y: sack.y, radius: 110, endTime: this.time.now + 3500 };
         this.flourClouds.push(cloud);
-        this.showFloatingText(sack.x, sack.y - 30, '💨 Облако муки!', '#fff0e0', 18);
+        this.showFloatingText(sack.x, sack.y - 30, 'Облако муки!', '#fff0e0', 18);
         bus.emit(SFX.HIT_ENEMY);
     }
 
@@ -1402,7 +1403,7 @@ export class DungeonScene extends Phaser.Scene {
                     this.tweens.add({ targets: e.sprite, scale: e.def.scale * 1.25,
                         duration: 350, yoyo: true });
                 }
-                this.showFloatingText(e.x, e.y - 30, '✦', '#ff60c0', 20);
+                this.showFloatingText(e.x, e.y - 30, '', '#ff60c0', 20, 'badge_anger');
             }
         }
     }
@@ -1470,8 +1471,8 @@ export class DungeonScene extends Phaser.Scene {
             boss._attackTimer = choice === 'CAPE_DASH' ? 500 : (choice === 'BAT_SWARM' ? 600 : 800);
             // Visual telegraph
             this.showFloatingText(boss.x, boss.y - 60,
-                choice === 'BAT_SWARM' ? '🦇 СТАЯ' :
-                choice === 'CAPE_DASH' ? '💨 РЫВОК' : '🩸 КРОВЬ',
+                choice === 'BAT_SWARM' ? 'СТАЯ' :
+                choice === 'CAPE_DASH' ? 'РЫВОК' : 'КРОВЬ',
                 '#ff8080', 20);
             boss.sprite.setTint(0xff6060);
             this.time.delayedCall(boss._attackTimer, () => {
@@ -1498,7 +1499,7 @@ export class DungeonScene extends Phaser.Scene {
             this.showFloatingText(c.x, c.y - 30,
                 litCount === 4 ? '4/4 НА КОЛЕНИ!' : `${litCount}/4 канделябр`,
                 '#ffd040', 20);
-            // All 4 lit → boss kneels for 1.5s, no invuln, takes extra damage
+            // All 4 lit -> boss kneels for 1.5s, no invuln, takes extra damage
             if (litCount === 4) {
                 boss.invulnUntil = 0;
                 boss._kneeling = this.time.now + 1500;
@@ -1570,7 +1571,7 @@ export class DungeonScene extends Phaser.Scene {
             if (t.type !== 'hotpan') continue;
             t.phaseTimer -= dtMs;
             if (t.phaseTimer > 0) continue;
-            // Advance phase: cold (2.0s) → warn (0.9s) → flame (1.5s) → cold
+            // Advance phase: cold (2.0s) -> warn (0.9s) -> flame (1.5s) -> cold
             if (t.phase === 'cold') { t.phase = 'warn'; t.phaseTimer = 900; }
             else if (t.phase === 'warn') { t.phase = 'flame'; t.phaseTimer = 1500; }
             else if (t.phase === 'flame') { t.phase = 'cold'; t.phaseTimer = 2000; }
@@ -1842,7 +1843,7 @@ export class DungeonScene extends Phaser.Scene {
                         if (this.pointInWalls(ex, ey, 12)) continue;
                         this.spawnSingleCheese(ex, ey);
                     }
-                    this.showFloatingText(cx, cy - 20, '🧀 Тайник!', '#ffe080', 18);
+                    this.showFloatingText(cx, cy - 20, 'Тайник!', '#ffe080', 18, 'ui_cheese');
                 }
             }
         }
@@ -2051,7 +2052,7 @@ export class DungeonScene extends Phaser.Scene {
         }
     }
 
-    // Special slime animation: full hop cycle (crouch → air → land → wobble → idle)
+    // Special slime animation: full hop cycle (crouch -> air -> land -> wobble -> idle)
     animateSlime(e, baseScale) {
         const sprite = e.sprite;
         sprite.x = e.x;
@@ -2153,7 +2154,7 @@ export class DungeonScene extends Phaser.Scene {
         bus.emit(UI.BUTTON_CLICK);
         this.player.sprite.setScale(0.34 * (this.player.crouch ? 0.85 : 1));
         // Visual indicator
-        const txt = this.player.crouch ? '🦶 крадусь' : '↑ стоя';
+        const txt = this.player.crouch ? 'крадусь' : 'стоя';
         this.showFloatingText(this.player.x, this.player.y - 50, txt, this.player.crouch ? '#80c0ff' : '#c0c0c0', 16);
     }
 
@@ -2194,7 +2195,7 @@ export class DungeonScene extends Phaser.Scene {
                     onComplete: () => book.destroy() });
             }
         });
-        this.showFloatingText(this.player.x, this.player.y - 50, `📕 ${this.distractionBooks}`, '#a0a0c0', 16);
+        this.showFloatingText(this.player.x, this.player.y - 50, `${this.distractionBooks}`, '#a0a0c0', 16, 'ui_book');
     }
 
     _isPlayerOnButter() {
@@ -2241,7 +2242,7 @@ export class DungeonScene extends Phaser.Scene {
         this.player.vy = Math.sin(angle) * PLAYER.dashSpeed * (onButterAtStart ? 1.3 : 1);
         this.player._dashTrailHot = onButterAtStart;   // mark trail as damaging
         if (onButterAtStart) {
-            this.showFloatingText(this.player.x, this.player.y - 30, '🧈 SLIDE!', '#ffd040', 22);
+            this.showFloatingText(this.player.x, this.player.y - 30, 'СКОЛЬЖУ!', '#ffd040', 22);
         }
         // Sound-like puff at start
         for (let i = 0; i < 8; i++) {
@@ -2353,7 +2354,7 @@ export class DungeonScene extends Phaser.Scene {
                 this.player.invulnTimer = 400;
                 this.cameras.main.shake(120, 0.006);
                 this.showFloatingText(this.player.x, this.player.y - 30,
-                    onHotPan ? '🔥' : '🌵', '#ff6060', 24);
+                    '', '#ff6060', 24, onHotPan ? 'ui_flame' : 'relic_thorns');
                 this._combo = 0;
             }
             if (onVines) speedMul *= 0.45;
@@ -2859,7 +2860,7 @@ export class DungeonScene extends Phaser.Scene {
         this.tweens.add({ targets: shock, scale: 5, alpha: 0,
             duration: 900, onComplete: () => shock.destroy() });
         this.cameras.main.shake(900, 0.028);
-        this.showFloatingText(e.x, e.y - 50, '⚡ ЯРОСТЬ! ⚡', '#ff0000', 38);
+        this.showFloatingText(e.x, e.y - 50, 'ЯРОСТЬ!', '#ff0000', 38);
     }
 
     // === HIDDEN CHAMBERS — cracked walls you can break with a pie ===
@@ -2930,7 +2931,7 @@ export class DungeonScene extends Phaser.Scene {
         this.cameras.main.shake(160, 0.008);
         // Drop a chest where the wall was
         this.spawnChest(cx, cy);
-        this.showFloatingText(cx, cy - 30, '🎁 СЕКРЕТ!', '#80c0ff', 26);
+        this.showFloatingText(cx, cy - 30, 'СЕКРЕТ!', '#80c0ff', 26, 'relic_gift');
     }
 
     // Place 1-2 mimic enemies (disguised as chests)
@@ -3029,7 +3030,7 @@ export class DungeonScene extends Phaser.Scene {
             this.pieDmgBonus = (this.pieDmgBonus || 0) + 1;   // permanent for this run
             this.score += 100;
             this.runCheeseTotal = (this.runCheeseTotal || 0) + 20;
-            this.showFloatingText(b.x, b.y - 30, '📕 +1 урон навсегда!', '#ff60ff', 22);
+            this.showFloatingText(b.x, b.y - 30, 'Книга: +1 урон навсегда', '#ff60ff', 22, 'ui_book');
             bus.emit(SFX.OPEN_CHEST);
             this.tweens.add({
                 targets: b.sprite, scale: 2 / this.dpr, alpha: 0, y: b.y - 50, duration: 500,
@@ -3102,7 +3103,7 @@ export class DungeonScene extends Phaser.Scene {
         e.vx = approach(e.vx, Math.cos(e.facingAngle) * baseSp, 250 * dt);
         e.vy = approach(e.vy, Math.sin(e.facingAngle) * baseSp, 250 * dt);
 
-        // Cone color from suspicion: yellow → orange → red
+        // Cone color from suspicion: yellow -> orange -> red
         const sus = e.suspicion || 0;
         e._coneTintFactor = sus;
         const origDef = e.def;
@@ -3112,7 +3113,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // Two-stage suspicion: in-cone accumulates, out-of-cone drains
         let inCone = this.playerInConeCustom(e, e.coneAngle, e.coneRange);
-        // KITCHEN: flour cloud over enemy → blinds them, no detection
+        // KITCHEN: flour cloud over enemy -> blinds them, no detection
         if (inCone && this.flourClouds) {
             for (const cl of this.flourClouds) {
                 if (cl.endTime < this.time.now) continue;
@@ -3190,7 +3191,7 @@ export class DungeonScene extends Phaser.Scene {
                     }
                     if (called > 0) {
                         this.showFloatingText(this.player.x, this.player.y - 80,
-                            `⚠️ +${called} врагов идут на шум!`, '#ff6060', 18);
+                            `+${called} врагов идут на шум!`, '#ff6060', 18);
                     }
                 }
             }
@@ -3263,7 +3264,7 @@ export class DungeonScene extends Phaser.Scene {
         if (stealthSuccess) {
             cheeseGain = 40 + Math.floor(Math.random() * 30);
             scoreGain = 150;
-            msg = `🥷 +${cheeseGain} 🧀 +${scoreGain}!`;
+            msg = `Тихо! +${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#80ff80';
             // Try to unlock a random locked skin as bonus
             const lockedSkins = SKINS.filter(sk => !Progress.isSkinUnlocked(sk.id) && sk.id !== 'blue');
@@ -3275,13 +3276,13 @@ export class DungeonScene extends Phaser.Scene {
         } else {
             cheeseGain = 15 + Math.floor(Math.random() * 10);
             scoreGain = 50;
-            msg = `+${cheeseGain} 🧀 +${scoreGain}`;
+            msg = `+${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#ffe080';
         }
         this.runCheeseTotal = (this.runCheeseTotal || 0) + cheeseGain;
         this.score += scoreGain;
         this.time.delayedCall(190, () => bus.emit(SFX.CHEST_COINS));
-        this.showFloatingText(c.x, c.y - 40, msg, msgColor, 26);
+        this.showFloatingText(c.x, c.y - 40, msg, msgColor, 26, 'ui_cheese');
         this.poofAt(c.x, c.y, 0xffd040);
         this.tweens.add({ targets: c.sprite,
             scale: 1.6 / this.dpr, alpha: 0, duration: 500,
@@ -3346,7 +3347,7 @@ export class DungeonScene extends Phaser.Scene {
             e.zzz.setPosition(e.x, e.y - 60);
             e.zzz.setVisible(!e.alarmed);
         }
-        // Player in cone? → alarmed
+        // Player in cone? -> alarmed
         if (!e.alarmed && this.playerInCone(e)) {
             this.alarmGuard(e);
         }
@@ -3411,17 +3412,17 @@ export class DungeonScene extends Phaser.Scene {
         const range = e.def.coneRange;
         const a = e.facingAngle;
         const x = e.x, y = e.y;
-        // Cone color interpolates yellow→orange→red by suspicion (or fully red if alarmed)
+        // Cone color interpolates yellow->orange->red by suspicion (or fully red if alarmed)
         const sus = e.alarmed ? 1.0 : Math.min(1, e.suspicion || 0);
-        // Lerp 0xffd040 (yellow) → 0xff8040 (orange) → 0xff2020 (red)
+        // Lerp 0xffd040 (yellow) -> 0xff8040 (orange) -> 0xff2020 (red)
         let color;
         if (sus < 0.5) {
-            // yellow → orange
+            // yellow -> orange
             const t = sus / 0.5;
             const r = 0xff, gC = Math.round(0xd0 + (0x80 - 0xd0) * t), b = Math.round(0x40 + (0x40 - 0x40) * t);
             color = (r << 16) | (gC << 8) | b;
         } else {
-            // orange → red
+            // orange -> red
             const t = (sus - 0.5) / 0.5;
             const r = 0xff, gC = Math.round(0x80 + (0x20 - 0x80) * t), b = Math.round(0x40 + (0x20 - 0x40) * t);
             color = (r << 16) | (gC << 8) | b;
@@ -3458,7 +3459,7 @@ export class DungeonScene extends Phaser.Scene {
 
     castRay(x, y, angle, maxLen) {
         const cx = Math.cos(angle), sy = Math.sin(angle);
-        // Larger step (24 → 40) — minor visual loss, ~40% fewer wall queries
+        // Larger step (24 -> 40) — minor visual loss, ~40% fewer wall queries
         const step = 40;
         for (let d = step; d <= maxLen; d += step) {
             if (this.pointInWalls(x + cx * d, y + sy * d, 0)) return d - step;
@@ -3884,7 +3885,7 @@ export class DungeonScene extends Phaser.Scene {
                 e.path = null;
                 return;
             }
-            // Obstacle on the line → use A* even though LOS-ray says we see player
+            // Obstacle on the line -> use A* even though LOS-ray says we see player
             if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
             e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
             e.alertTimer = e.def.alertMs || 4000;
@@ -4065,7 +4066,7 @@ export class DungeonScene extends Phaser.Scene {
                 e.stateTimer = 300;
                 return;
             }
-            // Wall in pounce path → walk via Dijkstra this frame instead
+            // Wall in pounce path -> walk via Dijkstra this frame instead
         }
         if (e.stateTimer > 0) {
             e.stateTimer -= dt * 1000;
@@ -4077,7 +4078,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     aiSlime(e, dt, dx, dy, dist, sees) {
-        // Phases: idle → crouch → air → land → wobble → idle
+        // Phases: idle -> crouch -> air -> land -> wobble -> idle
         const PHASE_NEXT = { idle: 'crouch', crouch: 'air', air: 'land', land: 'wobble', wobble: 'idle' };
         const phaseDuration = (phase) => {
             switch (phase) {
@@ -4336,13 +4337,13 @@ export class DungeonScene extends Phaser.Scene {
             if (this.relicComboHeart && this._combo > 0 && this._combo % 5 === 0
                 && this.player.hp < this.maxHp) {
                 this.player.hp = Math.min(this.maxHp, this.player.hp + 1);
-                this.showFloatingText(this.player.x, this.player.y - 50, '💞 +1', '#ff80a0', 22);
+                this.showFloatingText(this.player.x, this.player.y - 50, '+1', '#ff80a0', 22, 'ui_heart');
             }
             // ACHIEVEMENT: combo 25
             if (this._combo >= 25) {
                 try {
                     if (Progress.unlockAchievement && Progress.unlockAchievement('combo_25')) {
-                        this.showFloatingText(this.player.x, this.player.y - 80, '🏆 КОМБО 25!', '#ffd040', 22);
+                        this.showFloatingText(this.player.x, this.player.y - 80, 'КОМБО 25!', '#ffd040', 22);
                     }
                 } catch (err) {}
             }
@@ -4357,7 +4358,7 @@ export class DungeonScene extends Phaser.Scene {
             // Lifesteal upgrade — chance to heal on kill
             if (this.lifestealChance > 0 && this.player.hp < this.maxHp && Math.random() < this.lifestealChance) {
                 this.player.hp = Math.min(this.maxHp, this.player.hp + 1);
-                this.showFloatingText(this.player.x, this.player.y - 30, '+❤️', '#ff80a0', 18);
+                this.showFloatingText(this.player.x, this.player.y - 30, '+1', '#ff80a0', 18, 'ui_heart');
             }
             // Drop a heart sometimes
             const dropChance = (e.kind === 'boss') ? 1.0 : (e.kind === 'zombie' ? 0.35 : 0.22);
@@ -4405,12 +4406,12 @@ export class DungeonScene extends Phaser.Scene {
                 this.score += 200;
                 try {
                     if (Progress.unlockAchievement && Progress.unlockAchievement('boss_defeated')) {
-                        this.showFloatingText(e.x, e.y - 70, '🏆 Граф повержен', '#ffd040', 24);
+                        this.showFloatingText(e.x, e.y - 70, 'Граф повержен', '#ffd040', 24);
                     }
                     // No-hit achievement: track if player has taken damage this floor
                     if (Progress.unlockAchievement && !this._floorDamageTaken
                         && Progress.unlockAchievement('boss_no_hit')) {
-                        this.showFloatingText(e.x, e.y - 100, '🏆 Без единого удара!', '#ffd040', 22);
+                        this.showFloatingText(e.x, e.y - 100, 'Без единого удара!', '#ffd040', 22);
                     }
                 } catch (err) {}
             }
@@ -4458,7 +4459,7 @@ export class DungeonScene extends Phaser.Scene {
         if (pk.heart) {
             this.player.hp = Math.min(this.maxHp, this.player.hp + 1);
             this.poofAt(pk.x, pk.y, 0xff4070);
-            this.showFloatingText(pk.x, pk.y - 20, '+❤️', '#ff80a0', 24);
+            this.showFloatingText(pk.x, pk.y - 20, '+1', '#ff80a0', 24, 'ui_heart');
             bus.emit(SFX.COLLECT_HEART);
         } else {
             // Alarm penalty: cheese in alarmed rooms gives half value
@@ -4472,8 +4473,8 @@ export class DungeonScene extends Phaser.Scene {
             this.poofAt(pk.x, pk.y, penalized ? 0x808080 : 0xf5c945);
             // Show what was COLLECTED (cheese piece), not the score bonus — was confusing
             this.showFloatingText(pk.x, pk.y - 20,
-                penalized ? '+🧀 ½' : '+🧀',
-                penalized ? '#a0a0a0' : '#ffe080', 22);
+                penalized ? '+½' : '+1',
+                penalized ? '#a0a0a0' : '#ffe080', 22, 'ui_cheese');
             bus.emit(SFX.COLLECT_CHEESE);
             // Cheese Explosion relic — 2 dmg to enemies in 100px
             if (this.relicCheeseBoom) {
@@ -4579,7 +4580,7 @@ export class DungeonScene extends Phaser.Scene {
     spawnStairsLabel(x, y) {
         // Small visual ladder/stairs going down beside the exit door, plus floating arrow
         const g = this._worldImage(x, y, 'stairs', 124, 0.5, 0.9);
-        // Floating "↓" arrow above
+        // Floating "down" arrow above
         const arrow = this.add.image(x, y - 70, 'ui_stairs').setDisplaySize(36, 36).setDepth(125);
         this.tweens.add({
             targets: arrow, y: y - 78, alpha: 0.5,
@@ -4756,7 +4757,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this.captive) this.freeCaptive();
     }
 
-    showFloatingText(x, y, text, color, size) {
+    showFloatingText(x, y, text, color, size, icon) {
         const t = this._getPooledText(x, y, text, {
             fontFamily: '"Nunito", "Roboto", system-ui, sans-serif',
             fontSize: size + 'px', color,
@@ -4764,6 +4765,20 @@ export class DungeonScene extends Phaser.Scene {
             stroke: '#0a0410', strokeThickness: 4,
         });
         t.setOrigin(0.5).setDepth(800).setScale(0.7);
+        let ico = null;
+        if (icon) {
+            const box = Math.round(size * 1.25);
+            const gap = text ? Math.round(size * 0.22) : 0;
+            const tw = text ? t.width : 0;
+            const half = (box + gap + tw) / 2;
+            ico = this._getPooledIcon(x - half + box / 2, y, icon, box);
+            t.setX(x + half - tw / 2);
+            const bs = ico.scaleX;
+            ico.setDepth(800).setScale(bs * 0.7);
+            this.tweens.add({ targets: ico, scaleX: bs * 1.05, scaleY: bs * 1.05, duration: 140, ease: 'Back.easeOut' });
+            this.tweens.add({ targets: ico, y: y - 56, alpha: 0, duration: 1100, ease: 'Cubic.easeOut',
+                onComplete: () => this._releaseIcon(ico) });
+        }
         this.tweens.add({
             targets: t, scale: 1.05, duration: 140, ease: 'Back.easeOut',
         });
@@ -5063,6 +5078,26 @@ export class DungeonScene extends Phaser.Scene {
         else t.destroy();
     }
 
+    _getPooledIcon(x, y, key, box) {
+        if (!this._iconPool) this._iconPool = [];
+        let k = uiIconKey(key);
+        if (!k || !this.textures.exists(k)) k = 'ui_paw';
+        let img = this._iconPool.pop();
+        if (!img) img = this.add.image(x, y, k);
+        else img.setTexture(k).setPosition(x, y).setAlpha(1).setActive(true).setVisible(true);
+        const src = this.textures.get(k).getSourceImage();
+        const f = box / Math.max(1, src.width, src.height);
+        img.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+        return img;
+    }
+
+    _releaseIcon(img) {
+        this.tweens.killTweensOf(img);
+        img.setActive(false).setVisible(false);
+        if (this._iconPool.length < 16) this._iconPool.push(img);
+        else img.destroy();
+    }
+
     poofAt(x, y, color) {
         // Bigger, juicier explosion: 12 particles in larger range (pooled)
         for (let i = 0; i < 12; i++) {
@@ -5247,7 +5282,7 @@ export class DungeonScene extends Phaser.Scene {
         this.uiLayer = this.add.container(o.x, o.y).setScrollFactor(0).setDepth(LAYER.UI_TOUCH);
     }
     // Move every top-level screen-space object into its fixed layer (call after creating HUD/overlays).
-    // Display-list order is kept so equal-depth objects (backdrop → text) stack as before.
+    // Display-list order is kept so equal-depth objects (backdrop -> text) stack as before.
     _pinFixed() {
         if (!this.uiLayer) return;
         const list = this.sys.displayList.list;
@@ -5314,7 +5349,7 @@ export class DungeonScene extends Phaser.Scene {
             fontFamily: FONT, fontSize: '30px',
             color: '#e8b54a', stroke: '#3a1248', strokeThickness: 5, fontStyle: '900',
         }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(D).setVisible(false);
-        // COMPASS arrow toward current objective (key → grandma / stairs)
+        // COMPASS arrow toward current objective (key -> grandma / stairs)
         this.compass = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_COMPASS);
         this.compassLabel = this.add.image(0, 0, 'd_key').setOrigin(0.5).setScrollFactor(0).setDepth(LAYER.UI_COMPASS_LABEL).setVisible(false);
         this._compassKey = null; this._compassAngle = undefined;  // fresh Graphics — force first redraw
@@ -5338,7 +5373,7 @@ export class DungeonScene extends Phaser.Scene {
         // Exit button — disc drawn in repositionHUD (radius scales), icon doubles as the hit area
         this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
-            .setInteractive(new Phaser.Geom.Circle(32, 32, 44), Phaser.Geom.Circle.Contains)
+            .setInteractive(new Phaser.Geom.Circle(0, 0, 1), Phaser.Geom.Circle.Contains)
             .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.exitToMenu(); });
         // Pause button — same disc beside the exit one, with its own 52 px tap rect
         this.pauseBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
@@ -5390,6 +5425,15 @@ export class DungeonScene extends Phaser.Scene {
         this.exitBtnBg.strokeCircle(0, 0, L.exit.r);
         this.exitBtnBg.setPosition(L.exit.cx, L.exit.cy);
         this.exitBtn.setPosition(L.exit.cx, L.exit.cy).setDisplaySize(L.exit.iconSize, L.exit.iconSize);
+        // Hit area is texture space (the frame is 64 x dpr), so centre it on the real
+        // frame and keep the tap disc at least 48 CSS px across at any dpr / HUD scale.
+        const hitArea = this.exitBtn.input && this.exitBtn.input.hitArea;
+        if (hitArea) {
+            const fw = this.exitBtn.frame.realWidth, fh = this.exitBtn.frame.realHeight;
+            hitArea.x = fw / 2;
+            hitArea.y = fh / 2;
+            hitArea.radius = Math.max(fw / 2, 24 * fw / Math.max(1, this.exitBtn.displayWidth));
+        }
         // Pause disc: left of the exit one, or under it when the cheese counter is that close
         const pGap = Math.round(10 * L.s), pR = L.exit.r;
         let pcx = L.exit.cx - L.exit.r - pGap - pR, pcy = L.exit.cy;
@@ -5630,7 +5674,7 @@ export class DungeonScene extends Phaser.Scene {
             this.dashBtnBase.setFillStyle(0x203060, 0.65);
             this.dashBtnBase.setStrokeStyle(3, 0x4080a0, 0.7);
             this.dashBtnLabel.setAlpha(0.45);
-            const p = 1 - Math.min(1, cdMs / maxCd);   // 0 → 1 as cooldown ends
+            const p = 1 - Math.min(1, cdMs / maxCd);   // 0 -> 1 as cooldown ends
             const start = -Math.PI / 2;
             const end = start + Math.PI * 2 * p;
             this.dashBtnCdArc.lineStyle(5, 0x80c0ff, 0.85);
@@ -5666,7 +5710,7 @@ export class DungeonScene extends Phaser.Scene {
         const half = W / 2;
 
         // === FLOATING JOYSTICKS — stick spawns where finger lands ===
-        // Right half → aim stick (no need to find a base, finger position IS the base)
+        // Right half -> aim stick (no need to find a base, finger position IS the base)
         if (p.x >= half && this.aimStick && !this.aimStick.active) {
             this.aimStick.active = true;
             this.aimStick.pointerId = p.id;
@@ -5676,7 +5720,7 @@ export class DungeonScene extends Phaser.Scene {
             this.setAimStickAlpha(1.0);
             return;
         }
-        // Left half → movement stick
+        // Left half -> movement stick
         if (p.x < half && !this.joy.active) {
             this.joy.active = true;
             this.joy.pointerId = p.id;
@@ -5886,7 +5930,7 @@ export class DungeonScene extends Phaser.Scene {
 
     updateCompass() {
         if (!this.compass) return;
-        // Target: key first → captive (final floor) or exit door (intermediate floor)
+        // Target: key first -> captive (final floor) or exit door (intermediate floor)
         let target, icon;
         if (!this.hasKey && this.keyPickup && !this.keyPickup.taken) {
             target = this.keyPickup; icon = 'key';
@@ -5982,13 +6026,13 @@ export class DungeonScene extends Phaser.Scene {
         // Per-floor completion bonus + cheese
         const floorBonus = 20 + this.chapter * 10;
         this.score += floorBonus;
-        // Ghost-run bonus: 0 alarms AND biome had stealth rooms → +cheese + score + log progress
+        // Ghost-run bonus: 0 alarms AND biome had stealth rooms -> +cheese + score + log progress
         const hadStealth = (this.biome?.stealthRoomsPerFloor || 0) > 0;
         if (hadStealth && (this.runAlarmCount || 0) === 0) {
             const ghostCheese = 50 * this.chapter;
             this.runCheeseTotal = (this.runCheeseTotal || 0) + ghostCheese;
             this.score += 200;
-            this.showFloatingText(this.player.x, this.player.y - 60, `🥷 Тихая лапка! +${ghostCheese}🧀`, '#80ff80', 26);
+            this.showFloatingText(this.player.x, this.player.y - 60, `Тихая лапка! +${ghostCheese}`, '#80ff80', 26, 'ui_cheese');
             try { Progress.incrementGhostRuns(); } catch (e) {}
             bus.emit(SFX.GHOST_RUN);
         }
@@ -6937,7 +6981,7 @@ export class DungeonScene extends Phaser.Scene {
             this.player.hp = 1;
             this.player.invulnTimer = 2400;
             this.cameras.main.flash(380, 255, 220, 100);
-            this.showFloatingText(this.player.x, this.player.y - 60, '💀 НЕ В ЭТОТ РАЗ!', '#ffd040', 28);
+            this.showFloatingText(this.player.x, this.player.y - 60, 'НЕ В ЭТОТ РАЗ!', '#ffd040', 28);
             bus.emit(SFX.COLLECT_POWERUP);
             return;
         }

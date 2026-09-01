@@ -24,11 +24,11 @@ export const SKINS = [
 // === PERMANENT UPGRADES — bought once, stack each run forever ===
 // dmg1 maxLevel dropped to 1 to keep boss tension (Q1 recommended)
 export const PERMANENT_UPGRADES = [
-    { id: 'hp1',     icon: 'ui_heart', emoji: '❤️', name: '+1 HP',         price: 80,  desc: 'Старт с +1 сердцем', maxLevel: 3 },
-    { id: 'speed1',  icon: 'ui_bolt', emoji: '⚡', name: '+10% скорость', price: 120, desc: 'Чуть быстрее ходишь', maxLevel: 3 },
-    { id: 'dash1',   icon: 'ui_dash', emoji: '💨', name: 'Быстрый рывок', price: 180, desc: '−15% кулдаун рывка', maxLevel: 2 },
-    { id: 'dmg1',    icon: 'ui_flame', emoji: '🔥', name: '+1 урон',       price: 250, desc: 'Пироги бьют сильнее', maxLevel: 1 },
-    { id: 'powerup', icon: 'relic_gift', emoji: '🎁', name: 'Стартовый бонус', price: 350, desc: 'Случайный power-up в начале', maxLevel: 1 }
+    { id: 'hp1',     icon: 'ui_heart', name: '+1 HP',         price: 80,  desc: 'Старт с +1 сердцем', maxLevel: 3 },
+    { id: 'speed1',  icon: 'ui_bolt', name: '+10% скорость', price: 120, desc: 'Чуть быстрее ходишь', maxLevel: 3 },
+    { id: 'dash1',   icon: 'ui_dash', name: 'Быстрый рывок', price: 180, desc: '−15% кулдаун рывка', maxLevel: 2 },
+    { id: 'dmg1',    icon: 'ui_flame', name: '+1 урон',       price: 250, desc: 'Пироги бьют сильнее', maxLevel: 1 },
+    { id: 'powerup', icon: 'relic_gift', name: 'Стартовый бонус', price: 350, desc: 'Случайный power-up в начале', maxLevel: 1 }
 ];
 
 const DEFAULT_STATE = {
@@ -38,7 +38,7 @@ const DEFAULT_STATE = {
     // === Skins ===
     skinsUnlocked: ['blue'],
     currentSkin: 'blue',
-    upgrades: {},               // id → level
+    upgrades: {},               // id -> level
 
     // === Per-mode stats ===
     stats: {
@@ -60,7 +60,7 @@ const DEFAULT_STATE = {
     lastRunMode: 'story',
 
     // === Long-tail ===
-    enemyKills: {},             // kind → count (for codex)
+    enemyKills: {},             // kind -> count (for codex)
     achievementsUnlocked: [],   // array of achievement ids
     ghostRuns: 0,               // floors cleared with 0 alarms
 

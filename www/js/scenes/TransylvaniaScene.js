@@ -37,6 +37,23 @@ export class TransylvaniaScene extends Phaser.Scene {
         this.load.svg('m_skin_devil',         skinBase + 'devil.svg',         { width: 180, height: 207 });
         this.load.svg('m_skin_angel',         skinBase + 'angel.svg',         { width: 180, height: 207 });
         this.load.svg('m_skin_yellow_lion',   skinBase + 'yellow-lion.svg',   { width: 180, height: 207 });
+        // Icon kit — same SVGs the dungeon HUD uses, at UI resolution
+        const uiPx = Math.round(64 * (window.__GAME_DPR || 1));
+        for (const n of ['heart', 'bolt', 'dash', 'flame']) {
+            this.load.svg('ui_' + n, `assets/ui/${n}.svg`, { width: uiPx, height: uiPx });
+        }
+        this.load.svg('relic_gift', 'assets/relics/gift.svg', { width: uiPx, height: uiPx });
+        this.load.svg('ui_cheese',  base + 'cheese.svg',      { width: uiPx, height: uiPx });
+        this.load.svg('m_grandma',  base + 'grandma.svg',     { width: 180, height: 200 });
+    }
+
+    _menuIcon(x, y, key, box) {
+        const k = this.textures.exists(key) ? key : 'ui_cheese';
+        const img = this.add.image(x, y, k);
+        const src = this.textures.get(k).getSourceImage();
+        const f = box / Math.max(1, src.width, src.height);
+        img.setDisplaySize(Math.round(src.width * f), Math.round(src.height * f));
+        return img;
     }
 
     create() {
@@ -163,8 +180,8 @@ export class TransylvaniaScene extends Phaser.Scene {
         cornerCurl(cx + w/2 - inset, cy - h/2 + inset, 1);
         cornerCurl(cx - w/2 + inset, cy + h/2 - inset, 2);
         cornerCurl(cx + w/2 - inset, cy + h/2 - inset, 3);
-        if (opts.themed !== false) {
-            const themes = opts.theme || ['🕸️', '🦇', '💀', '🕯️'];
+        const themes = opts.theme || [];
+        if (opts.themed !== false && themes.length) {
             const corners = [
                 { x: cx - w/2 + 30, y: cy - h/2 + 30 },
                 { x: cx + w/2 - 30, y: cy - h/2 + 30 },
@@ -235,17 +252,17 @@ export class TransylvaniaScene extends Phaser.Scene {
     // VERTICAL LAYOUT — clean, readable, mobile-first.
     //
     // Stack from top to bottom:
-    //   [HEADER]    Back ‹                 🧀 Balance
+    //   [HEADER]    Back ‹                 cheese balance
     //   [TITLE]     ЗАМОК ТЕНЕЙ
     //               — • —
     //               Глава 1 · Подземелье графа Ратулы
     //   [HERO]      Single big skin sprite, idle bob
     //               Skin name pill
-    //   [STORY]     👵 СПАСТИ БАБУШКУ           ▸
+    //   [STORY]     grandma icon · СПАСТИ БАБУШКУ
     //               5 этажей · босс
     //   [ENDLESS]   ∞ БЕСКОНЕЧНЫЙ СПУСК         ▸
     //               Лучший этаж: 8
-    //   [FOOTER]    🏪 ЛАВКА      📜 КОДЕКС
+    //   [FOOTER]    ЛАВКА      КОДЕКС
     //
     // No overlaps. Every block has guaranteed vertical space.
     // ============================================
@@ -337,9 +354,9 @@ export class TransylvaniaScene extends Phaser.Scene {
         };
 
         this._buildModeCard(cx, storyCy, cardW, cardH, {
-            icon: '👵',
+            iconKey: 'm_grandma',
             title: 'СПАСТИ БАБУШКУ',
-            hint: sStat.wins > 0 ? `✓ Спасений: ${sStat.wins}` : '5 этажей · босс · спасение',
+            hint: sStat.wins > 0 ? `Спасений: ${sStat.wins}` : '5 этажей · босс · спасение',
             accent: C.accent, titleColor: C.accentSoft,
             bg: 0x2d104a,
             chevron: true,
@@ -348,7 +365,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         this._buildModeCard(cx, endlessCy, cardW, cardH, {
             icon: '∞',
             title: 'БЕСКОНЕЧНЫЙ СПУСК',
-            hint: eStat.bestFloor > 0 ? `🏆 Лучший этаж: ${eStat.bestFloor}` : 'Спускайся вечно · растущая сложность',
+            hint: eStat.bestFloor > 0 ? `Лучший этаж: ${eStat.bestFloor}` : 'Спускайся вечно · растущая сложность',
             accent: C.danger, titleColor: 0xffd2c8,
             bg: 0x300c10,
             chevron: true,
@@ -411,8 +428,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         g.lineStyle(STROKE.thin, C.accent, 0.85);
         g.strokeRoundedRect(pillCx - pillW/2, pillCy - pillH/2, pillW, pillH, R.pill);
 
-        this.add.text(pillCx - pillW/2 + 18, pillCy, '🧀', { fontSize: '18px' })
-            .setOrigin(0.5).setDepth(501);
+        this._menuIcon(pillCx - pillW/2 + 18, pillCy, 'ui_cheese', 22).setDepth(501);
         this.add.text(pillCx + 10, pillCy, balText, {
             fontFamily: FONT.display, fontSize: '18px',
             color: hex(C.accentSoft), fontStyle: '900',
@@ -491,10 +507,14 @@ export class TransylvaniaScene extends Phaser.Scene {
         body.lineStyle(STROKE.thin, opts.accent, 0.85);
         body.strokeRoundedRect(left, cy - h/2, w, h, R.lg);
 
-        // Icon (left)
+        // Icon (left) — a sprite when the card names one, otherwise a glyph
         const iconSize = h > 80 ? 32 : 28;
-        const icon = this.add.text(left + 38, cy, opts.icon,
-            { fontSize: iconSize + 'px' }).setOrigin(0.5).setDepth(500);
+        // A sprite goes in a container so the card's scale tweens don't fight setDisplaySize
+        const icon = opts.iconKey
+            ? this.add.container(left + 38, cy,
+                [this._menuIcon(0, 0, opts.iconKey, Math.round(iconSize * 1.3))]).setDepth(500)
+            : this.add.text(left + 38, cy, opts.icon,
+                { fontSize: iconSize + 'px' }).setOrigin(0.5).setDepth(500);
 
         // Title + hint stack
         const titleSize = h > 80 ? 18 : 16;
@@ -548,12 +568,12 @@ export class TransylvaniaScene extends Phaser.Scene {
         const btnH = 50;
 
         makeButton(this, cx - btnW/2 - gap/2, cy, btnW, btnH, 'ЛАВКА', {
-            variant: 'secondary', icon: '🏪', textSize: '15px',
+            variant: 'secondary', textSize: '15px',
             depth: 500, clickEvent: 'ui.menu.open',
             onClick: () => this.openShop(),
         });
         makeButton(this, cx + btnW/2 + gap/2, cy, btnW, btnH, 'КОДЕКС', {
-            variant: 'secondary', icon: '📜', textSize: '15px',
+            variant: 'secondary', textSize: '15px',
             depth: 500, clickEvent: 'ui.menu.open',
             onClick: () => this.openCodex(),
         });
@@ -806,7 +826,7 @@ export class TransylvaniaScene extends Phaser.Scene {
             color: hex(C.textSecond), fontStyle: 'italic',
         }).setOrigin(0.5));
         // Close button — top-right, proper styled
-        const closeBtn = makeButton(this, W/2 + panelW/2 - 32, H/2 - panelH/2 + 32, 40, 40, '✕', {
+        const closeBtn = makeButton(this, W/2 + panelW/2 - 32, H/2 - panelH/2 + 32, 40, 40, '×', {
             variant: 'ghost', textSize: '22px', depth: D + 5,
             clickEvent: 'ui.button.back', onClick: close,
         });
@@ -820,7 +840,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         const topY = H/2 - panelH/2 + 78;
 
         // LEFT: Bestiary — section header
-        addEl(this.add.text(leftX + colW/2, topY, '👁  БЕСТИАРИЙ', {
+        addEl(this.add.text(leftX + colW/2, topY, 'БЕСТИАРИЙ', {
             fontFamily: FONT.display, fontSize: '20px',
             color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
             fontStyle: '700',
@@ -831,18 +851,18 @@ export class TransylvaniaScene extends Phaser.Scene {
         bdivL.setDepth(D); els.push(bdivL);
         const allKills = Progress.getAllKills();
         const enemyList = [
-            { kind: 'zombie',    name: 'Зомби',           emoji: '🧟' },
-            { kind: 'cat',       name: 'Демон-кот',       emoji: '😈' },
-            { kind: 'slime',     name: 'Слайм',           emoji: '🟢' },
-            { kind: 'bat',       name: 'Летучая мышь',    emoji: '🦇' },
-            { kind: 'skeleton',  name: 'Скелет',          emoji: '💀' },
-            { kind: 'ghost',     name: 'Призрак',         emoji: '👻' },
-            { kind: 'mimic',     name: 'Мимик',           emoji: '📦' },
-            { kind: 'guard',     name: 'Часовой',         emoji: '🛡️' },
-            { kind: 'librarian', name: 'Библиотекарь',    emoji: '📕' },
-            { kind: 'chef',      name: 'Шеф-кот',         emoji: '🍳' },
-            { kind: 'snapdragon', name: 'Львиный зев',    emoji: '🌺' },
-            { kind: 'boss',      name: 'Граф Ратула',     emoji: '🦇' }
+            { kind: 'zombie',    name: 'Зомби', },
+            { kind: 'cat',       name: 'Демон-кот', },
+            { kind: 'slime',     name: 'Слайм', },
+            { kind: 'bat',       name: 'Летучая мышь', },
+            { kind: 'skeleton',  name: 'Скелет', },
+            { kind: 'ghost',     name: 'Призрак', },
+            { kind: 'mimic',     name: 'Мимик', },
+            { kind: 'guard',     name: 'Часовой', },
+            { kind: 'librarian', name: 'Библиотекарь', },
+            { kind: 'chef',      name: 'Шеф-кот', },
+            { kind: 'snapdragon', name: 'Львиный зев', },
+            { kind: 'boss',      name: 'Граф Ратула', }
         ];
         const rowH = 28;
         for (let i = 0; i < enemyList.length; i++) {
@@ -852,8 +872,8 @@ export class TransylvaniaScene extends Phaser.Scene {
             const kills = allKills[e.kind] || 0;
             const discovered = kills > 0;
             const txt = discovered
-                ? `${e.emoji}  ${e.name}  —  ×${kills}`
-                : `❓  ???  —  не встречен`;
+                ? `${e.name}  —  ×${kills}`
+                : '???  —  не встречен';
             addEl(this.add.text(leftX + 12, y, txt, {
                 fontFamily: FONT.body, fontSize: '14px',
                 color: discovered ? hex(C.textPrimary) : hex(C.textMuted),
@@ -862,7 +882,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         }
 
         // RIGHT: Stats + Achievements
-        addEl(this.add.text(rightX + colW/2, topY, '🏆  ЛЕТОПИСЬ', {
+        addEl(this.add.text(rightX + colW/2, topY, 'ЛЕТОПИСЬ', {
             fontFamily: FONT.display, fontSize: '20px',
             color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
             fontStyle: '700',
@@ -874,10 +894,10 @@ export class TransylvaniaScene extends Phaser.Scene {
         const eStat = Progress.getEndlessStats();
         const ghostRuns = Progress.getGhostRuns();
         const stats = [
-            `📖 Сюжетных побед:  ${sStat.wins}`,
-            `📏 Глубочайший этаж: ${eStat.bestFloor}`,
-            `🥷 Тихих забегов:   ${ghostRuns}`,
-            `🧀 Сыра всего:      ${Progress.state.cheeseEarnedAllTime || 0}`
+            `Сюжетных побед: ${sStat.wins}`,
+            `Глубочайший этаж: ${eStat.bestFloor}`,
+            `Тихих забегов: ${ghostRuns}`,
+            `Сыра всего: ${Progress.state.cheeseEarnedAllTime || 0}`
         ];
         for (let i = 0; i < stats.length; i++) {
             addEl(this.add.text(rightX + 12, topY + 36 + i * 26, stats[i], {
@@ -889,7 +909,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         const skinsUnlocked = (Progress.state.skinsUnlocked || ['blue']).length;
         const skinsTotal = Progress.getAllSkins().length;
         addEl(this.add.text(rightX + 12, topY + 36 + stats.length * 26 + 12,
-            `🐭  Скинов открыто: ${skinsUnlocked}/${skinsTotal}`, {
+            `Скинов открыто: ${skinsUnlocked}/${skinsTotal}`, {
                 fontFamily: FONT.display, fontSize: '15px',
                 color: hex(C.accent), stroke: hex(C.bgVoid), strokeThickness: 3,
                 fontStyle: '700',
@@ -898,21 +918,21 @@ export class TransylvaniaScene extends Phaser.Scene {
         // === ACHIEVEMENTS section (under right column) ===
         const achY = topY + 36 + stats.length * 26 + 50;
         if (achY + 100 < H/2 + panelH/2 - 16) {
-            addEl(this.add.text(rightX + colW/2, achY, '🏆  ДОСТИЖЕНИЯ', {
+            addEl(this.add.text(rightX + colW/2, achY, 'ДОСТИЖЕНИЯ', {
                 fontFamily: FONT.display, fontSize: '15px',
                 color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
                 fontStyle: '700',
             }).setOrigin(0.5));
             const ACHIEVEMENTS = [
-                { id: 'first_win',     name: 'Первое спасение бабушки',  emoji: '👵' },
-                { id: 'five_wins',     name: '5 спасений',                emoji: '⭐' },
-                { id: 'speed_win',     name: 'Спасение < 10 мин',         emoji: '⚡' },
-                { id: 'boss_defeated', name: 'Граф Ратула повержен',      emoji: '💀' },
-                { id: 'boss_no_hit',   name: 'Без единого удара',         emoji: '🛡' },
-                { id: 'combo_25',      name: 'Комбо ×25',                 emoji: '🎯' },
-                { id: 'endless_10',    name: '∞ Этаж 10',                 emoji: '🔟' },
-                { id: 'endless_20',    name: '∞ Этаж 20',                 emoji: '🏆' },
-                { id: 'endless_30',    name: '∞ Этаж 30',                 emoji: '👑' }
+                { id: 'first_win',     name: 'Первое спасение бабушки', },
+                { id: 'five_wins',     name: '5 спасений', },
+                { id: 'speed_win',     name: 'Спасение < 10 мин', },
+                { id: 'boss_defeated', name: 'Граф Ратула повержен', },
+                { id: 'boss_no_hit',   name: 'Без единого удара', },
+                { id: 'combo_25',      name: 'Комбо ×25', },
+                { id: 'endless_10',    name: '∞ Этаж 10', },
+                { id: 'endless_20',    name: '∞ Этаж 20', },
+                { id: 'endless_30',    name: '∞ Этаж 30', }
             ];
             for (let i = 0; i < ACHIEVEMENTS.length; i++) {
                 const a = ACHIEVEMENTS[i];
@@ -920,7 +940,7 @@ export class TransylvaniaScene extends Phaser.Scene {
                 const y = achY + 28 + i * 22;
                 if (y + 22 > H/2 + panelH/2 - 12) break;
                 addEl(this.add.text(rightX + 12, y,
-                    unlocked ? `${a.emoji}  ${a.name}` : `🔒  ???`, {
+                    unlocked ? a.name : '???', {
                         fontFamily: FONT.body, fontSize: '13px',
                         color: unlocked ? hex(C.success) : hex(C.textMuted),
                         fontStyle: unlocked ? '600' : '400',
@@ -981,15 +1001,14 @@ export class TransylvaniaScene extends Phaser.Scene {
         balG.lineStyle(STROKE.thin, C.accent, 0.85);
         balG.strokeRoundedRect(balPillX - balPillW/2, balPillY - 18, balPillW, 36, R.pill);
         els.push(balG);
-        addEl(this.add.text(balPillX - balPillW/2 + 20, balPillY, '🧀',
-            { fontSize: '20px' }).setOrigin(0.5), D + 3);
+        addEl(this._menuIcon(balPillX - balPillW/2 + 20, balPillY, 'ui_cheese', 24), D + 3);
         addEl(this.add.text(balPillX + 12, balPillY, String(bal), {
             fontFamily: FONT.display, fontSize: '18px',
             color: hex(C.accentSoft), fontStyle: '700',
         }).setOrigin(0.5), D + 3);
 
         // Close — top-left ghost button
-        const closeBtnObj = makeButton(this, W/2 - panelW/2 + 32, H/2 - panelH/2 + 32, 40, 40, '✕', {
+        const closeBtnObj = makeButton(this, W/2 - panelW/2 + 32, H/2 - panelH/2 + 32, 40, 40, '×', {
             variant: 'ghost', textSize: '22px', depth: D + 5,
             clickEvent: 'ui.button.back', onClick: closeModal,
         });
@@ -1003,7 +1022,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         const topY = H/2 - panelH/2 + 80;
 
         // === LEFT COLUMN: SKINS (responsive grid) ===
-        addEl(this.add.text(leftX + colW/2, topY, '🐭  СКИНЫ', {
+        addEl(this.add.text(leftX + colW/2, topY, 'СКИНЫ', {
             fontFamily: FONT.display, fontSize: '20px',
             color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
             fontStyle: '700',
@@ -1064,12 +1083,20 @@ export class TransylvaniaScene extends Phaser.Scene {
             if (skin.id === 'shadow') piPreview.setAlpha(0.85);
             if (skin.id === 'angel') piPreview.setAlpha(0.95);
             // Floor of card: pill price/state badge
-            const subText = unlocked ? (equipped ? '✓ НАДЕТ' : 'НАДЕТЬ') : `🧀 ${skin.price}`;
+            const subText = unlocked ? (equipped ? 'НАДЕТ' : 'НАДЕТЬ') : `${skin.price}`;
             const subColor = unlocked ? (equipped ? C.success : C.textPrimary) : C.accent;
-            addEl(this.add.text(cx, cy + cardH/2 - 12, subText, {
+            const subTxt = addEl(this.add.text(cx, cy + cardH/2 - 12, subText, {
                 fontFamily: FONT.body, fontSize: '11px',
                 color: hex(subColor), fontStyle: '700', letterSpacing: 0.5,
             }).setOrigin(0.5, 1), D + 3);
+            if (!unlocked) {
+                // Price reads «<cheese> N» — icon and number centred as one group
+                const icoBox = 14, icoGap = 4;
+                const half = (icoBox + icoGap + subTxt.width) / 2;
+                subTxt.setX(cx + half - subTxt.width / 2);
+                addEl(this._menuIcon(cx - half + icoBox / 2,
+                    cy + cardH/2 - 12 - subTxt.height / 2, 'ui_cheese', icoBox), D + 3);
+            }
 
             cardHit.on('pointerover', () => {
                 drawCardBg(1);
@@ -1097,7 +1124,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         });
 
         // === RIGHT COLUMN: PERMANENT UPGRADES ===
-        addEl(this.add.text(rightX + colW/2, topY, '💪  АПГРЕЙДЫ', {
+        addEl(this.add.text(rightX + colW/2, topY, 'АПГРЕЙДЫ', {
             fontFamily: FONT.display, fontSize: '20px',
             color: hex(C.textPrimary), stroke: hex(C.bgVoid), strokeThickness: 3,
             fontStyle: '700',
@@ -1132,8 +1159,7 @@ export class TransylvaniaScene extends Phaser.Scene {
             card.on('pointerover', () => drawUp(1));
             card.on('pointerout', () => drawUp(0.85));
 
-            addEl(this.add.text(rightX + 18, y, upg.emoji,
-                { fontSize: '30px' }).setOrigin(0, 0.5), D + 2);
+            addEl(this._menuIcon(rightX + 34, y, upg.icon, 34), D + 2);
             addEl(this.add.text(rightX + 60, y - 14, `${upg.name}  (${lvl}/${upg.maxLevel})`, {
                 fontFamily: FONT.display, fontSize: '14px',
                 color: hex(C.textPrimary), fontStyle: '700',
@@ -1143,11 +1169,12 @@ export class TransylvaniaScene extends Phaser.Scene {
                 color: hex(C.textSecond),
                 wordWrap: { width: colW - 80 }
             }).setOrigin(0, 0.5), D + 2);
-            const price = maxed ? 'МАКС' : `🧀 ${upg.price}`;
-            addEl(this.add.text(rightX + 60, y + 22, price, {
+            const price = maxed ? 'МАКС' : `${upg.price}`;
+            addEl(this.add.text(rightX + (maxed ? 60 : 76), y + 22, price, {
                 fontFamily: FONT.body, fontSize: '12px',
                 color: maxed ? hex(C.success) : hex(C.accent), fontStyle: '700',
             }).setOrigin(0, 0.5), D + 2);
+            if (!maxed) addEl(this._menuIcon(rightX + 67, y + 22, 'ui_cheese', 14), D + 2);
 
             card.on('pointerdown', () => {
                 if (maxed) return;
