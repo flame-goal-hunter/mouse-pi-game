@@ -2981,6 +2981,7 @@ export class DungeonScene extends Phaser.Scene {
             this.wallLayer.removeTileAt(c, r);
             this.crackLayer.removeTileAt(c, r);
             this.floorLayer.putTileAt(this.plateTile(r, c), c, r);
+            if (this.navGrid[r]) this.navGrid[r][c] = 'floor';   // the opening is walkable ground now
             const above = this.wallLayer.getTileAt(c, r - 1), below = this.wallLayer.getTileAt(c, r + 1);
             if (above && above.index >= TILE.WALL) above.index = TILE.WALL + ((above.index - TILE.WALL) | 2);
             if (below && below.index >= TILE.WALL) below.index = TILE.WALL + ((below.index - TILE.WALL) | 1);
@@ -3005,8 +3006,8 @@ export class DungeonScene extends Phaser.Scene {
         }
         // Camera kick
         this.cameras.main.shake(160, 0.008);
-        // Drop a chest where the wall was
-        this.spawnChest(cx, cy);
+        // Drop the chest on the open side of the breach, never inside the remaining masonry
+        this.spawnChest(cx, cy + (this.navGrid[r + 1]?.[c0] === 'floor' ? NAV_CELL : -NAV_CELL));
         this.showFloatingText(cx, cy - 30, 'СЕКРЕТ!', '#80c0ff', 26, 'relic_gift');
     }
 
@@ -3105,7 +3106,7 @@ export class DungeonScene extends Phaser.Scene {
             b.taken = true;
             this.pieDmgBonus = (this.pieDmgBonus || 0) + 1;   // permanent for this run
             this.score += 100;
-            this.runCheeseTotal = (this.runCheeseTotal || 0) + 20;
+            this.runCheeseTotal = (this.runCheeseTotal || 0) + 8;
             this.showFloatingText(b.x, b.y - 30, 'Книга: +1 урон навсегда', '#ff60ff', 22, 'ui_book');
             bus.emit(SFX.OPEN_CHEST);
             this.tweens.add({
@@ -3316,7 +3317,28 @@ export class DungeonScene extends Phaser.Scene {
         return this.hasLineOfSight(e.x, e.y, this.player.x, this.player.y);
     }
 
+    // Nearest spot that is real floor and clear of the brickwork (chests used to end up inside walls)
+    _safeSpot(x, y, clearance = 34) {
+        const free = (px, py) => {
+            const gc = Math.floor(px / NAV_CELL), gr = Math.floor(py / NAV_CELL);
+            return this.navGrid[gr]?.[gc] === 'floor' && !this.pointInWalls(px, py, clearance);
+        };
+        if (free(x, y)) return { x, y };
+        for (let ring = 1; ring <= 4; ring++) {
+            for (let a = 0; a < 8; a++) {
+                const ang = (a / 8) * Math.PI * 2;
+                const px = x + Math.cos(ang) * ring * NAV_CELL;
+                const py = y + Math.sin(ang) * ring * NAV_CELL;
+                if (free(px, py)) return { x: px, y: py };
+            }
+        }
+        return null;
+    }
+
     spawnChest(x, y) {
+        const spot = this._safeSpot(x, y, 34);
+        if (!spot) return;                 // nowhere clear nearby — better no chest than one in a wall
+        x = spot.x; y = spot.y;
         const sprite = this._worldImage(x, y, 'chest_closed', 150, 0.5, 0.85);
         const glow = this.add.circle(x, y - 15, 28, 0xffd040, 0.25).setDepth(149);
         this.tweens.add({ targets: glow, alpha: 0.08, scale: 1.4,
@@ -3338,7 +3360,7 @@ export class DungeonScene extends Phaser.Scene {
         // Big bonus if you sneaked past unalarmed, small bonus otherwise
         let cheeseGain, scoreGain, msg, msgColor;
         if (stealthSuccess) {
-            cheeseGain = 40 + Math.floor(Math.random() * 30);
+            cheeseGain = 12 + Math.floor(Math.random() * 7);
             scoreGain = 150;
             msg = `Тихо! +${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#80ff80';
@@ -3350,7 +3372,7 @@ export class DungeonScene extends Phaser.Scene {
                 this.showFloatingText(c.x, c.y - 90, `Открыт скин: ${skin.name}`, '#80c0ff', 22);
             }
         } else {
-            cheeseGain = 15 + Math.floor(Math.random() * 10);
+            cheeseGain = 5 + Math.floor(Math.random() * 4);
             scoreGain = 50;
             msg = `+${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#ffe080';
@@ -4541,15 +4563,17 @@ export class DungeonScene extends Phaser.Scene {
             // Alarm penalty: cheese in alarmed rooms gives half value
             const roomId = this._findRoomIdForPoint(pk.x, pk.y);
             const penalized = this._cheesePenaltyRooms && this._cheesePenaltyRooms.has(roomId);
-            const cheeseValue = penalized ? 0.5 : 1;
+            // Cheese is always a whole number. The alarm penalty costs score, not fractions of cheese,
+            // and the "Сырный нос" upgrade pays its +50% as a chance of one extra cheese.
             this.cheeseGot++;
-            this.runCheeseTotal = (this.runCheeseTotal || 0) + cheeseValue;
-            const cheeseScore = Math.round(10 * (this.cheeseMul || 1) * cheeseValue);
+            const bonus = (Math.random() < ((this.cheeseMul || 1) - 1)) ? 1 : 0;
+            this.runCheeseTotal = (this.runCheeseTotal || 0) + 1 + bonus;
+            const cheeseScore = penalized ? 4 : 10;
             this.score += cheeseScore;
             this.poofAt(pk.x, pk.y, penalized ? 0x808080 : 0xf5c945);
             // Show what was COLLECTED (cheese piece), not the score bonus — was confusing
             this.showFloatingText(pk.x, pk.y - 20,
-                penalized ? '+½' : '+1',
+                bonus ? '+2' : '+1',
                 penalized ? '#a0a0a0' : '#ffe080', 22, 'ui_cheese');
             bus.emit(SFX.COLLECT_CHEESE);
             // Cheese Explosion relic — 2 dmg to enemies in 100px
@@ -6127,7 +6151,7 @@ export class DungeonScene extends Phaser.Scene {
         // Ghost-run bonus: 0 alarms AND biome had stealth rooms -> +cheese + score + log progress
         const hadStealth = (this.biome?.stealthRoomsPerFloor || 0) > 0;
         if (hadStealth && (this.runAlarmCount || 0) === 0) {
-            const ghostCheese = 50 * this.chapter;
+            const ghostCheese = 10 * this.chapter;
             this.runCheeseTotal = (this.runCheeseTotal || 0) + ghostCheese;
             this.score += 200;
             this.showFloatingText(this.player.x, this.player.y - 60, `Тихая лапка! +${ghostCheese}`, '#80ff80', 26, 'ui_cheese');
@@ -6150,7 +6174,7 @@ export class DungeonScene extends Phaser.Scene {
                 'ИГРАТЬ ЗАНОВО',
                 () => this.scene.start('DungeonScene', { runMode: 'story', chapter: 1 }),
                 'В ЛАВКУ',
-                () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); },
+                () => this._leaveToMenu('?openShop=1'),
                 [{ icon: 'ui_stairs', value: `${this.chapter}` }, { icon: 'ui_cheese', value: `+${earned}` }]
             );
         } else {
@@ -7130,7 +7154,7 @@ export class DungeonScene extends Phaser.Scene {
             'ЗАНОВО',
             () => this.scene.start('DungeonScene', { runMode: this.runMode, chapter: 1 }),
             'В ЛАВКУ',
-            () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); },
+            () => this._leaveToMenu('?openShop=1'),
             [{ icon: 'ui_stairs', value: `${this.chapter}` }, { icon: 'ui_cheese', value: `+${banked}` }]
         );
     }
@@ -7466,12 +7490,20 @@ export class DungeonScene extends Phaser.Scene {
     exitToMenu() {
         // NOTE: renamed from exit() — spawnExitDoor() assigns this.exit = {door object},
         // which previously shadowed this method and caused TypeError on click.
+        this._leaveToMenu();
+    }
+
+    // Leave the run for the HTML castle menu (the Phaser TransylvaniaScene is a legacy fallback
+    // that is slow and half-styled — never send the player there).
+    _leaveToMenu(query = '') {
         try { window.audio?.stopBgm?.(); } catch (e) {}
         if (this.game.canvas && this.game.canvas.style) this.game.canvas.style.cursor = '';
+        try {
+            window.location.href = 'transylvania-menu.html' + query;
+            return;
+        } catch (e) { /* fall through to the legacy paths below */ }
         if (window.parent && window.parent !== window) {
             window.parent.postMessage('closePhaserSnowball', '*');
-        } else if (this.scene.manager.keys && this.scene.manager.keys['TransylvaniaScene']) {
-            this.scene.start('TransylvaniaScene');
         } else if (this.scene.manager.keys && this.scene.manager.keys['MenuScene']) {
             this.scene.start('MenuScene');
         }

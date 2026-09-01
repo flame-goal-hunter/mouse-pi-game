@@ -130,6 +130,7 @@ export const Progress = {
 
     // === Cheese bank ===
     addCheese(amount) {
+        amount = Math.max(0, Math.round(amount || 0));   // the bank only ever holds whole cheese
         const s = load();
         s.cheeseBank += amount;
         s.cheeseEarnedAllTime += amount;
