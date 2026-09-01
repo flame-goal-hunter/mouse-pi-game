@@ -259,6 +259,17 @@ export class DungeonScene extends Phaser.Scene {
             this.load.svg('skin_' + safeId + '_w1',  skinBase + k + '-walk1.svg',   { width: 150, height: 172 });
             this.load.svg('skin_' + safeId + '_w2',  skinBase + k + '-walk2.svg',   { width: 150, height: 172 });
         }
+        // === BACK VIEWS — same art without the face, shown while walking away from the camera ===
+        const backBase = base + 'back/';
+        this.load.svg('d_pi_b',       backBase + 'pi.svg',       { width: 150, height: 172 });
+        this.load.svg('d_pi_walk1_b', backBase + 'pi-walk1.svg', { width: 150, height: 172 });
+        this.load.svg('d_pi_walk2_b', backBase + 'pi-walk2.svg', { width: 150, height: 172 });
+        for (const k of skinKeys) {
+            const safeId = k.replace(/-/g, '_');
+            this.load.svg('skin_' + safeId + '_b',     backBase + k + '.svg',         { width: 150, height: 172 });
+            this.load.svg('skin_' + safeId + '_w1_b',  backBase + k + '-walk1.svg',   { width: 150, height: 172 });
+            this.load.svg('skin_' + safeId + '_w2_b',  backBase + k + '-walk2.svg',   { width: 150, height: 172 });
+        }
         this.load.svg('d_zombie',   base + 'zombie.svg',   { width: 180, height: 210 });
         this.load.svg('d_cat',      base + 'cat.svg',      { width: 165, height: 150 });
         this.load.svg('d_slime',    base + 'slime.svg',    { width: 180, height: 135 });
@@ -2007,6 +2018,23 @@ export class DungeonScene extends Phaser.Scene {
         const sprite = entity.sprite;
         const facing = entity.facing || 1;
         sprite.x = entity.x;
+        // Back views — turn away from the camera while walking up the screen. The flip needs
+        // ~120 ms of the new state before it commits, so a wiggle up/down cannot flicker it.
+        if (entity.walkFramesBack) {
+            const wantBack = isMoving && (entity.vy || 0) < -30;
+            if (wantBack !== !!entity._facingBack) {
+                if (entity._facingBackSince == null) entity._facingBackSince = this.time.now;
+                else if (this.time.now - entity._facingBackSince >= 120) {
+                    entity._facingBack = wantBack;
+                    entity._facingBackSince = null;
+                }
+            } else {
+                entity._facingBackSince = null;
+            }
+        }
+        const back = !!(entity._facingBack && entity.walkFramesBack);
+        const walkFrames = back ? entity.walkFramesBack : entity.walkFrames;
+        const standFrame = (back && entity.standFrameBack) ? entity.standFrameBack : entity.standFrame;
         if (isMoving) {
             entity.walkPhase = (entity.walkPhase || 0) + (walkSpeed || 0.20);
             // Lively walk: bigger bounce + waddle + squash
@@ -2031,9 +2059,9 @@ export class DungeonScene extends Phaser.Scene {
             sprite.scaleX = baseScale * facing * (1 - stretch * 0.5);  // gentler horizontal squash
             sprite.scaleY = baseScale * (1 + stretch + ySquash);
             // Swap walk-cycle frames if entity has them (legs visibly move)
-            if (entity.walkFrames) {
-                const idx = Math.floor(entity.walkPhase / Math.PI) % entity.walkFrames.length;
-                const key = entity.walkFrames[idx];
+            if (walkFrames) {
+                const idx = Math.floor(entity.walkPhase / Math.PI) % walkFrames.length;
+                const key = walkFrames[idx];
                 if (sprite.texture.key !== key) sprite.setTexture(key);
             }
         } else {
@@ -2046,8 +2074,8 @@ export class DungeonScene extends Phaser.Scene {
             sprite.scaleX = baseScale * facing * (1 + breath);
             sprite.scaleY = baseScale * (1 - breath);
             // Reset to standing frame
-            if (entity.standFrame && sprite.texture.key !== entity.standFrame) {
-                sprite.setTexture(entity.standFrame);
+            if (standFrame && sprite.texture.key !== standFrame) {
+                sprite.setTexture(standFrame);
             }
         }
     }
@@ -2108,6 +2136,10 @@ export class DungeonScene extends Phaser.Scene {
             aimAngle: 0,
             standFrame: 'd_pi',
             walkFrames: ['d_pi_walk1', 'd_pi_walk2'],
+            standFrameBack: 'd_pi_b',
+            walkFramesBack: ['d_pi_walk1_b', 'd_pi_walk2_b'],
+            _facingBack: false,
+            _facingBackSince: null,
             crouch: false,       // stealth verb (C key / mobile button) — slower, harder to detect
             dashTimer: 0,
             dashCooldown: 0,
@@ -2128,9 +2160,12 @@ export class DungeonScene extends Phaser.Scene {
             this.player.sprite.setTexture(spriteKey);
             this.player.standFrame = spriteKey;
         }
+        // Back view of the same skin — '<key>_b'; null when the skin has no back art
+        this.player.standFrameBack = this.textures.exists(spriteKey + '_b') ? spriteKey + '_b' : null;
         // Set walk-cycle frames — each skin has its own walk1/walk2 (real leg movement per skin)
         if (skin.id === 'blue' || !skin.spriteKey || skin.spriteKey === 'd_pi') {
             this.player.walkFrames = ['d_pi_walk1', 'd_pi_walk2'];
+            this.player.walkFramesBack = ['d_pi_walk1_b', 'd_pi_walk2_b'];
         } else {
             const w1 = skin.spriteKey + '_w1';
             const w2 = skin.spriteKey + '_w2';
@@ -2139,7 +2174,11 @@ export class DungeonScene extends Phaser.Scene {
             } else {
                 this.player.walkFrames = null;  // fallback — no swap, rely on bounce animation
             }
+            this.player.walkFramesBack = (this.textures.exists(w1 + '_b') && this.textures.exists(w2 + '_b'))
+                ? [w1 + '_b', w2 + '_b'] : null;
         }
+        this.player._facingBack = false;
+        this.player._facingBackSince = null;
         // Tint is no longer needed — each skin SVG has its own colors. Clear any old tint.
         this.player.sprite.clearTint();
         // Special alpha for ethereal skins
