@@ -10,9 +10,9 @@
     <meta name="screen-orientation" content="landscape">
     <title>Мышонок Пи</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
-    <link rel="icon" sizes="32x32" href="assets/icons/favicon-32.png">
-    <link rel="icon" sizes="256x256" href="assets/icons/icon-256.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-v2.png">
+    <link rel="icon" sizes="32x32" href="assets/icons/favicon-32-v2.png">
+    <link rel="icon" sizes="256x256" href="assets/icons/icon-256-v2.png">
     <link rel="stylesheet" href="assets/fonts/nunito.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="js/storage/FavoritesManager.js"></script>
@@ -10869,7 +10869,7 @@
     </style>
     <div id="installCard" hidden>
       <div class="ic-row">
-        <img src="assets/icons/icon-256.png" alt="">
+        <img src="assets/icons/icon-256-v2.png" alt="">
         <div style="flex:1;min-width:0">
           <div class="ic-title">Установить Мышонка Пи</div>
           <div id="installWhy">Появится на экране телефона и будет открываться как обычное
@@ -10884,11 +10884,23 @@
     </div>
     <script>
     (function () {
-        // Service worker: enables the Chrome install prompt and offline play.
+        // Service worker: enables the Chrome install prompt and offline play — in a
+        // browser. Inside the APK every file is already local, and a worker left over
+        // from an earlier install keeps serving that older copy after an app update.
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () {
-                navigator.serviceWorker.register('sw.js').catch(function () {});
-            });
+            if (inApp()) {
+                navigator.serviceWorker.getRegistrations()
+                    .then(function (rs) { rs.forEach(function (r) { r.unregister(); }); })
+                    .catch(function () {});
+                if (window.caches && caches.keys) {
+                    caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); })
+                        .catch(function () {});
+                }
+            } else {
+                window.addEventListener('load', function () {
+                    navigator.serviceWorker.register('sw.js').catch(function () {});
+                });
+            }
         }
         var card = document.getElementById('installCard');
         var yes = document.getElementById('installYes');
@@ -10922,9 +10934,20 @@
                        window.navigator.standalone === true;
             } catch (e) { return false; }
         }
-        // Inside the Android build there is nothing to install.
+        // Inside the Android build there is nothing to install. Checked four ways: the
+        // bridge may not be injected yet when this runs, and the WebView user agent is
+        // not guaranteed, so the serving origin is the reliable signal.
         function inApp() {
-            return !!(window.Capacitor || /\bwv\b/.test(navigator.userAgent));
+            if (window.Capacitor || window.cordova || window.Ionic) return true;
+            var ua = navigator.userAgent || '';
+            if (/\bwv\b/.test(ua)) return true;                            // Android WebView marker
+            if (/Version\/[\d.]+ Chrome\/[\d.]+/.test(ua)) return true;     // WebView UA shape
+            var proto = location.protocol, host = location.hostname;
+            if (proto === 'capacitor:' || proto === 'ionic:' || proto === 'file:') return true;
+            // Capacitor Android serves from https://localhost with no port. A real site is
+            // never there, and a local dev server always carries a port.
+            if (proto === 'https:' && (host === 'localhost' || host === '127.0.0.1') && !location.port) return true;
+            return false;
         }
         function silenced() {
             if (get(K_NEVER) === '1') return true;
@@ -10978,6 +11001,7 @@
 
         window.addEventListener('beforeinstallprompt', function (e) {
             e.preventDefault();                       // keep the mini-infobar off the game
+            if (inApp()) return;                      // a WebView that fires this still cannot install
             deferred = e;
             maybeShow();
         });
@@ -10988,13 +11012,20 @@
             var d = deferred;
             deferred = null;
             hide();
+            var settled = false;
+            function decide(r) {
+                if (settled) return;
+                settled = true;
+                // Dismissing the system dialog is not "never" — back off for a week.
+                if (!r || r.outcome !== 'accepted') snooze();
+            }
             try {
-                d.prompt();
-                d.userChoice.then(function (r) {
-                    // Dismissing the system dialog is not "never" — back off for a week.
-                    if (!r || r.outcome !== 'accepted') snooze();
-                }).catch(function () {});
-            } catch (e) { snooze(); }
+                // prompt() rejects when the event is stale — the app was installed in the
+                // meantime, or Chrome dropped it. Unhandled, that is an uncaught rejection
+                // in the console and no decision recorded.
+                Promise.resolve(d.prompt()).catch(function () { decide(null); });
+                Promise.resolve(d.userChoice).then(decide).catch(function () { decide(null); });
+            } catch (e) { decide(null); }
         });
         no.addEventListener('click', snooze);
         never.addEventListener('click', stopAsking);
