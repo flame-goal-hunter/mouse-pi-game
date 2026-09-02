@@ -37,8 +37,6 @@
             padding: 0 !important;
             overflow: hidden !important;
             background: #1a1a2e !important;
-            /* Safe area for notch/cutout */
-            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left) !important;
         }
 
         body {
@@ -55,17 +53,21 @@
         #gameCanvas {
             display: block !important;
             position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
+            top: env(safe-area-inset-top, 0px) !important;
+            left: env(safe-area-inset-left, 0px) !important;
+            width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
+            height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+            height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
             touch-action: none;
             background: #1a1a2e;
         }
 
         .overlay {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: env(safe-area-inset-top, 0px);
+            left: env(safe-area-inset-left, 0px);
+            right: env(safe-area-inset-right, 0px);
+            bottom: env(safe-area-inset-bottom, 0px);
             background: rgba(0,0,0,0.92);
             display: none;
             flex-direction: column;
@@ -773,24 +775,9 @@
         const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
         function resizeCanvas() {
-            let w, h;
-
-            if (window.screen && window.screen.availWidth) {
-                w = Math.max(window.screen.availWidth, window.innerWidth || 0);
-                h = Math.max(window.screen.availHeight, window.innerHeight || 0);
-            } else {
-                w = window.innerWidth || document.documentElement.clientWidth || 800;
-                h = window.innerHeight || document.documentElement.clientHeight || 480;
-            }
-
-            if (h > w) {
-                const temp = w;
-                w = h;
-                h = temp;
-            }
-
-            canvas.width = w;
-            canvas.height = h;
+            const box = canvas.getBoundingClientRect();
+            const w = Math.max(1, Math.round(box.width || window.innerWidth || 800));
+            const h = Math.max(1, Math.round(box.height || window.innerHeight || 480));
 
             // Calculate scale: mobile gets 0.6, desktop stays at 1.0
             if (isMobile) {
@@ -798,6 +785,12 @@
             } else {
                 SCALE = 1.0;
             }
+
+            // Reassigning width clears the canvas, so only touch it on a real change.
+            if (canvas.width === w && canvas.height === h) return;
+
+            canvas.width = w;
+            canvas.height = h;
         }
 
         resizeCanvas();
