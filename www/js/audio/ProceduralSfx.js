@@ -28,6 +28,12 @@ export class ProceduralSfx {
         return this._ctx;
     }
 
+    // Backgrounding the app has to stop the ambient bed too, not just the music.
+    suspend() {
+        const ctx = this._ctx;
+        if (ctx && ctx.state === 'running' && ctx.suspend) ctx.suspend();
+    }
+
     resume() {
         const ctx = this._ensureCtx();
         if (ctx && ctx.state === 'suspended') ctx.resume();
@@ -103,9 +109,10 @@ export class ProceduralSfx {
         const ctx = this._ensureCtx();
         if (!ctx) return;
         if (this._ambienceNodes) this.stopAmbience();
-        const baseFreq = opts.baseFreq || 55;     // low drone fundamental
-        const padFreq = opts.padFreq || 165;      // higher pad layer
-        const vol = opts.vol != null ? opts.vol : 0.12;
+        // An octave up, out of the 40-60 Hz band where a steady tone reads as a hum
+        const baseFreq = (opts.baseFreq || 55) * 2;
+        const padFreq = opts.padFreq || 165;
+        const vol = (opts.vol != null ? opts.vol : 0.12) * 0.35;
         // Bass drone
         const osc1 = ctx.createOscillator();
         osc1.type = 'sine';
@@ -129,15 +136,26 @@ export class ProceduralSfx {
         lfoGain.gain.value = 80;
         lfo.connect(lfoGain).connect(padFilter.frequency);
         // Master ambience gain
+        // The two sines sit well under the pad now — they are body, not the sound
+        const bassGain = ctx.createGain();
+        bassGain.gain.value = 0.35;
         const ambGain = ctx.createGain();
         ambGain.gain.value = 0;
-        ambGain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 2);
-        osc1.connect(ambGain);
-        osc2.connect(ambGain);
+        ambGain.gain.linearRampToValueAtTime(vol, ctx.currentTime + 3);
+        osc1.connect(bassGain);
+        osc2.connect(bassGain);
+        bassGain.connect(ambGain);
         pad.connect(padFilter).connect(ambGain);
+        // Slow breath on the level so it is room tone, not a held note
+        const breath = ctx.createOscillator();
+        breath.type = 'sine';
+        breath.frequency.value = 0.045;
+        const breathGain = ctx.createGain();
+        breathGain.gain.value = vol * 0.55;
+        breath.connect(breathGain).connect(ambGain.gain);
         ambGain.connect(this._sfxGain);
-        osc1.start(); osc2.start(); pad.start(); lfo.start();
-        this._ambienceNodes = { osc1, osc2, pad, lfo, ambGain, ctx };
+        osc1.start(); osc2.start(); pad.start(); lfo.start(); breath.start();
+        this._ambienceNodes = { osc1, osc2, pad, lfo, breath, ambGain, ctx };
     }
 
     stopAmbience() {
@@ -147,7 +165,7 @@ export class ProceduralSfx {
             a.ambGain.gain.cancelScheduledValues(a.ctx.currentTime);
             a.ambGain.gain.linearRampToValueAtTime(0, a.ctx.currentTime + 1);
             setTimeout(() => {
-                try { a.osc1.stop(); a.osc2.stop(); a.pad.stop(); a.lfo.stop(); } catch (e) {}
+                try { a.osc1.stop(); a.osc2.stop(); a.pad.stop(); a.lfo.stop(); a.breath?.stop(); } catch (e) {}
             }, 1100);
         } catch (e) {}
         this._ambienceNodes = null;

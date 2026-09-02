@@ -21,24 +21,24 @@
     <circle cx="34" cy="34" r="2.6" fill="#355c35" opacity="0.85"/>
   </g>
   <g transform="translate(160,0)" clip-path="url(#cell)">
-    <rect x="0" y="0" width="40" height="40" fill="#375e38"/>
-    <path d="M3 4 L34 2 L37 30 L20 37 L2 32 Z" fill="#394a56" stroke="#0e1c25" stroke-width="1.4" stroke-linejoin="round"/>
-    <circle cx="6" cy="6" r="2.6" fill="#375e38" opacity="0.85"/>
+    <rect x="0" y="0" width="40" height="40" fill="#365c36"/>
+    <path d="M3 4 L34 2 L37 30 L20 37 L2 32 Z" fill="#374651" stroke="#0b1821" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="6" cy="6" r="2.6" fill="#365c36" opacity="0.85"/>
   </g>
   <g transform="translate(200,0)" clip-path="url(#cell)">
-    <rect x="0" y="0" width="40" height="40" fill="#375e38"/>
-    <path d="M4 3 L36 5 L38 34 L14 36 L2 20 Z" fill="#394a56" stroke="#0e1c25" stroke-width="1.4" stroke-linejoin="round"/>
-    <circle cx="34" cy="6" r="2.6" fill="#375e38" opacity="0.85"/>
+    <rect x="0" y="0" width="40" height="40" fill="#365c36"/>
+    <path d="M4 3 L36 5 L38 34 L14 36 L2 20 Z" fill="#374651" stroke="#0b1821" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="34" cy="6" r="2.6" fill="#365c36" opacity="0.85"/>
   </g>
   <g transform="translate(240,0)" clip-path="url(#cell)">
-    <rect x="0" y="0" width="40" height="40" fill="#375e38"/>
-    <path d="M2 6 L22 2 L37 12 L34 36 L6 34 Z" fill="#394a56" stroke="#0e1c25" stroke-width="1.4" stroke-linejoin="round"/>
-    <circle cx="6" cy="34" r="2.6" fill="#375e38" opacity="0.85"/>
+    <rect x="0" y="0" width="40" height="40" fill="#365c36"/>
+    <path d="M2 6 L22 2 L37 12 L34 36 L6 34 Z" fill="#374651" stroke="#0b1821" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="6" cy="34" r="2.6" fill="#365c36" opacity="0.85"/>
   </g>
   <g transform="translate(280,0)" clip-path="url(#cell)">
-    <rect x="0" y="0" width="40" height="40" fill="#375e38"/>
-    <path d="M6 2 L36 6 L35 33 L10 37 L3 18 Z" fill="#394a56" stroke="#0e1c25" stroke-width="1.4" stroke-linejoin="round"/>
-    <circle cx="34" cy="34" r="2.6" fill="#375e38" opacity="0.85"/>
+    <rect x="0" y="0" width="40" height="40" fill="#365c36"/>
+    <path d="M6 2 L36 6 L35 33 L10 37 L3 18 Z" fill="#374651" stroke="#0b1821" stroke-width="1.4" stroke-linejoin="round"/>
+    <circle cx="34" cy="34" r="2.6" fill="#365c36" opacity="0.85"/>
   </g>
   <g transform="translate(320,0)" clip-path="url(#cell)">
     <polyline points="9,15 17,20 22,17 28,25 33,24" fill="none" stroke="#081418" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>

@@ -83,22 +83,22 @@ def _stone_quarter(fill, grid, q, seam_on=True):
     seam = hex6(grid)
     base = mix(fill, 0xffffff, 0.10)
     parts = [f'<rect x="0" y="0" width="{T}" height="{T}" fill="{base}"/>']
-    if q in ('TL', 'TR'):
-        parts.append(f'<rect x="0" y="1" width="{T}" height="2" fill="{light}" opacity="0.55"/>')
-    if q in ('TL', 'BL'):
-        parts.append(f'<rect x="1" y="0" width="2" height="{T}" fill="{light}" opacity="0.45"/>')
-    if q in ('BL', 'BR'):
-        parts.append(f'<rect x="0" y="{T-3}" width="{T}" height="2" fill="{dark}" opacity="0.6"/>')
-    if q in ('TR', 'BR'):
-        parts.append(f'<rect x="{T-3}" y="0" width="2" height="{T}" fill="{dark}" opacity="0.5"/>')
+    # The dark bottom/right bevel was the real grid line: every plate drew one, so a
+    # dark stripe landed every 80px in both directions whatever the seam did. Gone.
+    # Only a faint light lip survives, and only on the seamed plate.
+    if seam_on:
+        if q in ('TL', 'TR'):
+            parts.append(f'<rect x="0" y="1" width="{T}" height="2" fill="{light}" opacity="0.18"/>')
+        if q in ('TL', 'BL'):
+            parts.append(f'<rect x="1" y="0" width="2" height="{T}" fill="{light}" opacity="0.15"/>')
     # Finding 17 — the most harmful visual defect in the registry: every plate drew its
     # own edge seam, so a seam landed on every cell and the floor read as a ruled table.
     # Only the A plate seams, and softly; B is seamless, so the two break the grid up.
     if seam_on:
         if q in ('TL', 'TR'):
-            parts.append(f'<rect x="0" y="0" width="{T}" height="1" fill="{seam}" opacity="0.34"/>')
+            parts.append(f'<rect x="0" y="0" width="{T}" height="1" fill="{seam}" opacity="0.22"/>')
         if q in ('TL', 'BL'):
-            parts.append(f'<rect x="0" y="0" width="1" height="{T}" fill="{seam}" opacity="0.34"/>')
+            parts.append(f'<rect x="0" y="0" width="1" height="{T}" fill="{seam}" opacity="0.22"/>')
     spots = {'TL': [(12, 27, 1.4), (29, 9, 1.0)], 'TR': [(9, 14, 1.2), (24, 31, 1.5)],
              'BL': [(27, 12, 1.1), (14, 24, 1.4)], 'BR': [(8, 30, 1.0), (30, 20, 1.3)]}[q]
     for (x, y, r) in spots:
@@ -157,7 +157,7 @@ def _flag_quarter(fill, grid, q):
     ]
 
 
-def _marble_quarter(fill, grid, q):
+def _marble_quarter(fill, grid, q, seam_on=True):
     """Throne: polished marble with veining and a gold inlay along the plate border."""
     base_i = mix_i(fill, 0xffffff, 0.16)
     base = hex6(base_i)
@@ -171,11 +171,13 @@ def _marble_quarter(fill, grid, q):
              'BR': 'M38 10 Q24 18 26 34 M2 4 Q10 16 4 26'}[q]
     parts.append(f'<path d="{veins}" fill="none" stroke="{vein}" stroke-width="1.3" opacity="0.5"/>')
     parts.append(f'<path d="{veins}" fill="none" stroke="{deep}" stroke-width="0.6" opacity="0.35"/>')
-    # Gold inlay on the plate's outer edges only
-    if q in ('TL', 'TR'):
-        parts.append(f'<rect x="0" y="0" width="{T}" height="1.6" fill="{GOLD}" opacity="0.55"/>')
-    if q in ('TL', 'BL'):
-        parts.append(f'<rect x="0" y="0" width="1.6" height="{T}" fill="{GOLD}" opacity="0.55"/>')
+    # Gold inlay only on the seamed plate, and faint — drawn on every plate it was the
+    # same ruled grid the stone floor had (finding 17).
+    if seam_on:
+        if q in ('TL', 'TR'):
+            parts.append(f'<rect x="0" y="0" width="{T}" height="1.4" fill="{GOLD}" opacity="0.26"/>')
+        if q in ('TL', 'BL'):
+            parts.append(f'<rect x="0" y="0" width="1.4" height="{T}" fill="{GOLD}" opacity="0.26"/>')
     return parts
 
 
@@ -334,7 +336,11 @@ def weak_crack():
 
 def build_sheet(b):
     tiles = []
-    for plate, fill in enumerate((b['floorA'], b['floorB'])):
+    # The two plate tones were far enough apart to read as a checkerboard, which is the
+    # same ruled-floor problem in another form. B is pulled most of the way toward A so
+    # the variation is texture, not a pattern.
+    plate_b = mix_i(b['floorB'], b['floorA'], 0.72)
+    for plate, fill in enumerate((b['floorA'], plate_b)):
         for q in ('TL', 'TR', 'BL', 'BR'):
             tiles.append(plate_quarter(fill, b['grid'], q, b['id'], seam_on=(plate == 0)))
     tiles.append(crack(b['grid']))

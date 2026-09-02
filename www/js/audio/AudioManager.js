@@ -466,12 +466,16 @@ export class AudioManager {
             if (this._bgmEl) this._bgmEl.pause();
         } catch (e) {}
         try { this.bgm?.pause(); } catch (e) {}
+        // The ambient bed and every procedural tail live in proc's own AudioContext,
+        // which nothing here was suspending — so the hum survived being backgrounded.
+        try { this.proc?.suspend?.(); } catch (e) {}
         if (this.game?.sound) this.game.sound.pauseAll?.();
     }
     resumeAll() {
         if (!this._duckTimer && this._duckGain !== 1) this._clearDuck();
         try { if (this._bgmEl && this._bgmWasPlaying) this._startEl(this._bgmEl, this._bgmKey); } catch (e) {}
         try { this.bgm?.resume(); } catch (e) {}
+        try { this.proc?.resume?.(); } catch (e) {}
         if (this.game?.sound) this.game.sound.resumeAll?.();
     }
 

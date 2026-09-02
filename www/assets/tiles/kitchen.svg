@@ -22,23 +22,23 @@
   </g>
   <g transform="translate(160,0)" clip-path="url(#cell)">
     <rect x="0" y="0" width="40" height="40" fill="#1a0c06"/>
-    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#6f615a"/>
-    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#afa8a4" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#6c5f59"/>
+    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#aea7a3" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
   </g>
   <g transform="translate(200,0)" clip-path="url(#cell)">
     <rect x="0" y="0" width="40" height="40" fill="#1a0c06"/>
-    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#4e3d34"/>
-    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#9d948f" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#4a3a33"/>
+    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#9b928e" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
   </g>
   <g transform="translate(240,0)" clip-path="url(#cell)">
     <rect x="0" y="0" width="40" height="40" fill="#1a0c06"/>
-    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#4e3d34"/>
-    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#9d948f" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#4a3a33"/>
+    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#9b928e" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
   </g>
   <g transform="translate(280,0)" clip-path="url(#cell)">
     <rect x="0" y="0" width="40" height="40" fill="#1a0c06"/>
-    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#6f615a"/>
-    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#afa8a4" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    <rect x="1.5" y="1.5" width="37" height="37" rx="2" fill="#6c5f59"/>
+    <path d="M4 12 Q6 5 13 4" fill="none" stroke="#aea7a3" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
   </g>
   <g transform="translate(320,0)" clip-path="url(#cell)">
     <polyline points="9,15 17,20 22,17 28,25 33,24" fill="none" stroke="#1a0c06" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
