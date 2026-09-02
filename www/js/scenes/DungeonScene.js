@@ -133,6 +133,15 @@ const PIE = { speed: 580, life: 1400, radius: 10, damage: 2 };
 const POWERUP_TINTS = { triple: 0xff70a0, speed: 0xfff060, shield: 0x60a0ff, fire: 0xff8030 };
 const BOOK_DMG_CAP = 2;   // forbidden books are a bonus, not a second damage tree
 
+// One note per floor, found with the key. They build to why the Count took her at all.
+const GRANDMA_NOTES = [
+    'Внучок, я цела. Пирог держу крепко!',
+    'Он велел испечь ему пирог. Я сказала: сначала лапы помой.',
+    'Спросила, когда у него день рождения. Он не помнит.',
+    'Кажется, ему никто никогда не пёк пирога. Ни разу.'
+];
+const VILLAIN = 'ГРАФ РАТУЛА';
+
 // Feel: aim assist cone/reach, the dash-press buffer, and the haptic pulse lengths (ms)
 const AIM_ASSIST = { cone: Math.PI / 18, range: 420 };   // +-10 deg
 const DASH_BUFFER_MS = 150;
@@ -3844,6 +3853,7 @@ export class DungeonScene extends Phaser.Scene {
                 && Math.hypot(e.x - this.player.x, e.y - this.player.y) < 520) {
                 this._bossIntroDone = true;
                 bus.emit(SFX.BOSS_INTRO);
+                this._speak(e.x, e.y - 70, 'ПИРОГ МОЙ! И БАБУШКА ТОЖЕ!', '#e8a0c0', 2800);
             }
             this.updateEnemy(e, dt);
             const tx = e.lastSeen ? e.lastSeen.x : this.player.x;
@@ -4686,7 +4696,17 @@ export class DungeonScene extends Phaser.Scene {
             });
             // Boss death = unlock exit early bonus message
             if (e.kind === 'boss') {
-                this.showFloatingText(e.x, e.y - 30, 'БОСС ПОВЕРЖЕН!', '#ff80ff', 32);
+                this.showFloatingText(e.x, e.y - 30, 'ГРАФ ПОВЕРЖЕН!', '#ff80ff', 32);
+                this.time.delayedCall(900, () => {
+                    if (this.state !== 'play' && this.state !== 'won') return;
+                    this._speak(e.x, e.y - 70, 'Я... просто хотел попробовать пирог.', '#e8d0f0', 3400);
+                });
+                this.time.delayedCall(3600, () => {
+                    if (!this.captive || !this.captive.freed) return;
+                    if (this.state !== 'play' && this.state !== 'won') return;
+                    this._speak(this.captive.x, this.captive.y - 130,
+                        'Так бы и сказал! Ну-ка, ставь чайник.', '#c8f0c0', 3400);
+                });
                 this.score += 200;
                 try {
                     if (Progress.unlockAchievement && Progress.unlockAchievement('boss_defeated')) {
@@ -4877,7 +4897,7 @@ export class DungeonScene extends Phaser.Scene {
             duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
         });
         const label = this.add.text(x, y + 56, 'СПУСК ВНИЗ', {
-            fontFamily: 'Arial Black', fontSize: '14px',
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: '14px',
             color: '#d0a0ff', stroke: '#1a0a3a', strokeThickness: 3
         }).setOrigin(0.5).setDepth(125);
         // captive reference is null on non-final floors; compass will fall back to exit
@@ -4898,9 +4918,9 @@ export class DungeonScene extends Phaser.Scene {
         });
 
         const bubble = this.add.text(x, y - 110, fam.plea, {
-            fontFamily: 'Arial Black', fontSize: '16px',
-            color: '#1a1a1a', backgroundColor: '#fff8e0',
-            padding: { x: 10, y: 6 }, stroke: '#5a3010', strokeThickness: 1
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: '16px',
+            color: '#3a2410', backgroundColor: '#fff8e0',
+            padding: { x: 12, y: 7 }, stroke: '#fff8e0', strokeThickness: 2
         }).setOrigin(0.5).setDepth(125);
         this.tweens.add({
             targets: bubble,
@@ -4929,8 +4949,9 @@ export class DungeonScene extends Phaser.Scene {
         });
         if (c.bubble) {
             c.bubble.setText(c.family.freed);
-            c.bubble.setBackgroundColor('#80ff80');
+            c.bubble.setBackgroundColor('#c8f0c0');
         }
+        this._speak(c.x, c.y - 130, 'Внучок! Я знала, что ты придёшь.', '#c8f0c0', 3000);
         for (let i = 0; i < 12; i++) {
             const angle = Math.random() * Math.PI * 2;
             const r = Phaser.Math.Between(40, 80);
@@ -5043,6 +5064,10 @@ export class DungeonScene extends Phaser.Scene {
             onComplete: () => { k.sprite.destroy(); k.glow.destroy(); }
         });
         this.showFloatingText(k.x, k.y - 30, 'Ключ найден!', '#ffd040', 24);
+        if (this.runMode === 'story') {
+            const note = GRANDMA_NOTES[this.chapter - 1];
+            if (note) this.time.delayedCall(500, () => this._showNote(note));
+        }
         this.unlockExit();
     }
 
@@ -5058,6 +5083,58 @@ export class DungeonScene extends Phaser.Scene {
         });
         this.exit.glowHoldUntil = this.time.now + 600;  // let the unlock flash win over the bob for its duration
         this.tweens.add({ targets: this.exit.glow, alpha: 0.30, duration: 600 });
+    }
+
+    _speak(x, y, text, color = '#fff8e0', ms = 2600) {
+        const t = this.add.text(x, y, text, {
+            fontFamily: UI_F.body, fontStyle: '700', fontSize: '17px',
+            color: '#3a2410', backgroundColor: color,
+            padding: { x: 12, y: 7 }, align: 'center',
+            wordWrap: { width: 420 }
+        }).setOrigin(0.5, 1).setDepth(LAYER.UI_COMPASS_LABEL).setAlpha(0);
+        this.tweens.add({ targets: t, alpha: 1, y: y - 10, duration: 220, ease: 'Back.easeOut' });
+        this.time.delayedCall(ms, () => {
+            if (!t.scene) return;
+            this.tweens.add({ targets: t, alpha: 0, y: y - 28, duration: 320,
+                onComplete: () => t.destroy() });
+        });
+        return t;
+    }
+
+    // A note from grandma, on a scrap of paper, centred and non-blocking.
+    _showNote(text) {
+        const W = this.viewW, D = LAYER.UI_OVERLAY;
+        const w = Math.min(Math.round(W * 0.72), 430);
+        const head = this.add.text(0, 0, 'ЗАПИСКА БАБУШКИ', {
+            fontFamily: UI_F.display, fontStyle: '700', fontSize: '13px',
+            color: '#8a5a20', align: 'center'
+        }).setOrigin(0.5, 0);
+        const body = this.add.text(0, 0, text, {
+            fontFamily: UI_F.body, fontStyle: '600', fontSize: '16px',
+            color: '#3a2410', align: 'center', wordWrap: { width: w - 44 }
+        }).setOrigin(0.5, 0);
+        const h = 18 + head.height + 10 + body.height + 18;
+        const x = Math.round(W / 2), y = Math.round(this.viewH * 0.22);
+        // Drawn at its own origin and then positioned, so it shifts with the text when
+        // _pinFixed moves everything into the fixed layer.
+        const paper = this.add.graphics();
+        paper.fillStyle(0xfff5dc, 0.97);
+        paper.fillRoundedRect(-w / 2, 0, w, h, 10);
+        paper.lineStyle(2, 0xc9a35a, 1);
+        paper.strokeRoundedRect(-w / 2, 0, w, h, 10);
+        paper.setPosition(x, y);
+        head.setPosition(x, y + 18);
+        body.setPosition(x, y + 18 + head.height + 10);
+        paper.setScrollFactor(0).setDepth(D).setAlpha(0);
+        head.setScrollFactor(0).setDepth(D + 1).setAlpha(0);
+        body.setScrollFactor(0).setDepth(D + 1).setAlpha(0);
+        const els = [paper, head, body];
+        this._pinFixed();   // screen-space objects only land in CSS px once they are in the fixed layer
+        this.tweens.add({ targets: els, alpha: 1, duration: 260 });
+        this.time.delayedCall(4600, () => {
+            this.tweens.add({ targets: els, alpha: 0, duration: 400,
+                onComplete: () => els.forEach(e => e.destroy()) });
+        });
     }
 
     showFloatingText(x, y, text, color, size, icon) {
@@ -5275,12 +5352,12 @@ export class DungeonScene extends Phaser.Scene {
     _finaleBlocker() {
         if (this.captive && !this.captive.freed) return 'Сначала освободи бабушку!';
         const boss = this.enemies && this.enemies.find(e => e.kind === 'boss' && !e.dead);
-        if (boss) return 'Дракула не пустит! Победи его.';
+        if (boss) return 'Граф не пустит! Победи его.';
         return null;
     }
 
     _bossName() {
-        return this.isSubBossFloor && this.runMode === 'endless' ? 'СТРАЖ ЭТАЖА' : 'ДРАКУЛА';
+        return this.isSubBossFloor && this.runMode === 'endless' ? 'СТРАЖ ЭТАЖА' : VILLAIN;
     }
 
     _nagFinale() {
@@ -5516,6 +5593,13 @@ export class DungeonScene extends Phaser.Scene {
                   'Сегодня он нашёл записку:\n' +
                   '«Внучок, помоги! Меня забрал граф Ратула...»\n\n' +
                   'Пи надел шлем и спустился спасать бабушку.')
+            : this.runMode === 'endless'
+            ? (this.chapter === 1
+                ? 'Пи наелся пирога и заснул.\n' +
+                  'Замок снится ему снова — и во сне у замка нет дна.'
+                : 'Пи спускается всё глубже во сне.\n' +
+                  ((this.biome?.ambient || '').replace(/[.!]?$/, '.')) + '\n' +
+                  (this.isSubBossFloor ? 'Этот этаж кто-то сторожит.' : 'Найди ключ и иди по лестнице вниз.'))
             : this.isFinalFloor
             ? 'Пи дошёл до самого низа замка!\n' +
               'Где-то здесь граф Ратула держит бабушку.\n' +
@@ -6537,10 +6621,11 @@ export class DungeonScene extends Phaser.Scene {
             Progress.recordStoryWin(totalScore, durationMs);
             bus.emit(SFX.WIN_STORY);
             this.showOverlay(
-                'БАБУШКА СПАСЕНА!',
-                'Пи дошёл до дна и освободил бабушку!\n' +
-                `Всего сыра: ${Progress.getCheese()}`,
-                0xffd040, ['d_grandma', this._heroKey()],
+                'ЧАЙ С ПИРОГОМ',
+                'Бабушка режет пирог. Граф — в бумажном колпаке.\n' +
+                'Он говорит, это его первый день рождения.\n' +
+                'Конец... до следующего пирога.',
+                0xffd040, ['d_grandma', this._heroKey(), 'd_zombie'],
                 'ИГРАТЬ ЗАНОВО',
                 () => this.scene.start('DungeonScene', { runMode: 'story', chapter: 1 }),
                 'В ЛАВКУ',
