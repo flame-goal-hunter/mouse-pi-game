@@ -16,7 +16,7 @@ export const BIOMES = [
         gridColor:   0x120820,
         wallFill:    0x2a1a3e, wallShadow: 0x120818, wallHighlight: 0x3e2a56,
         // Warm gothic: violet stone, amber torch pools; darkest of the "normal" floors
-        darknessColor: 0x080418, darknessAlpha: 0.72,
+        darknessColor: 0x171033, darknessAlpha: 0.36,
         decorWeights: [
             { type: 'mushroom', w: 3 },
             { type: 'bone',     w: 3 },
@@ -48,7 +48,7 @@ export const BIOMES = [
         gridColor:   0x1a0c06,
         wallFill:    0x4a3020, wallShadow: 0x1a0c04, wallHighlight: 0x6a4828,
         // Warm orange tinted darkness — kitchen feel
-        darknessColor: 0x200c04, darknessAlpha: 0.54,
+        darknessColor: 0x35200f, darknessAlpha: 0.30,
         decorWeights: [
             { type: 'pot',     w: 3 },
             { type: 'plate',   w: 3 },
@@ -80,7 +80,7 @@ export const BIOMES = [
         gridColor:   0x0a0818,
         wallFill:    0x4a2a14, wallShadow: 0x1a0a02, wallHighlight: 0x6a3a1c,
         // Cool blue-black tinted darkness — library feel
-        darknessColor: 0x0a0a20, darknessAlpha: 0.64,
+        darknessColor: 0x1b1b3a, darknessAlpha: 0.34,
         decorWeights: [
             { type: 'book',      w: 5 },
             { type: 'scroll',    w: 3 },
@@ -114,7 +114,7 @@ export const BIOMES = [
         gridColor:   0x081418,
         wallFill:    0x1a4438, wallShadow: 0x0a1c14, wallHighlight: 0x305840,
         // Moonlit blue darkness — the one cool floor (accent from the "Лунная ночь" mockup)
-        darknessColor: 0x0a1428, darknessAlpha: 0.68,
+        darknessColor: 0x1a2744, darknessAlpha: 0.35,
         decorWeights: [
             { type: 'moonflower', w: 3 },
             { type: 'glowpod',    w: 2 },
@@ -147,7 +147,7 @@ export const BIOMES = [
         gridColor:   0x0a0208,
         wallFill:    0x4a0a18, wallShadow: 0x180408, wallHighlight: 0x7a1830,
         // Crimson-tinted darkness — throne feel
-        darknessColor: 0x180408, darknessAlpha: 0.76,
+        darknessColor: 0x2e1420, darknessAlpha: 0.38,
         decorWeights: [
             { type: 'goblet',     w: 3 },
             { type: 'bone',       w: 2 },

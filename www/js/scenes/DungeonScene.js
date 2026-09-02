@@ -777,7 +777,7 @@ export class DungeonScene extends Phaser.Scene {
         // 2. Ambient halo around Pi
         const haloFlicker = 1 + Math.sin(this.time.now * 0.015 + 1.3) * 0.06;
         this._radialLight.setPosition(this.player.x - ox, this.player.y - oy);
-        this._radialLight.setScale((220 * haloFlicker) / 256);
+        this._radialLight.setScale((300 * haloFlicker) / 256);   // wider: unlit floor must not be pure black
         rt.batchDraw(this._radialLight);
 
         // 3. Torches in view
