@@ -206,11 +206,22 @@ function enemyBudgetForFloor(chapter, mode, isFinal) {
     return Math.max(6, n);
 }
 
-// Shown once every perk is maxed, so a late-run pick is still worth something.
-const CHEESE_FILLER = {
-    id: 'cheesebag', cap: 99, icon: 'ui_cheese', name: 'Мешок сыра', desc: '+20 сыра в забег',
-    apply: (s) => { s.runCheeseTotal = (s.runCheeseTotal || 0) + 20; }
-};
+// Shown once every capped perk is taken, so a late pick is still a real choice.
+// Effects must be idempotent under replay: create() re-applies every collected id from
+// a clean slate each floor, so these adjust reset stats, never grant one-off amounts.
+const FILLERS = [
+    { id: 'cheesebag', cap: 99, icon: 'ui_cheese', name: 'Сырный дух', desc: '+25% сыра за подбор',
+      apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.25; } },
+    { id: 'magnet',    cap: 99, icon: 'relic_magnet', name: 'Магнит', desc: 'Сыр липнет издалека',
+      apply: (s) => { s.relicMagnetRange = (s.relicMagnetRange || 0) + 80; } },
+    { id: 'tough',     cap: 99, icon: 'ui_heart', name: 'Твёрдый лоб', desc: '+150 мс неуязвимости',
+      apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 150; } }
+];
+
+// The picker's ids are replayed on every floor, so lookup has to see fillers too.
+function upgradeById(id) {
+    return UPGRADES.find(u => u.id === id) || FILLERS.find(u => u.id === id) || null;
+}
 
 // Upgrade roster — player picks one after every floor. cap = max stacks per run.
 const UPGRADES = [
@@ -246,6 +257,24 @@ export class DungeonScene extends Phaser.Scene {
         this.collectedRelics = data?.collectedRelics || [];
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        // Relic effects are re-applied below from collectedRelics — clear them first or
+        // they compound once per floor (the Scene instance survives scene.start).
+        this.relicPierce = 0;
+        this.relicMagnetRange = 0;
+        this.relicSpreadEvery = 0;
+        this.relicInvulnBonusMs = 0;
+        this.relicBounce = 0;
+        this.relicCritChance = 0;
+        this.relicThornDmg = 0;
+        this.relicUndying = 0;
+        this.relicGoldPieEvery = 0;
+        this.relicFlameTrail = false;
+        this.relicComboHeart = false;
+        this.relicDashBurst = false;
+        this.relicGhostWalk = false;
+        this.relicPieStorm = false;
+        this.relicCheeseBoom = false;
+        this.relicTimeWarp = false;
         this._bossEngaged = false;
         this.speedMul = 1;
         this.dashCdMul = 1;
@@ -258,7 +287,7 @@ export class DungeonScene extends Phaser.Scene {
         Progress.applyTo(this);
         // Then in-run upgrades collected this run
         for (const id of this.upgradeIds) {
-            const upg = UPGRADES.find(u => u.id === id);
+            const upg = upgradeById(id);
             if (upg) upg.apply(this);
         }
         // Apply collected relics for this run
@@ -2797,6 +2826,7 @@ export class DungeonScene extends Phaser.Scene {
         // Reset per-floor stealth state
         this._alarmedRooms = new Set();
         this._everAlarmedRooms = new Set();
+        this._cheesePenaltyRooms = new Set();
         this._roomAlarmCooldowns = {};
 
         // Mode-aware scaling (Story linear, Endless log past ch5)
@@ -4886,11 +4916,26 @@ export class DungeonScene extends Phaser.Scene {
             if ((distances[i] ?? -1) > maxDist) { maxDist = distances[i]; exitIdx = i; }
         }
         this.exitRoomIdx = exitIdx;
-        let keyIdx = 1, secMax = -1;
-        for (let i = 1; i < this.dungeon.rooms.length; i++) {
+        // The key belongs off the path, not next to the door: take the room that is
+        // furthest from the START and the EXIT at once, so reaching it is a real detour.
+        const fromExit = this.roomDistances(exitIdx);
+        const R = this.dungeon.rooms;
+        const centre = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+        const exitC = centre(R[exitIdx]);
+        let keyIdx = -1, bestScore = -1, bestPx = -1;
+        for (let i = 1; i < R.length; i++) {
             if (i === exitIdx) continue;
-            if ((distances[i] ?? -1) > secMax) { secMax = distances[i]; keyIdx = i; }
+            const dS = distances[i] ?? 0, dE = fromExit[i] ?? 0;
+            const score = Math.min(dS, dE);
+            // Hub-and-spoke floors put every room two steps apart, so graph distance alone
+            // says nothing there — break ties on how far the walk actually is.
+            const c = centre(R[i]);
+            const px = Math.hypot(c.x - exitC.x, c.y - exitC.y);
+            if (score > bestScore || (score === bestScore && px > bestPx)) {
+                bestScore = score; bestPx = px; keyIdx = i;
+            }
         }
+        if (keyIdx < 0) keyIdx = 1;   // degenerate map (two rooms) — anything but the exit
         this.keyRoomIdx = keyIdx;
 
         // Pick 1-2 stealth rooms (skip start/key/exit). Larger rooms preferred — more space for patrol.
@@ -6575,7 +6620,8 @@ export class DungeonScene extends Phaser.Scene {
             const available = UPGRADES.filter(u => (stacked[u.id] || 0) < (u.cap || 1));
             Phaser.Utils.Array.Shuffle(available);
             const picks = available.slice(0, 3);
-            while (picks.length < 3) picks.push(CHEESE_FILLER);   // never re-offer a maxed perk
+            // Pad with DISTINCT fillers — three copies of one card is not a choice
+            for (const f of FILLERS) { if (picks.length >= 3) break; picks.push(f); }
             this._cachedUpgradeChoices = picks;
         }
         const choices = this._cachedUpgradeChoices;
