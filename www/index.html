@@ -10824,12 +10824,31 @@
         generateLevel();
         gameLoop();
     </script>
-    <!-- ===== Install as an app (Chrome/Android) ===== -->
-    <button id="installBtn" type="button" hidden
-            style="position:fixed;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));
-                   z-index:1200;min-height:48px;padding:0 18px;border-radius:14px;border:2px solid #e8b54a;
-                   background:#e8b54a;color:#2a1206;font:700 15px 'Nunito',sans-serif;cursor:pointer;
-                   box-shadow:0 6px 18px rgba(0,0,0,.45)">Установить игру</button>
+    <!-- ===== Install as an app (browser only) ===== -->
+    <div id="installCard" hidden
+         style="position:fixed;left:50%;transform:translateX(-50%);
+                bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:1200;
+                width:min(92vw,440px);box-sizing:border-box;padding:14px 16px;border-radius:16px;
+                border:2px solid #e8b54a;background:#241338;color:#f4ecff;
+                font:400 14px 'Nunito',system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="assets/icons/icon-256.png" alt="" width="44" height="44"
+             style="border-radius:11px;flex:none">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:15px;color:#f6d77a">Установить Мышонка Пи</div>
+          <div id="installWhy" style="opacity:.85;line-height:1.35">Появится на экране телефона и будет
+            открываться как обычное приложение — на весь экран и без интернета.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="installYes" type="button"
+                style="flex:1;min-height:44px;border-radius:12px;border:none;background:#e8b54a;
+                       color:#2a1206;font:700 15px 'Nunito',sans-serif;cursor:pointer">Установить</button>
+        <button id="installNo" type="button"
+                style="min-height:44px;padding:0 16px;border-radius:12px;border:2px solid #4a3a63;
+                       background:transparent;color:#b9a6d4;font:700 15px 'Nunito',sans-serif;cursor:pointer">Потом</button>
+      </div>
+    </div>
     <script>
     (function () {
         // Service worker: enables the Chrome install prompt and offline play.
@@ -10838,23 +10857,59 @@
                 navigator.serviceWorker.register('sw.js').catch(function () {});
             });
         }
+        var card = document.getElementById('installCard');
+        var yes = document.getElementById('installYes');
+        var no = document.getElementById('installNo');
+        var why = document.getElementById('installWhy');
         var deferred = null;
-        var btn = document.getElementById('installBtn');
+        var KEY = 'pi_install_dismissed';
+
+        function installed() {
+            try {
+                return window.matchMedia('(display-mode: fullscreen)').matches ||
+                       window.matchMedia('(display-mode: standalone)').matches ||
+                       window.navigator.standalone === true;
+            } catch (e) { return false; }
+        }
+        // Inside the Android build there is nothing to install.
+        function inApp() {
+            return !!(window.Capacitor || /\bwv\b/.test(navigator.userAgent));
+        }
+        function dismissed() {
+            try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+        }
+        function hide(remember) {
+            card.hidden = true;
+            if (remember) { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+        }
+        function show() {
+            if (installed() || inApp() || dismissed()) return;
+            card.hidden = false;
+        }
+
         window.addEventListener('beforeinstallprompt', function (e) {
             e.preventDefault();
             deferred = e;
-            if (btn) btn.hidden = false;
+            show();
         });
-        if (btn) btn.addEventListener('click', function () {
-            if (!deferred) { btn.hidden = true; return; }
+        yes.addEventListener('click', function () {
+            if (!deferred) { hide(true); return; }
             deferred.prompt();
-            deferred.userChoice.finally(function () { deferred = null; btn.hidden = true; });
+            deferred.userChoice.finally(function () { deferred = null; hide(false); });
         });
-        window.addEventListener('appinstalled', function () { if (btn) btn.hidden = true; });
-        // Already installed (opened from the home screen): never show the button.
-        if (window.matchMedia('(display-mode: fullscreen)').matches ||
-            window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-            if (btn) btn.hidden = true;
+        no.addEventListener('click', function () { hide(true); });
+        window.addEventListener('appinstalled', function () { hide(true); });
+
+        // iOS Safari never fires beforeinstallprompt — there the install is a manual
+        // menu action, so offer the instruction instead of a button that cannot work.
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        var isSafari = isIOS && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+        if (isSafari && !installed() && !inApp() && !dismissed()) {
+            why.textContent = 'Нажми «Поделиться» внизу Safari, затем «На экран «Домой»» — ' +
+                              'игра появится на экране телефона.';
+            yes.textContent = 'Понятно';
+            yes.onclick = function () { hide(true); };
+            setTimeout(function () { card.hidden = false; }, 2500);
         }
     })();
     </script>
