@@ -91,7 +91,12 @@ export class MenuScene extends Phaser.Scene {
             .setInteractive({ useHandCursor: true })
             .on('pointerover', () => storyBtn.setStyle(storyHover))
             .on('pointerout',  () => storyBtn.setStyle(storyStyle))
-            .on('pointerdown', () => this.scene.start('TransylvaniaScene'));
+            // The castle menu is transylvania-menu.html. TransylvaniaScene is the old
+            // half-styled Phaser twin and must not be where the button lands.
+            .on('pointerdown', () => {
+                try { window.location.href = 'transylvania-menu.html'; }
+                catch (e) { this.scene.start('TransylvaniaScene'); }
+            });
 
         // === BOT SETTINGS ===
         this.add.text(centerX, 560, 'Bots:', {

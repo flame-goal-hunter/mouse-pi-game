@@ -92,10 +92,12 @@ let _started = false;
 
 function bgmVolume() {
     const p = safePrefs();
-    if (!p || p.muted) return 0;
+    if (p && p.muted) return 0;
+    // Missing prefs must mean "use the defaults", not "stay silent" — the old code
+    // returned 0 whenever localStorage was unavailable, which is silence forever.
     const base = (BGM_FILES[BGM_KEY] && BGM_FILES[BGM_KEY][1]) || 0.34;
-    const music = typeof p.music === 'number' ? p.music : 1;
-    const master = typeof p.master === 'number' ? p.master : 1;
+    const music = (p && typeof p.music === 'number') ? p.music : 0.6;
+    const master = (p && typeof p.master === 'number') ? p.master : 1;
     return Math.max(0, Math.min(1, base * music * master));
 }
 
@@ -109,9 +111,8 @@ function fadeTo(target) {
     }, 50);
 }
 
-// Mirrors AudioManager._startEl: try to play straight away, and only fall back to
-// waiting for a gesture if the browser actually refuses. The old version never tried,
-// so the menu sat silent until you happened to tap something.
+// Mirrors AudioManager._startEl: try straight away, fall back to a gesture only if the
+// browser actually refuses.
 export function startMenuMusic() {
     const target = bgmVolume();
     if (!_bgm) {
@@ -121,7 +122,7 @@ export function startMenuMusic() {
         _bgm.preload = 'auto';
         _bgm.volume = 0;
     }
-    if (target <= 0) { _bgm.pause(); return Promise.resolve(false); }
+    if (target <= 0) { try { _bgm.pause(); } catch (e) {} return Promise.resolve(false); }
     let pr = null;
     try { pr = _bgm.play(); } catch (e) { return Promise.resolve(false); }
     if (!pr || typeof pr.then !== 'function') { _started = true; fadeTo(target); return Promise.resolve(true); }
@@ -134,27 +135,38 @@ export function refreshMenuMusicVolume() {
     const target = bgmVolume();
     if (_fade) { clearInterval(_fade); _fade = null; }
     _bgm.volume = target;
-    if (target <= 0) _bgm.pause();
+    if (target <= 0) { try { _bgm.pause(); } catch (e) {} }
+    else if (_bgm.paused) startMenuMusic();
 }
 
 if (typeof window !== 'undefined') {
-    // The gesture hook is a fallback, and it stays armed until a play() actually
-    // resolves — dropping it after one blocked attempt meant silence for the whole
-    // session on a device that refuses the first try.
-    const kick = () => {
-        if (_started) { detach(); return; }
-        startMenuMusic().then((ok) => { if (ok) detach(); });
-    };
-    const detach = () => {
-        window.removeEventListener('pointerdown', kick);
-        window.removeEventListener('touchstart', kick);
-        window.removeEventListener('keydown', kick);
-    };
-    window.addEventListener('pointerdown', kick);
-    window.addEventListener('touchstart', kick);
-    window.addEventListener('keydown', kick);
-    // Try immediately: in the Capacitor WebView, and on an origin the browser already
-    // trusts, this succeeds and the menu has music the moment it opens.
-    startMenuMusic().then((ok) => { if (ok) detach(); });
-    window.addEventListener('pagehide', () => { if (_bgm) _bgm.pause(); });
+    const attempt = () => startMenuMusic().catch(() => false);
+
+    // Capture phase on both window and document, and every event that can carry a
+    // user gesture: a listener on window in the bubble phase is lost the moment any
+    // handler on the page calls stopPropagation.
+    const EVENTS = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'];
+    const kick = () => { if (!_started) attempt(); };
+    for (const ev of EVENTS) {
+        window.addEventListener(ev, kick, true);
+        document.addEventListener(ev, kick, true);
+    }
+
+    // Watchdog: whatever refused the earlier attempts — a blocked autoplay, an audio
+    // focus loss, a WebView pausing on resume — the next tick picks it back up. It
+    // costs one paused check a second and stops asking once the track is running.
+    let ticks = 0;
+    const watchdog = setInterval(() => {
+        if (bgmVolume() <= 0) return;                 // muted on purpose: leave it alone
+        if (_bgm && !_bgm.paused) { _started = true; return; }
+        if (++ticks > 600) { clearInterval(watchdog); return; }   // give up after 10 min
+        attempt();
+    }, 1000);
+
+    attempt();
+    window.addEventListener('pagehide', () => { if (_bgm) { try { _bgm.pause(); } catch (e) {} } });
+    // Coming back to the menu from the game: resume rather than stay silent.
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && _bgm && _bgm.paused) attempt();
+    });
 }
