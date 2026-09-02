@@ -97,7 +97,7 @@ export const BIOMES = [
         roomConfig: { targetCount: 11, minSize: 260, maxSize: 420, pad: 80 },
         // Library = dedicated stealth biome — multiple rooms, librarian gets cones
         coneEnemyKinds: ['librarian'],
-        stealthRoomsPerFloor: 4,
+        stealthRoomsPerFloor: 3,
         stealthFlavor: 'reader-patrol',
         enemyDensityMul: 0.55,
         ambientCloud: null,

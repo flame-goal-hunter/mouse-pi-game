@@ -131,6 +131,7 @@ const PLAYER = {
 
 const PIE = { speed: 580, life: 1400, radius: 10, damage: 2 };
 const POWERUP_TINTS = { triple: 0xff70a0, speed: 0xfff060, shield: 0x60a0ff, fire: 0xff8030 };
+const BOOK_DMG_CAP = 2;   // forbidden books are a bonus, not a second damage tree
 
 // Feel: aim assist cone/reach, the dash-press buffer, and the haptic pulse lengths (ms)
 const AIM_ASSIST = { cone: Math.PI / 18, range: 420 };   // +-10 deg
@@ -189,9 +190,14 @@ function scaleForFloor(chapter, mode) {
     // Continuous with the story curve at floor 5 (hp 2.00), so floor 6 is a step up
     // and not a wall: the old 2.55 made crossing into the endless branch a 70% HP jump.
     const past = chapter - 5;
+    // Past floor 25 the log curve is flat but the player is not: permanent upgrades plus
+    // maxed in-run perks keep growing, so the run stopped getting harder. Enemy COUNT
+    // stays capped (a phone has to draw them) and the pressure comes from tougher
+    // enemies instead.
+    const deep = Math.max(0, chapter - 25);
     return {
-        hpMul:    Math.min(4.5, 2.0 + 0.50 * Math.log2(past + 1) * (past / (past + 1.6))),
-        dmgMul:   Math.min(2.2, 1.6 + 0.10 * Math.log2(past + 1)),
+        hpMul:    Math.min(4.5, 2.0 + 0.50 * Math.log2(past + 1) * (past / (past + 1.6))) + 0.05 * deep,
+        dmgMul:   Math.min(2.2, 1.6 + 0.10 * Math.log2(past + 1)) + 0.02 * deep,
         countMul: Math.min(2.4, 1.6 + 0.18 * Math.log2(past + 1))
     };
 }
@@ -256,6 +262,7 @@ export class DungeonScene extends Phaser.Scene {
         this.upgradeIds = data?.upgradeIds || [];
         this.runAlarmCount = data?.runAlarmCount || 0;     // for ghost-run achievement
         this.collectedRelics = data?.collectedRelics || [];
+        this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
         this._heartbeatNext = 0;
@@ -281,7 +288,7 @@ export class DungeonScene extends Phaser.Scene {
         this.speedMul = 1;
         this.dashCdMul = 1;
         this.fireCdMul = 1;
-        this.pieDmgBonus = 0;
+        this.pieDmgBonus = this.runBookDmg || 0;   // books earned earlier in the run
         this.pieSizeMul = 1;
         this.cheeseMul = 1;
         this.lifestealChance = 0;
@@ -3250,10 +3257,15 @@ export class DungeonScene extends Phaser.Scene {
                 continue;
             }
             b.taken = true;
-            this.pieDmgBonus = (this.pieDmgBonus || 0) + 1;   // permanent for this run
+            const capped = (this.runBookDmg || 0) >= BOOK_DMG_CAP;
+            if (!capped) {
+                this.runBookDmg = (this.runBookDmg || 0) + 1;
+                this.pieDmgBonus = (this.pieDmgBonus || 0) + 1;
+            }
             this.score += 100;
             this.runCheeseTotal = (this.runCheeseTotal || 0) + 8;
-            this.showFloatingText(b.x, b.y - 30, 'Книга: +1 урон навсегда', '#ff60ff', 22, 'ui_book');
+            this.showFloatingText(b.x, b.y - 30,
+                capped ? 'Книга: +8 сыра' : 'Книга: +1 урон навсегда', '#ff60ff', 22, 'ui_book');
             bus.emit(SFX.OPEN_CHEST);
             this.tweens.add({
                 targets: b.sprite, scale: 2 / this.dpr, alpha: 0, y: b.y - 50, duration: 500,
@@ -4740,14 +4752,18 @@ export class DungeonScene extends Phaser.Scene {
             // Cheese is always a whole number. The alarm penalty costs score, not fractions of cheese,
             // and the "Сырный нос" upgrade pays its +50% as a chance of one extra cheese.
             this.cheeseGot++;
-            const bonus = (Math.random() < ((this.cheeseMul || 1) - 1)) ? 1 : 0;
-            this.runCheeseTotal = (this.runCheeseTotal || 0) + 1 + bonus;
+            // Whole cheese only: pay the multiplier's integer part outright and the
+            // remainder as a chance, so a 2.25x nose really is worth 2.25 and not 2.
+            const mul = Math.max(1, this.cheeseMul || 1);
+            const gained = Math.floor(mul) + (Math.random() < (mul % 1) ? 1 : 0);
+            this.runCheeseTotal = (this.runCheeseTotal || 0) + gained;
+            const bonus = gained - 1;
             const cheeseScore = penalized ? 4 : 10;
             this.score += cheeseScore;
             this.poofAt(pk.x, pk.y, penalized ? 0x808080 : 0xf5c945);
             // Show what was COLLECTED (cheese piece), not the score bonus — was confusing
             this.showFloatingText(pk.x, pk.y - 20,
-                bonus ? '+2' : '+1',
+                `+${gained}`,
                 penalized ? '#a0a0a0' : '#ffe080', 22, 'ui_cheese');
             bus.emit(SFX.COLLECT_CHEESE);
             // Cheese Explosion relic — 2 dmg to enemies in 100px
@@ -6743,6 +6759,7 @@ export class DungeonScene extends Phaser.Scene {
                     runCheeseTotal: this.runCheeseTotal,
                     runStartTime: this.runStartTime,
                     runAlarmCount: this.runAlarmCount,
+                    runBookDmg: this.runBookDmg,
                     collectedRelics: this.collectedRelics
                 });
             };
@@ -7855,7 +7872,10 @@ export class DungeonScene extends Phaser.Scene {
         // Half the run's cheese banks on the way out: quitting is not free, but the
         // floors you did clear are not erased either.
         if (this.state === 'play') {
-            const banked = Math.floor((this.runCheeseTotal || 0) / 2);
+            // Endless banks the full purse on death, so leaving on purpose must not pay
+            // less — otherwise suicide is the optimal move.
+            const share = (this.runMode === 'endless') ? 1 : 0.5;
+            const banked = Math.floor((this.runCheeseTotal || 0) * share);
             if (banked > 0) { try { Progress.addCheese(banked); } catch (e) {} }
         }
         this._leaveToMenu();
