@@ -11,6 +11,22 @@ import { preloadAudio } from '../audio/AudioManager.js';
 import { RELICS, pickRandomRelics, relicById, RARITY_COLORS } from './Relics.js';
 
 const RARITY_NAMES = { common: 'ОБЫЧНАЯ', rare: 'РЕДКАЯ', legendary: 'ЛЕГЕНДАРНАЯ' };
+
+// What a floor asks of the player. Floor 1 and the story finale stay on the key so the
+// tutorial and the climax are predictable; everything between varies.
+const FLOOR_GOALS = {
+    key:    { objective: 'Найди ключ',            intro: 'Найди ключ и иди по лестнице вниз.' },
+    tomes:  { objective: 'Собери три книги',      intro: 'Ключа нет. Собери три книги — они откроют лестницу.' },
+    escape: { objective: 'Забери сундук и беги',  intro: 'Лестница уже открыта. Но сундук так просто не отдадут.' },
+};
+const TOME_TARGET = 3;
+
+function goalForFloor(chapter, mode, isFinal) {
+    if (isFinal || chapter <= 1) return 'key';
+    let h = chapter * 0x9e3779b1;
+    h ^= h >>> 16; h = Math.imul(h, 0x21f0aaad); h ^= h >>> 15;
+    return ['key', 'tomes', 'escape', 'key'][Math.abs(h) % 4];
+}
 import { computeHudLayout } from '../ui/hudLayout.js';
 import { readSafeArea } from '../ui/safeArea.js';
 
@@ -29,7 +45,8 @@ const SHAKE_CFG = {
     huge:{ dur: 380, amt: 0.026 },
 };
 const POWERUP_ICON = { triple: 'ui_target', speed: 'ui_bolt', shield: 'ui_shield', fire: 'ui_flame' };
-const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1] };   // texture, w/h factors of labelSize
+const COMPASS_ICON = { key: ['d_key', 1.5, 0.8], grandma: ['d_grandma', 0.9, 1.0], exit: ['ui_stairs', 1, 1],
+                       book: ['book_forbidden', 0.9, 1.0] };   // texture, w/h factors of labelSize
 const UI_ICON_NAMES = ['heart', 'heart_empty', 'eye', 'book', 'paw', 'stairs', 'target', 'bolt', 'shield', 'flame', 'move', 'dash', 'close', 'pause', 'sound', 'sound_off'];
 
 // Depth bands. World/level visuals below, UI band (989+) at the end.
@@ -278,6 +295,9 @@ export class DungeonScene extends Phaser.Scene {
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this.floorGoal = 'key';
+        this.goalTomes = [];
+        this.goalTreasure = null;
         this._recoil = null;
         this.floorMod = null;
         this._keyIconHas = undefined;
@@ -344,6 +364,7 @@ export class DungeonScene extends Phaser.Scene {
         if (dbgChapter) this.biome = biomeForFloor(dbgChapter);
         // Endless floor modifier — applied after upgrades and relics so it multiplies
         // the finished values rather than being overwritten by the replay.
+        this.floorGoal = goalForFloor(this.chapter, this.runMode, this.isFinalFloor);
         this.floorMod = modifierForFloor(this.chapter, this.runMode);
         if (this.floorMod) {
             const m = this.floorMod.id;
@@ -505,6 +526,7 @@ export class DungeonScene extends Phaser.Scene {
         this._applyMotionPreference();
         this.spawnExitDoor();
         this.spawnKey();
+        if (this.floorGoal === 'escape') this.unlockExit();   // open, but the prize is the lock
         this.spawnEnemies();
         this.spawnCheese();
         this.spawnPowerups();
@@ -5057,6 +5079,8 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     spawnKey() {
+        if (this.floorGoal === 'tomes')  return this.spawnGoalTomes();
+        if (this.floorGoal === 'escape') return this.spawnGoalTreasure();
         // exitRoomIdx and keyRoomIdx are pre-computed in computeRoomGoals()
         const room = this.dungeon.rooms[this.keyRoomIdx];
         let x = room.x + room.w / 2;
@@ -5069,6 +5093,51 @@ export class DungeonScene extends Phaser.Scene {
         const sprite = this.add.image(x, y, 'd_key').setScale(1.3).setDepth(155);
         const glow = this.add.circle(x, y, 40, 0xffd040, 0.22).setDepth(154);
         this.keyPickup = { sprite, glow, x, y, taken: false, bobPhase: Math.random() * Math.PI * 2 };
+    }
+
+    // TOMES — three of them, spread across rooms that are not the start or the exit,
+    // so the floor is a sweep instead of a straight line.
+    spawnGoalTomes() {
+        this.goalTomes = [];
+        const idxs = [];
+        for (let i = 1; i < this.dungeon.rooms.length; i++) {
+            if (i === this.exitRoomIdx) continue;
+            idxs.push(i);
+        }
+        Phaser.Utils.Array.Shuffle(idxs);
+        for (const i of idxs) {
+            if (this.goalTomes.length >= TOME_TARGET) break;
+            const room = this.dungeon.rooms[i];
+            let x = room.x + room.w / 2, y = room.y + room.h / 2;
+            if (this.pointInWalls(x, y, 26)) {
+                const safe = this.findFloorInRoom(room, 26);
+                if (!safe) continue;
+                x = safe.x; y = safe.y;
+            }
+            const sprite = this._worldImage(x, y, 'book_forbidden', 155, 0.5, 0.8);
+            const glow = this.add.circle(x, y - 12, 26, 0xff60ff, 0.32).setDepth(154);
+            this.tweens.add({ targets: glow, alpha: 0.12, scale: 1.6,
+                duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            this.tweens.add({ targets: sprite, y: y - 6,
+                duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            this.goalTomes.push({ sprite, glow, x, y, taken: false });
+        }
+    }
+
+    // ESCAPE — the stairs are open from the start and the prize is the lock: lifting it
+    // wakes everything on the floor, so the walk back is the fight.
+    spawnGoalTreasure() {
+        const room = this.dungeon.rooms[this.keyRoomIdx];
+        let x = room.x + room.w / 2, y = room.y + room.h / 2;
+        if (this.pointInWalls(x, y, 30)) {
+            const safe = this.findFloorInRoom(room, 30);
+            if (safe) { x = safe.x; y = safe.y; }
+        }
+        const sprite = this._worldImage(x, y, 'chest_closed', 155, 0.5, 0.85);
+        const glow = this.add.circle(x, y - 10, 38, 0xffd040, 0.3).setDepth(154);
+        this.tweens.add({ targets: glow, alpha: 0.12, scale: 1.5,
+            duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.goalTreasure = { sprite, glow, x, y, taken: false };
     }
 
     spawnExitDoor() {
@@ -5584,6 +5653,14 @@ export class DungeonScene extends Phaser.Scene {
                 this.pickupKey();
             }
         }
+        for (const t of (this.goalTomes || [])) {
+            if (t.taken) continue;
+            if (Math.hypot(t.x - this.player.x, t.y - this.player.y) < 36 + PLAYER.radius) this.pickupTome(t);
+        }
+        if (this.goalTreasure && !this.goalTreasure.taken) {
+            const g = this.goalTreasure;
+            if (Math.hypot(g.x - this.player.x, g.y - this.player.y) < 40 + PLAYER.radius) this.takeTreasure();
+        }
         if (this.captive && !this.captive.freed) {
             if (Math.hypot(this.captive.x - this.player.x, this.captive.y - this.player.y) < 74 + PLAYER.radius) {
                 this.freeCaptive();
@@ -5595,6 +5672,49 @@ export class DungeonScene extends Phaser.Scene {
                 else this.win();
             }
         }
+    }
+
+    pickupTome(t) {
+        if (t.taken) return;
+        t.taken = true;
+        bus.emit(SFX.KEY_GRAB);
+        this.poofAt(t.x, t.y, 0xff60ff);
+        this.tweens.add({ targets: [t.sprite, t.glow], scale: 1.8, alpha: 0, y: t.y - 30,
+            duration: 350, onComplete: () => { t.sprite.destroy(); t.glow.destroy(); } });
+        const left = (this.goalTomes || []).filter(x => !x.taken).length;
+        this.score += 60;
+        if (left > 0) {
+            this.showFloatingText(t.x, t.y - 30, `Книга! Осталось ${left}`, '#ff8cff', 22, 'ui_book');
+            return;
+        }
+        this.showFloatingText(t.x, t.y - 30, 'Все книги собраны!', '#ffd040', 24, 'ui_book');
+        this.hasKey = true;                 // the single "you may leave" flag
+        this.unlockExit();
+    }
+
+    takeTreasure() {
+        const g = this.goalTreasure;
+        if (!g || g.taken) return;
+        g.taken = true;
+        bus.emit(SFX.OPEN_CHEST);
+        g.sprite.setTexture('chest_open');
+        this.poofAt(g.x, g.y, 0xffd040);
+        const gain = 20 + Math.floor(Math.random() * 11);
+        this.runCheeseTotal = (this.runCheeseTotal || 0) + gain;
+        this.score += 200;
+        this.showFloatingText(g.x, g.y - 40, `+${gain} сыра — БЕГИ!`, '#ffd040', 26, 'ui_cheese');
+        this.hasKey = true;
+        // Every enemy on the floor knows where you are: the way back is the level.
+        for (const e of (this.enemies || [])) {
+            if (e.dead) continue;
+            if (!e.lastSeen) e.lastSeen = { x: 0, y: 0 };
+            e.lastSeen.x = this.player.x; e.lastSeen.y = this.player.y;
+            e.alertTimer = Math.max(e.alertTimer || 0, 12000);
+            if (e.stealthPatrol && !e.alarmed) this._raiseAlarm(e);
+        }
+        bus.emit(SFX.ALARM_TRIGGER);
+        this.cameras.main.flash(240, 200, 60, 30);
+        this._shake('big');
     }
 
     // On the last floor the door is not the finish line: grandma must be out of the
@@ -5851,7 +5971,7 @@ export class DungeonScene extends Phaser.Scene {
                   ((this.biome?.ambient || '').replace(/[.!]?$/, '.')) + '\n' +
                   (this.floorMod ? this.floorMod.desc + '.'
                      : this.isSubBossFloor ? 'Этот этаж кто-то сторожит.'
-                     : 'Найди ключ и иди по лестнице вниз.'))
+                     : (FLOOR_GOALS[this.floorGoal] || FLOOR_GOALS.key).intro))
             : this.isFinalFloor
             ? 'Пи дошёл до самого низа замка!\n' +
               'Где-то здесь граф Ратула держит бабушку.\n' +
@@ -5860,7 +5980,7 @@ export class DungeonScene extends Phaser.Scene {
             // 2-4 from printing the exact same three lines.
             : 'Пи спускается всё глубже.\n' +
               ((this.biome?.ambient || 'Подземелье темнее и опаснее').replace(/[.!]?$/, '.')) + '\n' +
-              'Найди ключ и иди по лестнице вниз.';
+              (FLOOR_GOALS[this.floorGoal] || FLOOR_GOALS.key).intro;
         const hintLabel = IS_TOUCH
             ? 'Стики — ходьба и огонь   ·   Кнопки справа — рывок,\nслева — красться и бросить книгу'
             : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
@@ -6773,8 +6893,15 @@ export class DungeonScene extends Phaser.Scene {
         let t;
         if (this.captive && !this.captive.freed) t = 'Освободи бабушку';
         else if (this._bossBarShown) t = 'Победи графа';
-        else if (!this.hasKey) t = 'Найди ключ';
-        else t = 'Иди к лестнице вниз';
+        else if (!this.hasKey) {
+            if (this.floorGoal === 'tomes') {
+                const left = (this.goalTomes || []).filter(x => !x.taken).length;
+                t = `Собери книги: осталось ${left}`;
+            } else if (this.floorGoal === 'escape') {
+                t = 'Забери сундук';
+            } else t = 'Найди ключ';
+        }
+        else t = this.floorGoal === 'escape' ? 'Беги к лестнице!' : 'Иди к лестнице вниз';
         // The boss bar owns the band under the counter while a fight is on — drop the
         // objective below it instead of printing the two on top of each other.
         const below = this._bossBarShown && this._bossBar
@@ -6848,8 +6975,13 @@ export class DungeonScene extends Phaser.Scene {
         }
         // Target: key first -> captive (final floor) or exit door (intermediate floor)
         let target, icon;
+        const tome = !this.hasKey ? (this.goalTomes || []).find(t => !t.taken) : null;
         if (!this.hasKey && this.keyPickup && !this.keyPickup.taken) {
             target = this.keyPickup; icon = 'key';
+        } else if (tome) {
+            target = tome; icon = 'book';
+        } else if (!this.hasKey && this.goalTreasure && !this.goalTreasure.taken) {
+            target = this.goalTreasure; icon = 'key';
         } else if (this.captive && !this.captive.freed) {
             target = this.captive; icon = 'grandma';
         } else if (this.exit) {
