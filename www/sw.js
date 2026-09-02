@@ -4,7 +4,7 @@
 // first time they are used, so the first load stays small.
 // Bump CACHE_VERSION whenever shipping new files.
 // ============================================
-const CACHE_VERSION = 'mousiepi-1008871ffb';
+const CACHE_VERSION = 'mousiepi-f79a3abc26';
 const SHELL = [
   './',
   './index.html',
