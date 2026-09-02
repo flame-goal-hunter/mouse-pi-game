@@ -1117,6 +1117,7 @@ import { SNEAK } from '../sneak/SneakMetrics.js';
 import { TEMPLATES, BEATS } from '../sneak/templates/index.js';
 import { assembleNight } from '../sneak/NightAssembler.js';
 import { isFloor } from '../sneak/RoomTemplate.js';
+import { positionAt } from '../sneak/PatrolCycle.js';
 
 const CELL = SNEAK.CELL;
 const DEPTH = { FLOOR: 10, PROP: 40, HOLE: 45, PLAYER: 60, MONSTER: 62, CONE: 55, HUD: 900 };
@@ -1141,8 +1142,11 @@ export class SneakScene extends Phaser.Scene {
 
     preload() {
         preloadAudio(this);
-        this.load.svg('d_pi', 'assets/characters/pi.svg', { width: 96, height: 96 });
-        this.load.svg('d_cat', 'assets/characters/cat.svg', { width: 96, height: 96 });
+        // Пути и размеры совпадают с DungeonScene:285-309 — Phaser пропускает
+        // ключи, уже лежащие в кэше, поэтому повторная загрузка бесплатна.
+        const base = 'assets/characters/transylvania/';
+        this.load.svg('d_pi',  base + 'pi.svg',  { width: 150, height: 172 });
+        this.load.svg('d_cat', base + 'cat.svg', { width: 165, height: 150 });
     }
 
     create() {
@@ -1151,10 +1155,23 @@ export class SneakScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor('#0b0616');
 
         this.drawRoom();
+        this.setupCamera();
         this.spawnPlayer();
         this.spawnMonster();
 
         this.cursors = this.input.keyboard.createCursorKeys();
+    }
+
+    // Комната видна целиком, камера за игроком НЕ следует: механика
+    // наблюдательного поста требует читать весь маршрут патруля разом.
+    setupCamera() {
+        const w = this.tpl.grid[0].length * CELL;
+        const h = this.tpl.grid.length * CELL;
+        const pad = 24;
+        const zoom = Math.min((this.viewW - pad * 2) / w, (this.viewH - pad * 2) / h, 1.6);
+        const cam = this.cameras.main;
+        cam.setZoom(Math.max(0.5, zoom));
+        cam.centerOn(w / 2, h / 2);
     }
 
     drawRoom() {
@@ -1163,12 +1180,17 @@ export class SneakScene extends Phaser.Scene {
             for (let x = 0; x < this.tpl.grid[y].length; x++) {
                 const px = x * CELL;
                 const py = y * CELL;
+                // Контраст стены и пола должен читаться мгновенно — игрок
+                // обязан видеть геометрию, а не догадываться о ней.
                 if (isFloor(this.tpl, x, y)) {
-                    g.fillStyle(((x + y) % 2 === 0) ? 0x221333 : 0x281838, 1);
+                    g.fillStyle(((x + y) % 2 === 0) ? 0x1a1030 : 0x1e1436, 1);
+                    g.fillRect(px, py, CELL, CELL);
                 } else {
-                    g.fillStyle(0x2a1a3e, 1);
+                    g.fillStyle(0x4a3568, 1);
+                    g.fillRect(px, py, CELL, CELL);
+                    g.fillStyle(0x6a4d90, 1);        // светлая грань даёт стене высоту
+                    g.fillRect(px, py, CELL, 4);
                 }
-                g.fillRect(px, py, CELL, CELL);
             }
         }
 
@@ -1195,8 +1217,10 @@ export class SneakScene extends Phaser.Scene {
 
     spawnMonster() {
         if (!this.tpl.patrol || this.tpl.patrol.length < 2) return;
-        this.monster = { t: 0, x: 0, y: 0, angle: 0, suspicion: 0, state: 'patrol' };
-        this.monster.sprite = this.add.image(0, 0, 'd_cat').setDepth(DEPTH.MONSTER).setScale(0.32);
+        // Сразу на старте маршрута: иначе до Task 10 кот стоит в мировом (0,0).
+        const start = positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, 0);
+        this.monster = { t: 0, x: start.x, y: start.y, angle: start.angle, suspicion: 0, state: 'patrol' };
+        this.monster.sprite = this.add.image(start.x, start.y, 'd_cat').setDepth(DEPTH.MONSTER).setScale(0.32);
         this.coneGfx = this.add.graphics().setDepth(DEPTH.CONE);
     }
 
@@ -1320,7 +1344,8 @@ git commit -m "feat(sneak): scene skeleton with room rendering and wall collisio
         if (this.holdRing) { this.holdRing.destroy(); this.holdRing = null; }
         this.player.hidden = true;
         this.state = 'squeeze';
-        bus.emit(SFX.DASH);
+        this.holdArmed = false;        // кнопку надо отпустить, иначе нора зациклится
+        bus.emit(SFX.PLAYER_DASH);     // именно PLAYER_DASH — SFX.DASH в SoundKeys.js нет
         const other = (hole.mouth === hole.pair.a) ? hole.pair.b : hole.pair.a;
         const tx = (other.x + 0.5) * CELL;
         const ty = (other.y + 0.5) * CELL;
@@ -1391,11 +1416,10 @@ git commit -m "feat(sneak): two-ended holes with a 400ms hold to enter"
 
 - [ ] **Step 1: Добавить импорты**
 
-В шапку файла:
+`positionAt` уже импортирован в задаче 8. Добавить только `inCone` к существующему импорту из `RoomTemplate.js`:
 
 ```js
-import { positionAt } from '../sneak/PatrolCycle.js';
-import { inCone } from '../sneak/RoomTemplate.js';
+import { isFloor, inCone } from '../sneak/RoomTemplate.js';
 ```
 
 - [ ] **Step 2: Добавить обновление монстра**
