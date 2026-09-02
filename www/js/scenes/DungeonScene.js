@@ -257,6 +257,7 @@ export class DungeonScene extends Phaser.Scene {
         this.collectedRelics = data?.collectedRelics || [];
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this._heartbeatNext = 0;
         // Relic effects are re-applied below from collectedRelics — clear them first or
         // they compound once per floor (the Scene instance survives scene.start).
         this.relicPierce = 0;
@@ -458,6 +459,9 @@ export class DungeonScene extends Phaser.Scene {
         try { window.audio?.setBiome?.(this.biome?.id || 'dungeon'); } catch (e) {}
         const bgmByBiome = { dungeon: BGM.DUNGEON, kitchen: BGM.KITCHEN, library: BGM.LIBRARY, garden: BGM.GARDEN, throne: BGM.THRONE };
         bus.emit(bgmByBiome[this.biome?.id] || BGM.DUNGEON);
+        // Ambient bed under the music — one drone per biome
+        bus.emit(SFX.AMBIENCE_START, this.biome?.ambience || { baseFreq: 50, padFreq: 150, vol: 0.09 });
+        this.events.once('shutdown', () => bus.emit(SFX.AMBIENCE_STOP));
 
         // KEYBOARD
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -603,6 +607,19 @@ export class DungeonScene extends Phaser.Scene {
         this.updateCandelabras(totalDt);
         this.updateSpookyEyes();
         if (this.dashBtnBase && this.dashBtnBase.visible) this.updateDashButton();
+        // Low-health pulse — faster the closer to death
+        if (this.state === 'play' && this.player && this.player.hp > 0) {
+            const frac = this.player.hp / Math.max(1, this.maxHp);
+            if (frac <= 0.34) {
+                const period = 420 + 380 * frac;      // ~550ms on the last heart
+                if (this.time.now >= (this._heartbeatNext || 0)) {
+                    this._heartbeatNext = this.time.now + period;
+                    bus.emit(UI.HEARTBEAT_TICK);
+                }
+            } else {
+                this._heartbeatNext = 0;
+            }
+        }
         if (this.crouchBtnBase && this.crouchBtnBase.visible) this.updateStealthButtons();
         this.updateHUD();
         if (this.player.hp <= 0) this.lose();
@@ -5475,17 +5492,21 @@ export class DungeonScene extends Phaser.Scene {
             ? 'Пи дошёл до самого низа замка!\n' +
               'Где-то здесь граф Ратула держит бабушку.\n' +
               'Найди ключ и спаси её!'
+            // Biomes.js already describes every room; using it here also stops floors
+            // 2-4 from printing the exact same three lines.
             : 'Пи спускается всё глубже.\n' +
-              'Подземелье темнее и опаснее.\n' +
+              ((this.biome?.ambient || 'Подземелье темнее и опаснее').replace(/[.!]?$/, '.')) + '\n' +
               'Найди ключ и иди по лестнице вниз.';
         const hintLabel = IS_TOUCH
             ? 'Левый стик — ходьба   ·   Правый — прицел и огонь   ·   Кнопка — рывок'
             : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
-        const floorLabel = this.isFinalFloor
-            ? `Этаж ${this.chapter}/${TOTAL_FLOORS} — ДНО ЗАМКА`
+        const place = (this.biome?.name || '').toUpperCase();
+        const counter = this.isFinalFloor
+            ? `${this.chapter}/${TOTAL_FLOORS} — ДНО ЗАМКА`
             : this.runMode === 'endless'
-                ? (this.isSubBossFloor ? `Этаж ${this.chapter} — СТРАЖ` : `Этаж ${this.chapter}`)
-                : `Этаж ${this.chapter}/${TOTAL_FLOORS}`;
+                ? (this.isSubBossFloor ? `${this.chapter} — СТРАЖ` : `${this.chapter}`)
+                : `${this.chapter}/${TOTAL_FLOORS}`;
+        const floorLabel = place ? `${place} · ${counter}` : `Этаж ${counter}`;
 
         const title = addEl(this.add.text(0, 0, 'МЫШОНОК ПИ', {
             fontFamily: UI_F.display, fontStyle: '700', color: '#f6d77a',
