@@ -14,58 +14,58 @@ export const SKINS = [
     // "playing" stop being separate activities. apply() runs from a clean slate on
     // every floor, next to the upgrade and relic replay, so it must only adjust stats.
     { id: 'blue',          name: 'Обычный',        price: 0,   spriteKey: 'd_pi',               menuKey: 'm_pi',
-      desc: 'Старый добрый Пи', defaultUnlocked: true,
+      body: '#7ec8e3', desc: 'Старый добрый Пи', defaultUnlocked: true,
       perk: { plus: 'Ничего лишнего', minus: 'И ничего особенного', apply: () => {} } },
 
     { id: 'brown',         name: 'Деревянный',     price: 80,  spriteKey: 'skin_brown',         menuKey: 'm_skin_brown',
-      desc: 'Воин-пенёк из чащи',
+      body: '#a5764a', desc: 'Воин-пенёк из чащи',
       perk: { plus: 'Дольше не бьют после удара', minus: 'Бегает чуть медленнее',
               apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 350;
                               s.speedMul = (s.speedMul || 1) * 0.94; } } },
 
     { id: 'pink',          name: 'Розовый',        price: 130, spriteKey: 'skin_pink',          menuKey: 'm_skin_pink',
-      desc: 'Сладкий и стильный',
+      body: '#ff9ec7', desc: 'Сладкий и стильный',
       perk: { plus: 'Сыр липнет издалека', minus: 'Пироги чуть меньше',
               apply: (s) => { s.relicMagnetRange = (s.relicMagnetRange || 0) + 120;
                               s.pieSizeMul = (s.pieSizeMul || 1) * 0.9; } } },
 
     { id: 'yellow_antler', name: 'Жёлтый с рогами',price: 200, spriteKey: 'skin_yellow_antler', menuKey: 'm_skin_yellow_antler',
-      desc: 'Гордый рогатый странник',
+      body: '#f5d76e', desc: 'Гордый рогатый странник',
       perk: { plus: 'Пирог бьёт сильнее', minus: 'Дольше набирает пироги',
               apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1;
                               s.reloadMul = (s.reloadMul || 1) * 1.25; } } },
 
     { id: 'robot',         name: 'Робот',          price: 250, spriteKey: 'skin_robot',         menuKey: 'm_skin_robot',
-      desc: 'Сталь и шестерёнки',
+      body: '#9aa5b1', desc: 'Сталь и шестерёнки',
       perk: { plus: 'Переживает лишний удар', minus: 'Громко топает',
               apply: (s) => { s.maxHp += 1; s.stealthMul = (s.stealthMul || 1) * 1.35; } } },
 
     { id: 'green_monster', name: 'Зелёный монстр', price: 500, spriteKey: 'skin_green_monster', menuKey: 'm_skin_green_monster',
-      desc: 'Лесное чудище',
+      body: '#4caf50', desc: 'Лесное чудище',
       perk: { plus: 'На два пирога больше в лапах', minus: 'Бегает медленнее',
               apply: (s) => { s.clipBonus = (s.clipBonus || 0) + 2;
                               s.speedMul = (s.speedMul || 1) * 0.9; } } },
 
     { id: 'shadow',        name: 'Тень',           price: 750, spriteKey: 'skin_shadow',        menuKey: 'm_skin_shadow',
-      desc: 'Тихий охотник из мрака',
+      body: '#202028', desc: 'Тихий охотник из мрака',
       perk: { plus: 'Крадётся тише всех', minus: 'Хуже видит в темноте',
               apply: (s) => { s.stealthMul = (s.stealthMul || 1) * 0.6;
                               s.lightMul = (s.lightMul || 1) * 0.78; } } },
 
     { id: 'devil',         name: 'Дьяволёнок',     price: 800, spriteKey: 'skin_devil',         menuKey: 'm_skin_devil',
-      desc: 'Рога, хвост и проблемы',
+      body: '#d04030', desc: 'Рога, хвост и проблемы',
       perk: { plus: 'Рывок готов быстрее', minus: 'Дольше набирает пироги',
               apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.72;
                               s.reloadMul = (s.reloadMul || 1) * 1.2; } } },
 
     { id: 'angel',         name: 'Ангелочек',      price: 800, spriteKey: 'skin_angel',         menuKey: 'm_skin_angel',
-      desc: 'Сияет, как нимб',
+      body: '#fff8d0', desc: 'Сияет, как нимб',
       perk: { plus: 'Видит дальше', minus: 'И его видно дальше',
               apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.3;
                               s.stealthMul = (s.stealthMul || 1) * 1.3; } } },
 
     { id: 'yellow_lion',   name: 'Львёнок',        price: 950, spriteKey: 'skin_yellow_lion',   menuKey: 'm_skin_yellow_lion',
-      desc: 'Король сырных земель',
+      body: '#f5c542', desc: 'Король сырных земель',
       perk: { plus: 'Бегает быстрее всех', minus: 'Пирог бьёт слабее',
               apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.12;
                               s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } },
@@ -74,19 +74,19 @@ export const SKINS = [
     // big-and-kind, no watery one and no bookish one. Drawn on the same skeleton and
     // given sidegrades that do not repeat any existing pair.
     { id: 'bear',          name: 'Медвежонок',     price: 300, spriteKey: 'skin_bear',          menuKey: 'm_skin_bear',
-      desc: 'Большой, тёплый, с мёдом',
+      body: '#a06a34', desc: 'Большой, тёплый, с мёдом',
       perk: { plus: 'Иногда сердечко за врага', minus: 'Бегает медленнее',
               apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.2;
                               s.speedMul = (s.speedMul || 1) * 0.92; } } },
 
     { id: 'frog',          name: 'Лягушонок',      price: 400, spriteKey: 'skin_frog',          menuKey: 'm_skin_frog',
-      desc: 'Прыгает дальше всех',
+      body: '#4caf50', desc: 'Прыгает дальше всех',
       perk: { plus: 'Рывок готов гораздо быстрее', minus: 'Меньше пирогов в лапах',
               apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.6;
                               s.clipBonus = (s.clipBonus || 0) - 2; } } },
 
     { id: 'professor',     name: 'Профессор',      price: 600, spriteKey: 'skin_professor',     menuKey: 'm_skin_professor',
-      desc: 'Читал про этот замок всё',
+      body: '#8f7ab0', desc: 'Читал про этот замок всё',
       perk: { plus: 'Больше сыра за кусочек', minus: 'Пирог бьёт слабее',
               apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.4;
                               s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } }

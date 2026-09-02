@@ -2372,7 +2372,7 @@ export class DungeonScene extends Phaser.Scene {
         // him lifts the silhouette off every biome without touching the daughter's art.
         const rim = this.add.image(start.x, start.y, 'd_pi')
             .setOrigin(0.5, 0.5).setScale(0.34 * 1.09).setDepth(199.5)
-            .setTint(0xfff0d0).setAlpha(0.30);
+            .setTint(0xfff0d0).setAlpha(0.30);   // strength set by applySkinToPlayer
         this.player = {
             sprite, shadow, rim,
             x: start.x, y: start.y,
@@ -2403,9 +2403,29 @@ export class DungeonScene extends Phaser.Scene {
         this.applySkinToPlayer(Progress.getCurrentSkin());
     }
 
+    // WCAG's 3:1 rule for large graphics, applied to the character: a skin the child
+    // cannot pick out of the floor is a broken skin. Measured against every biome,
+    // Тень sits at 1.01 and Деревянный at 2.73, so the rim light behind Pi carries
+    // whatever contrast the art itself does not.
+    _rimStrengthFor(skin) {
+        const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        const lum = (hex) => {
+            const h = String(hex || '').replace('#', '');
+            if (h.length !== 6) return 0.5;
+            const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+            return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+        };
+        const floor = '#' + ((this.biome && this.biome.floorColorA) || 0x2a1f3d).toString(16).padStart(6, '0');
+        const a = lum(skin && skin.body), b = lum(floor);
+        const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        // 3:1 and above needs only the default hint; below it the rim does the work.
+        return Math.max(0.26, Math.min(0.72, 0.26 + (3 - ratio) * 0.24));
+    }
+
     applySkinToPlayer(skin) {
         if (!skin || !this.player || !this.player.sprite) return;
         this.player.skin = skin;
+        this._rimAlpha = this._rimStrengthFor(skin);
         // SWAP TEXTURE — each skin is its own SVG art (not just tint)
         const spriteKey = skin.spriteKey || 'd_pi';
         if (this.textures.exists(spriteKey)) {
@@ -2750,7 +2770,7 @@ export class DungeonScene extends Phaser.Scene {
             this.player.rim.setTexture(this.player.sprite.texture.key);
             this.player.rim.setScale(this.player.sprite.scaleX * 1.09, this.player.sprite.scaleY * 1.09);
             this.player.rim.setFlipX(this.player.sprite.flipX);
-            this.player.rim.setAlpha(0.30 * this.player.sprite.alpha);   // follow the invuln flicker
+            this.player.rim.setAlpha((this._rimAlpha || 0.30) * this.player.sprite.alpha);   // follow the invuln flicker
         }
 
         if (this.player.invulnTimer > 0) {
