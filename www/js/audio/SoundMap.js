@@ -89,4 +89,4 @@ export const FOOTSTEPS = {
 // biome id → music key
 // Four track files for five biomes plus the menu, so the library takes its own
 // procedural preset (ProceduralBgm 'library') rather than replaying the dungeon's.
-export const BIOME_BGM = { dungeon: 'cavern', kitchen: 'hall', garden: 'garden', throne: 'throne' };
+export const BIOME_BGM = { dungeon: 'cavern', kitchen: 'hall', library: 'cavern', garden: 'garden', throne: 'throne' };

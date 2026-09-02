@@ -255,9 +255,6 @@ export class AudioManager {
             const biome = o.biome || this._biome;
             this._play(SFX.FOOTSTEP, { ...o, keys: FOOTSTEPS[biome] || FOOTSTEPS.dungeon });
         });
-        // Ambience stays procedural — it is a continuous bed, not a sample
-        wire(SFX.AMBIENCE_START, (opts) => this.proc.startAmbience(opts || {}));
-        wire(SFX.AMBIENCE_STOP,  () => this.proc.stopAmbience());
         // Music: bgm:<biome> → track key via BIOME_BGM
         for (const name of Object.values(BGM)) wire(name, () => this.playBgm(name));
     }

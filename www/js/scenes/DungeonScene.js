@@ -570,10 +570,6 @@ export class DungeonScene extends Phaser.Scene {
         try { window.audio?.setBiome?.(this.biome?.id || 'dungeon'); } catch (e) {}
         const bgmByBiome = { dungeon: BGM.DUNGEON, kitchen: BGM.KITCHEN, library: BGM.LIBRARY, garden: BGM.GARDEN, throne: BGM.THRONE };
         bus.emit(bgmByBiome[this.biome?.id] || BGM.DUNGEON);
-        // Ambient bed under the music — one drone per biome
-        bus.emit(SFX.AMBIENCE_START, this.biome?.ambience || { baseFreq: 50, padFreq: 150, vol: 0.09 });
-        this.events.once('shutdown', () => bus.emit(SFX.AMBIENCE_STOP));
-
         // KEYBOARD
         this.cursors = this.input.keyboard.createCursorKeys();
         this.keys = this.input.keyboard.addKeys('W,A,S,D,SPACE,R,ESC,Q,E,SHIFT,C,B');

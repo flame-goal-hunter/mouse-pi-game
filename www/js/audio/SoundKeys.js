@@ -41,11 +41,7 @@ export const SFX = {
 
     // Movement / world
     FOOTSTEP:        'audio:footstep',
-    DOOR_OPEN:       'audio:doorOpen',
-
-    // Ambience
-    AMBIENCE_START:  'audio:ambienceStart',
-    AMBIENCE_STOP:   'audio:ambienceStop'
+    DOOR_OPEN:       'audio:doorOpen'
 };
 
 export const UI = {
