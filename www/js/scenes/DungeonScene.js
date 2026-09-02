@@ -9,6 +9,8 @@ import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
 import { preloadAudio } from '../audio/AudioManager.js';
 import { RELICS, pickRandomRelics, relicById, RARITY_COLORS } from './Relics.js';
+
+const RARITY_NAMES = { common: 'ОБЫЧНАЯ', rare: 'РЕДКАЯ', legendary: 'ЛЕГЕНДАРНАЯ' };
 import { computeHudLayout } from '../ui/hudLayout.js';
 import { readSafeArea } from '../ui/safeArea.js';
 
@@ -3078,7 +3080,7 @@ export class DungeonScene extends Phaser.Scene {
             onComplete: () => rc.sprite.destroy() });
         this.tweens.add({ targets: rc.glow, scale: 2, alpha: 0, duration: 400,
             onComplete: () => rc.glow.destroy() });
-        this.showRelicPicker();
+        this.showUpgradePicker(false);
     }
 
     placePowerup(x, y, type) {
@@ -6794,20 +6796,24 @@ export class DungeonScene extends Phaser.Scene {
                 [{ icon: 'ui_stairs', value: `${this.chapter}` }, { icon: 'ui_cheese', value: `+${earned}` }]
             );
         } else {
-            // INTERMEDIATE FLOOR — show upgrade picker, then descend
-            this.showUpgradePicker();
+            // INTERMEDIATE FLOOR — guaranteed reward (a relic), then descend
+            this.showUpgradePicker(true);
         }
     }
 
-    showRelicPicker() {
+    // advanceFloor: this picker is the after-floor reward, so picking descends.
+    showRelicPicker(advanceFloor = false) {
+        this._relicAdvances = advanceFloor;
         const W = this.viewW, H = this.viewH;
         const D = LAYER.UI_PICKER;
         const choices = pickRandomRelics(3, this.collectedRelics || []);
         if (choices.length === 0) {
-            // Every relic already taken — pay out instead of showing nothing at all.
+            // Every relic already taken — fall back to the stat picker so the
+            // guaranteed reward is never an empty screen.
             this.runCheeseTotal = (this.runCheeseTotal || 0) + 25;
             this.score += 300;
             this.showFloatingText(this.player.x, this.player.y - 60, 'Реликвий больше нет! +25 сыра', '#ffd040', 24, 'ui_cheese');
+            if (advanceFloor) this.showUpgradePicker(true);
             return;
         }
         bus.emit(UI.MENU_OPEN);
@@ -6858,13 +6864,28 @@ export class DungeonScene extends Phaser.Scene {
                 align: 'center', lineSpacing: 2, wordWrap: { width: wrapW }
             }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
             const onPick = () => {
-                this.collectedRelics = [...(this.collectedRelics || []), relic.id];
-                relic.apply(this);
+                const nextRelics = [...(this.collectedRelics || []), relic.id];
+                this.collectedRelics = nextRelics;
                 bus.emit(SFX.COLLECT_POWERUP);
+                els.forEach(e => e.destroy());
+                if (this._relicAdvances) {
+                    this.scene.start('DungeonScene', {
+                        runMode: this.runMode,
+                        chapter: this.chapter + 1,
+                        upgradeIds: this.upgradeIds,
+                        runScore: this.runScore + this.score,
+                        runCheeseTotal: this.runCheeseTotal,
+                        runStartTime: this.runStartTime,
+                        runAlarmCount: this.runAlarmCount,
+                        runBookDmg: this.runBookDmg,
+                        collectedRelics: nextRelics
+                    });
+                    return;
+                }
+                relic.apply(this);   // mid-floor pick: apply now, the replay redoes it next floor
                 this.showFloatingText(this.player.x, this.player.y - 60, relic.name + '!', '#ffd040', 22);
                 if (this.aimIndicator) this.aimIndicator.setVisible(true);
                 if (this.aimLine) this.aimLine.setVisible(true);
-                els.forEach(e => e.destroy());
             };
             return { pill, ico, nm, ds, onPick };
         });
@@ -6909,17 +6930,26 @@ export class DungeonScene extends Phaser.Scene {
         this._pinFixed();
     }
 
-    showUpgradePicker() {
+    showUpgradePicker(advanceFloor = false) {
+        this._upgradeAdvances = advanceFloor;
         // Cache the choices so they survive a shop side-trip
         if (!this._cachedUpgradeChoices) {
-            // Count current stacks per upgrade id; filter out capped ones
-            const stacked = {};
-            for (const id of this.upgradeIds) stacked[id] = (stacked[id] || 0) + 1;
-            const available = UPGRADES.filter(u => (stacked[u.id] || 0) < (u.cap || 1));
-            Phaser.Utils.Array.Shuffle(available);
-            const picks = available.slice(0, 3);
-            // Pad with DISTINCT fillers — three copies of one card is not a choice
-            for (const f of FILLERS) { if (picks.length >= 3) break; picks.push(f); }
+            let picks = [];
+            if (advanceFloor) {
+                // The reward you are promised after every floor is a relic — the thing
+                // that changes how the game plays, not another percentage.
+                picks = pickRandomRelics(3, this.collectedRelics || [])
+                    .map(r => ({ ...r, _isRelic: true }));
+            }
+            if (picks.length < 3) {
+                const stacked = {};
+                for (const id of this.upgradeIds) stacked[id] = (stacked[id] || 0) + 1;
+                const available = UPGRADES.filter(u => (stacked[u.id] || 0) < (u.cap || 1));
+                Phaser.Utils.Array.Shuffle(available);
+                for (const u of available) { if (picks.length >= 3) break; picks.push(u); }
+                // Pad with DISTINCT fillers — three copies of one card is not a choice
+                for (const f of FILLERS) { if (picks.length >= 3) break; picks.push(f); }
+            }
             this._cachedUpgradeChoices = picks;
         }
         const choices = this._cachedUpgradeChoices;
@@ -6989,14 +7019,49 @@ export class DungeonScene extends Phaser.Scene {
             }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 8);
             const owned = stacks[upg.id] || 0;
             const cap = upg.cap || 1;
-            const pill = (cap > 1 && owned > 0)
-                ? this._statPill(null, `${owned} из ${cap}`, {
-                      fontSize: Math.max(9, Math.round(11 * k)), depth: D + 6 })
-                : null;
+            const pillFs = Math.max(9, Math.round(11 * k));
+            const rc = upg._isRelic ? (RARITY_COLORS[upg.rarity] || RARITY_COLORS.common) : null;
+            const pill = upg._isRelic
+                ? this._statPill(null, RARITY_NAMES[upg.rarity] || 'РЕЛИКВИЯ', {
+                      fontSize: pillFs, depth: D + 6,
+                      tint: rc.accent, fillAlpha: 0.18,
+                      color: '#' + rc.accent.toString(16).padStart(6, '0')
+                  })
+                : (cap > 1 && owned > 0)
+                    ? this._statPill(null, `${owned} из ${cap}`, { fontSize: pillFs, depth: D + 6 })
+                    : null;
             const onPick = () => {
                 bus.emit(UI.BUTTON_CLICK);
-                const nextUpgrades = [...this.upgradeIds, upg.id];
                 this._cachedUpgradeChoices = null;
+                if (upg._isRelic) {
+                    const nextRelics = [...(this.collectedRelics || []), upg.id];
+                    this.collectedRelics = nextRelics;
+                    this.scene.start('DungeonScene', {
+                        runMode: this.runMode,
+                        chapter: this.chapter + 1,
+                        upgradeIds: this.upgradeIds,
+                        runScore: this.runScore + this.score,
+                        runCheeseTotal: this.runCheeseTotal,
+                        runStartTime: this.runStartTime,
+                        runAlarmCount: this.runAlarmCount,
+                        runBookDmg: this.runBookDmg,
+                        collectedRelics: nextRelics
+                    });
+                    return;
+                }
+                const nextUpgrades = [...this.upgradeIds, upg.id];
+                if (!this._upgradeAdvances) {
+                    // Opened from a chest mid-floor: apply and carry on playing.
+                    this.upgradeIds = nextUpgrades;
+                    const u = upgradeById(upg.id);
+                    if (u) u.apply(this);
+                    this._pickerElements.forEach(e => e.destroy());
+                    this._pickerElements = null;
+                    if (this.aimIndicator) this.aimIndicator.setVisible(true);
+                    if (this.aimLine) this.aimLine.setVisible(true);
+                    this.showFloatingText(this.player.x, this.player.y - 60, upg.name + '!', '#ffd040', 22);
+                    return;
+                }
                 this.scene.start('DungeonScene', {
                     runMode: this.runMode,
                     chapter: this.chapter + 1,
@@ -7480,7 +7545,7 @@ export class DungeonScene extends Phaser.Scene {
             this._pickerElements.forEach(e => e.destroy());
             this._pickerElements = null;
             this._pickerSilent = true;
-            this.showUpgradePicker();
+            this.showUpgradePicker(!!this._upgradeAdvances);
         }
     }
 
