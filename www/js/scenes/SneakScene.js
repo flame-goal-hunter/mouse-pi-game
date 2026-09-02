@@ -40,6 +40,9 @@ export class SneakScene extends Phaser.Scene {
         this.susBar = null;
         this.monster = null;
         this.player = null;
+        this.hudPies = null;
+        this.hudCheese = null;
+        this.hudRoom = null;
     }
 
     preload() {
@@ -61,10 +64,20 @@ export class SneakScene extends Phaser.Scene {
         this.spawnPlayer();
         this.spawnMonster();
 
+        // Вторая, незумленная камера — для стика и HUD. Копит список уже
+        // существующих игровых объектов и игнорирует их: иначе она бы
+        // рисовала всю комнату повторно поверх зумленной главной камеры.
+        const worldObjects = this.children.list.slice();
+        this.uiCam = this.cameras.add(0, 0, this.viewW, this.viewH);
+        this.uiCam.ignore(worldObjects);
+
+        this.setupTouch();
+        this.buildHud();
+
         this.cursors = this.input.keyboard.createCursorKeys();
 
-        // Правая половина экрана — бросок. Левая отойдёт под стик в Task 14,
-        // поэтому граница задаётся сразу, чтобы обработчики не конфликтовали.
+        // Правая половина экрана — бросок. Левая — стик (setupTouch).
+        // Граница задаётся сразу, чтобы обработчики не конфликтовали.
         this.input.on('pointerdown', (p) => {
             if (this.state !== 'play' || p.x <= this.viewW / 2) return;
             const wp = this.cameras.main.getWorldPoint(p.x, p.y);
@@ -80,6 +93,83 @@ export class SneakScene extends Phaser.Scene {
             this._pieTarget = null;
             this._pieId = null;
         });
+    }
+
+    setupTouch() {
+        this.joy = { active: false, id: null, baseX: 0, baseY: 0, dx: 0, dy: 0 };
+        const R = 60;
+
+        this.joyBase = this.add.circle(0, 0, R, 0xd8a850, 0.14)
+            .setScrollFactor(0).setDepth(DEPTH.HUD).setVisible(false);
+        this.joyKnob = this.add.circle(0, 0, R * 0.42, 0xd8a850, 0.5)
+            .setScrollFactor(0).setDepth(DEPTH.HUD + 1).setVisible(false);
+        // Стик рисуется в экранных пикселях через uiCam — на зумленной
+        // главной камере он оказался бы не под пальцем и не того размера.
+        this.cameras.main.ignore([this.joyBase, this.joyKnob]);
+
+        this.input.addPointer(2);
+
+        this.input.on('pointerdown', (p) => {
+            if (p.x > this.viewW / 2 || this.joy.active) return;
+            this.joy.active = true;
+            this.joy.id = p.id;
+            this.joy.baseX = p.x;
+            this.joy.baseY = p.y;
+            this.joyBase.setPosition(p.x, p.y).setVisible(true);
+            this.joyKnob.setPosition(p.x, p.y).setVisible(true);
+        });
+
+        this.input.on('pointermove', (p) => {
+            if (!this.joy.active || p.id !== this.joy.id) return;
+            let dx = p.x - this.joy.baseX;
+            let dy = p.y - this.joy.baseY;
+            const d = Math.hypot(dx, dy);
+            const DEAD = 8;
+            if (d < DEAD) { this.joy.dx = 0; this.joy.dy = 0; }
+            else {
+                const clamped = Math.min(d, R);
+                this.joy.dx = (dx / d) * (clamped / R);
+                this.joy.dy = (dy / d) * (clamped / R);
+            }
+            this.joyKnob.setPosition(
+                this.joy.baseX + this.joy.dx * R,
+                this.joy.baseY + this.joy.dy * R,
+            );
+        });
+
+        this.input.on('pointerup', (p) => {
+            if (!this.joy.active || p.id !== this.joy.id) return;
+            this.joy.active = false;
+            this.joy.id = null;
+            this.joy.dx = 0;
+            this.joy.dy = 0;
+            this.joyBase.setVisible(false);
+            this.joyKnob.setVisible(false);
+        });
+    }
+
+    buildHud() {
+        this.hudPies = this.add.text(14, 12, '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: '18px', color: '#f0c060',
+        }).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
+
+        this.hudCheese = this.add.text(14, 36, '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: '18px', color: '#ffd040',
+        }).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
+
+        this.hudRoom = this.add.text(this.viewW - 14, 12, '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: '14px', color: '#a090b8',
+        }).setOrigin(1, 0).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
+
+        this.cameras.main.ignore([this.hudPies, this.hudCheese, this.hudRoom]);
+
+        this.updateHud();
+    }
+
+    updateHud() {
+        this.hudPies.setText(`🥧 ${this.pies}`);
+        this.hudCheese.setText(`🧀 ${this.cheeseThisNight}`);
+        this.hudRoom.setText(`Комната ${this.roomIndex + 1}/${this.night.length}`);
     }
 
     drawRoom() {
@@ -193,6 +283,7 @@ export class SneakScene extends Phaser.Scene {
         const t = Math.min(1, this.holdMs / SNEAK.HOLE_HOLD_MS);
         if (!this.holdRing) {
             this.holdRing = this.add.graphics().setDepth(DEPTH.HUD);
+            this.uiCam.ignore(this.holdRing);
         }
         this.holdRing.clear();
         this.holdRing.lineStyle(3, 0xd8a850, 0.9);
@@ -241,17 +332,20 @@ export class SneakScene extends Phaser.Scene {
         const t = this.add.text(x, y, text, {
             fontFamily: 'Nunito, sans-serif', fontSize: '22px', color,
         }).setOrigin(0.5).setDepth(DEPTH.HUD);
+        this.uiCam.ignore(t);
         this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 900, onComplete: () => t.destroy() });
     }
 
     throwPie(targetX, targetY) {
         if (this.pies <= 0 || this.state !== 'play') return;
         this.pies--;
+        this.updateHud();
         bus.emit(SFX.FIRE_PIE);
 
         const startX = this.player.x;
         const startY = this.player.y;
         const pie = this.add.circle(startX, startY, 7, 0xf0c060, 1).setDepth(DEPTH.PROP);
+        this.uiCam.ignore(pie);
         const dist = Math.hypot(targetX - startX, targetY - startY);
 
         // Отклик на собственное действие — то, чего не хватало боевым режимам.
@@ -294,6 +388,7 @@ export class SneakScene extends Phaser.Scene {
             return;
         }
         this.pies--;
+        this.updateHud();
         this.winded = false;
         bus.emit(SFX.COLLECT_POWERUP);
         this.showFloatingText(this.player.x, this.player.y - 30, 'ням', '#80ff80');
@@ -396,7 +491,10 @@ export class SneakScene extends Phaser.Scene {
     // должен понимать, что происходит, а не угадывать.
     drawSuspicion() {
         const m = this.monster;
-        if (!this.susBar) this.susBar = this.add.graphics().setDepth(DEPTH.HUD);
+        if (!this.susBar) {
+            this.susBar = this.add.graphics().setDepth(DEPTH.HUD);
+            this.uiCam.ignore(this.susBar);
+        }
         this.susBar.clear();
         if (m.suspicion <= 0.02) return;
         const w = 36;
@@ -487,6 +585,9 @@ export class SneakScene extends Phaser.Scene {
         const uiCam = this.cameras.add(0, 0, w, h);
         uiCam.ignore(worldObjects);
         this.cameras.main.ignore(objs);
+        // Стик/HUD живут на своей персистентной uiCam — без этого она бы
+        // рисовала оверлей повторно (её депth 905 у HUD-текста выше панели).
+        this.uiCam.ignore(objs);
     }
 
     checkPickupsAndExit() {
@@ -506,20 +607,26 @@ export class SneakScene extends Phaser.Scene {
         if (Math.hypot(this.exitPoint.x - this.player.x, this.exitPoint.y - this.player.y) < CELL * 0.5) {
             this.nextRoom();
         }
+        this.updateHud();
     }
 
     updatePlayer(dt) {
-        let dx = 0;
-        let dy = 0;
+        let dx = this.joy && this.joy.active ? this.joy.dx : 0;
+        let dy = this.joy && this.joy.active ? this.joy.dy : 0;
         if (this.cursors.left.isDown) dx -= 1;
         if (this.cursors.right.isDown) dx += 1;
         if (this.cursors.up.isDown) dy -= 1;
         if (this.cursors.down.isDown) dy += 1;
-        const len = Math.hypot(dx, dy) || 1;
+        const len = Math.hypot(dx, dy);
+        if (!len) return;
+        // Клавиатура всегда даёт полный ход (как раньше — деление на len его
+        // и обеспечивает), а стик сохраняет аналоговую величину наклона:
+        // magnitude берёт len напрямую, только ограничивая сверху единицей.
+        const magnitude = Math.min(1, len);
         const speed = this.winded ? SNEAK.WALK_SPEED * 0.7 : SNEAK.WALK_SPEED;
-        const nx = this.player.x + (dx / len) * speed * dt;
-        const ny = this.player.y + (dy / len) * speed * dt;
-        if (dx || dy) this.moveTo(nx, ny);
+        const nx = this.player.x + (dx / len) * magnitude * speed * dt;
+        const ny = this.player.y + (dy / len) * magnitude * speed * dt;
+        this.moveTo(nx, ny);
     }
 
     // Пошаговое движение с проверкой стен по сетке шаблона.

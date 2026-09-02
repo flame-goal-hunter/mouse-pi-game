@@ -275,12 +275,12 @@ export class TransylvaniaScene extends Phaser.Scene {
         const HEADER_H = 60;
         const FOOTER_H = 56;
         const FOOTER_PAD = 12;
-        const cardH = Math.max(72, Math.min(86, H * 0.095));
-        const cardGap = 10;
-        const cardsTotal = cardH * 2 + cardGap;
+        const cardH = Math.max(50, Math.min(86, H * 0.095));
+        const cardGap = 6;
+        const cardsTotal = cardH * 3 + cardGap * 2;
         const titleSize = Math.max(28, Math.min(46, W * 0.072));
         const titleBlockH = titleSize + 36;   // title + rule + subtitle
-        const heroBlockH = Math.max(160, H - HEADER_H - titleBlockH - cardsTotal - FOOTER_H - FOOTER_PAD - 40);
+        const heroBlockH = Math.max(90, H - HEADER_H - titleBlockH - cardsTotal - FOOTER_H - FOOTER_PAD - 40);
 
         // === BACKGROUND — MINIMAL (perf-first)
         // Two solid rects + one circle. No 120-strip gradient, no castle silhouette,
@@ -339,9 +339,11 @@ export class TransylvaniaScene extends Phaser.Scene {
         // === [CARDS + FOOTER] anchored to bottom ===
         const sStat = (Progress.getStoryStats ? Progress.getStoryStats() : null) || { wins: 0 };
         const eStat = (Progress.getEndlessStats ? Progress.getEndlessStats() : null) || { bestFloor: 0 };
+        const nStat = (Progress.getSneakStats ? Progress.getSneakStats() : null) || { clears: 0 };
 
         const footerCy = H - FOOTER_PAD - FOOTER_H / 2;
-        const endlessCy = footerCy - FOOTER_H / 2 - 24 - cardH / 2;
+        const sneakCy   = footerCy - FOOTER_H / 2 - 24 - cardH / 2;
+        const endlessCy = sneakCy - cardH - cardGap;
         const storyCy   = endlessCy - cardH - cardGap;
         const cardW = Math.min(W * 0.88, 440);
 
@@ -370,6 +372,20 @@ export class TransylvaniaScene extends Phaser.Scene {
             bg: 0x300c10,
             chevron: true,
             onClick: () => startRun('endless'),
+        });
+        this._buildModeCard(cx, sneakCy, cardW, cardH, {
+            icon: '🐾',
+            title: 'ТИХАЯ ЛАПКА',
+            hint: nStat.clears > 0 ? `Ночей пройдено: ${nStat.clears}` : 'Прячься · не дерись · унеси добычу',
+            accent: 0x80c090, titleColor: 0xc8e8d0,
+            bg: 0x0f2a1c,
+            chevron: true,
+            onClick: () => {
+                try { bus.emit(UI.BUTTON_CLICK); } catch (e) {}
+                this.cameras.main.fadeOut(280, 0, 0, 0);
+                this.cameras.main.once('camerafadeoutcomplete', () =>
+                    this.scene.start('SneakScene', { roomIndex: 0 }));
+            },
         });
 
         this._buildFooterRow(cx, footerCy, cardW);
@@ -440,8 +456,10 @@ export class TransylvaniaScene extends Phaser.Scene {
         const previewKey = (skin?.menuKey && this.textures.exists(skin.menuKey)) ? skin.menuKey : 'm_pi';
         const heroH = bot - top;
 
-        // Determine sprite scale — fit ~80% of the hero block height
-        const targetH = Math.max(140, heroH * 0.78);
+        // Determine sprite scale — fit ~80% of the hero block height. Below a
+        // cramped block (short landscape viewports) the 140 floor would push the
+        // sprite into the title/cards above and below it, so it scales down too.
+        const targetH = heroH < 120 ? Math.max(50, heroH * 0.78) : Math.max(140, heroH * 0.78);
         // Source SVG heights vary per character (Pi 460, skins 207)
         // Use texture dimensions for a faithful scale
         const tex = this.textures.get(previewKey);
