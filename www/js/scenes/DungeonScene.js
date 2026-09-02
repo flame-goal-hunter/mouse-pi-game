@@ -309,6 +309,9 @@ export class DungeonScene extends Phaser.Scene {
         this.dashCdMul = 1;
         this.fireCdMul = 1;
         this.reloadMul = 1;
+        this.stealthMul = 1;    // how fast enemies notice Pi (skin sidegrade)
+        this.lightMul = 1;      // flashlight reach (skin sidegrade)
+        this.clipBonus = 0;     // extra pies in a clip (skin sidegrade)
         this.pieDmgBonus = this.runBookDmg || 0;   // books earned earlier in the run
         this.pieSizeMul = 1;
         this.cheeseMul = 1;
@@ -320,6 +323,11 @@ export class DungeonScene extends Phaser.Scene {
             const upg = upgradeById(id);
             if (upg) upg.apply(this);
         }
+        // The chosen skin is a sidegrade, not a costume — its perk applies like the rest
+        try {
+            const sk = Progress.getCurrentSkin && Progress.getCurrentSkin();
+            if (sk && sk.perk && typeof sk.perk.apply === 'function') sk.perk.apply(this);
+        } catch (e) {}
         // Apply collected relics for this run
         for (const rid of (this.collectedRelics || [])) {
             const r = relicById(rid);
@@ -790,7 +798,7 @@ export class DungeonScene extends Phaser.Scene {
 
         // 1. Pi's directional flashlight cone
         const flicker = 1 + Math.sin(this.time.now * 0.012) * 0.04 + (Math.random() - 0.5) * 0.03;
-        const coneLen = 620 * flicker;
+        const coneLen = 620 * flicker * (this.lightMul || 1);
         const coneH = 480 * (coneLen / 512);
         this._coneLight.setPosition(this.player.x - ox, this.player.y - oy);
         this._coneLight.setRotation(this.player.aimAngle || 0);
@@ -2372,7 +2380,7 @@ export class DungeonScene extends Phaser.Scene {
             facing: 1,
             invulnTimer: 0,
             fireTimer: 0,
-            clip: PLAYER.clipSize,
+            clip: PLAYER.clipSize + (this.clipBonus || 0),
             reloadTimer: 0,
             walkPhase: 0,
             speedRef: PLAYER.speed,
@@ -2731,7 +2739,7 @@ export class DungeonScene extends Phaser.Scene {
             this.player.reloadTimer -= dt * 1000;
             if (this.player.reloadTimer <= 0) {
                 this.player.reloadTimer = 0;
-                this.player.clip = PLAYER.clipSize;
+                this.player.clip = PLAYER.clipSize + (this.clipBonus || 0);
             }
         }
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
@@ -3486,7 +3494,8 @@ export class DungeonScene extends Phaser.Scene {
         // Crouch + ghost-walk relic: slower suspicion ramp
         let ramp = this.player?.crouch ? 0.5 : 1.0;
         if (this.relicGhostWalk) ramp *= 0.5;
-        const detectSecs = this.floorMod?.id === 'quiet' ? 0.5 : 0.8;  // full alarm after this much solid stare
+        // Skin sidegrades move how quickly a guard commits to the alarm
+        const detectSecs = (this.floorMod?.id === 'quiet' ? 0.5 : 0.8) / (this.stealthMul || 1);
         if (inCone) {
             e.suspicion = Math.min(1.0, sus + ramp * dt / detectSecs);
             // Brief sus-tick chirp
@@ -4742,6 +4751,7 @@ export class DungeonScene extends Phaser.Scene {
             if (this.relicCritChance && Math.random() < this.relicCritChance) {
                 dmg *= 3; isCrit = true;
             }
+            dmg = Math.max(1, dmg);   // a negative skin sidegrade must never zero a hit
         }
         e.hp -= dmg;
         // C3. Show the number: without it a fight is a silent HP guessing game.
@@ -6385,6 +6395,7 @@ export class DungeonScene extends Phaser.Scene {
             return;
         }
         const clip = Math.max(0, this.player ? this.player.clip : PLAYER.clipSize);
+        const clipMax = PLAYER.clipSize + (this.clipBonus || 0);
         const rl = this.player ? this.player.reloadTimer : 0;
         const full = PLAYER.reloadMs * (this.reloadMul || 1);
         const prog = rl > 0 ? Math.max(0, Math.min(1, 1 - rl / full)) : 1;
@@ -6405,7 +6416,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         // Pips arc toward the middle of the screen — the stick lives in a corner, so a
         // ring centred on the top would push half of them off the edge.
-        const N = PLAYER.clipSize, span = Math.PI * 0.85;
+        const N = clipMax, span = Math.PI * 0.85;
         const mid = Math.atan2(this.viewH / 2 - cy, this.viewW / 2 - cx);
         const start = mid - span / 2;
         for (let i = 0; i < N; i++) {
