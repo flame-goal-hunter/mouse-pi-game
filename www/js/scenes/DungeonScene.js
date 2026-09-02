@@ -181,7 +181,7 @@ const ENEMY_DEFS = {
     snapdragon:{ speed: 0, hp: 3, damage: 2, radius: 30, detectRange: 0, knockback: 280, scale: 0.32,
                  alertMs: 9999, coneAngle: Math.PI / 3, coneRange: 180, alarmedSpeedMul: 1.0,
                  biteWindupMs: 700, biteArc: Math.PI / 2, biteRange: 80 },
-    boss:   { speed: 60,  hp: 9, damage: 2, radius: 50, detectRange: 800, knockback: 260, scale: 0.55, alertMs: 9999 }
+    boss:   { speed: 60,  hp: 16, damage: 2, radius: 50, detectRange: 800, knockback: 260, scale: 0.55, alertMs: 9999 }
 };
 
 const IS_TOUCH = (typeof window !== 'undefined') &&
@@ -4061,6 +4061,7 @@ export class DungeonScene extends Phaser.Scene {
             e.alertTimer -= dt * 1000;
         }
 
+        this._updateChaseLunge(e, dt, dist, sees || (e.alertTimer > 0 && !!e.lastSeen));
         if (e.stealthPatrol) {
             // aiStealthPatrol handles both patrol AND alarmed-chase + cone rendering
             this.aiStealthPatrol(e, dt);
@@ -4166,7 +4167,7 @@ export class DungeonScene extends Phaser.Scene {
             const ty = sees ? this.player.y : e.lastSeen.y;
             const tdx = tx - e.x, tdy = ty - e.y;
             const td = Math.hypot(tdx, tdy) || 1;
-            const sp = e.def.speed;
+            const sp = this._chaseSpeed(e);
             e.vx = approach(e.vx, (tdx / td) * sp, 400 * dt);
             e.vy = approach(e.vy, (tdy / td) * sp, 400 * dt);
         } else {
@@ -4253,6 +4254,33 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     // Smart chase: direct when LOS, A* path when memory of player
+    // A chasing enemy lunges for ~1.1s, then has to recover. Without this Pi simply
+    // walks away from everything in the game.
+    _chaseSpeed(e) {
+        return (e.def.speed || 0) * (e._lungeMul || 1);
+    }
+
+    _updateChaseLunge(e, dt, dist, sees) {
+        if (!e.def.speed || e.kind === 'boss') { e._lungeMul = 1; return; }
+        e._lungeCd = (e._lungeCd || 0) - dt * 1000;
+        if (e._lungeLeft > 0) {
+            e._lungeLeft -= dt * 1000;
+            if (e._lungeLeft <= 0) { e._lungeMul = 1; e._lungeCd = 2600; }
+            return;
+        }
+        // Only worth it when the player is pulling away and actually visible
+        if (sees && dist > 130 && dist < 520 && e._lungeCd <= 0) {
+            e._lungeLeft = 1100;
+            e._lungeMul = 2.1;
+            if (e.sprite) {
+                this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.12,
+                    duration: 120, yoyo: true, ease: 'Quad.easeOut' });
+            }
+        } else {
+            e._lungeMul = 1;
+        }
+    }
+
     aiPathChase(e, dt, dx, dy, dist, sees) {
         if (sees && dist > 8) {
             // Use clearance map to check the WHOLE chase line, not just thin LOS ray.
@@ -4274,7 +4302,7 @@ export class DungeonScene extends Phaser.Scene {
             }
             if (lineClear) {
                 // Direct chase — line geometrically fits the body
-                const sp = e.def.speed;
+                const sp = this._chaseSpeed(e);
                 e.vx = approach(e.vx, (dx / dist) * sp, 700 * dt);
                 e.vy = approach(e.vy, (dy / dist) * sp, 700 * dt);
                 e.path = null;
@@ -4429,7 +4457,7 @@ export class DungeonScene extends Phaser.Scene {
             const dy = step.ty - e.y;
             const d = Math.hypot(dx, dy);
             if (d > 1) {
-                const sp = e.def.speed;
+                const sp = this._chaseSpeed(e);
                 e.vx = approach(e.vx, (dx / d) * sp, 700 * dt);
                 e.vy = approach(e.vy, (dy / d) * sp, 700 * dt);
             }
@@ -4522,7 +4550,7 @@ export class DungeonScene extends Phaser.Scene {
                     hx = Math.cos(a); hy = Math.sin(a);
                     len = 1;
                 }
-                const sp = e.def.speed;
+                const sp = this._chaseSpeed(e);
                 e.vx = (hx / len) * sp;
                 e.vy = (hy / len) * sp;
             }
