@@ -853,7 +853,7 @@ button:focus-visible,
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    min-height: 136px;              /* ≥96px tap target with room for the preview */
+    min-height: 168px;              /* ≥96px tap target, preview and the sidegrade trade */
     padding: var(--space-2) 6px var(--space-2);
     border-radius: var(--space-3);
     background: rgba(58, 42, 21, 0.55);
@@ -884,6 +884,25 @@ button:focus-visible,
 
 .skin-card:active {
     transform: scale(0.96);
+}
+
+/* Sidegrade trade — the reason to pick this skin and the reason not to.
+   Green for what it gives, warm red for what it costs; never colour alone, the
+   leading + and − carry the same meaning. */
+.skin-card .skin-perk {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 0 2px;
+    font-size: 10.5px;
+    line-height: 1.25;
+    text-align: center;
+}
+.skin-card .perk-plus  { color: #8fd49a; }
+.skin-card .perk-minus { color: #e79a9a; }
+@media (min-height: 520px) {
+    .skin-card .skin-perk { font-size: 11.5px; }
 }
 
 .skin-card .skin-name {

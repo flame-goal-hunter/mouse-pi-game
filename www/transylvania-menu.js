@@ -240,6 +240,21 @@ function renderSkinGrid() {
         img.onerror = () => { img.onerror = null; img.src = PI_BASE; };
         card.appendChild(img);
 
+        // A sidegrade is only a choice if the trade is on the card
+        if (skin.perk && (skin.perk.plus || skin.perk.minus)) {
+            const perk = document.createElement('span');
+            perk.className = 'skin-perk';
+            const up = document.createElement('span');
+            up.className = 'perk-plus';
+            up.textContent = '+ ' + skin.perk.plus;
+            const dn = document.createElement('span');
+            dn.className = 'perk-minus';
+            dn.textContent = '− ' + skin.perk.minus;
+            perk.appendChild(up);
+            perk.appendChild(dn);
+            card.appendChild(perk);
+        }
+
         if (equipped) {
             const badge = document.createElement('span');
             badge.className = 'skin-badge badge-owned';
