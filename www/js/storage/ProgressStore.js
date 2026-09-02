@@ -89,7 +89,27 @@ export const SKINS = [
       body: '#8f7ab0', desc: 'Читал про этот замок всё',
       perk: { plus: 'Больше сыра за кусочек', minus: 'Пирог бьёт слабее',
               apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.4;
-                              s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } }
+                              s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } },
+
+    // Second family — again picked for silhouettes the set did not have: a headwrap
+    // with a trailing knot, a helmet wider than the head, and pointed ears.
+    { id: 'pirate',        name: 'Пират',          price: 350, spriteKey: 'skin_pirate',        menuKey: 'm_skin_pirate',
+      body: '#c96a4a', desc: 'Бандана, крюк и попугай',
+      perk: { plus: 'Сундуки богаче', minus: 'Один глаз — видит хуже',
+              apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.25;
+                              s.lightMul = (s.lightMul || 1) * 0.8; } } },
+
+    { id: 'astronaut',     name: 'Космонавт',      price: 700, spriteKey: 'skin_astronaut',     menuKey: 'm_skin_astronaut',
+      body: '#dfe6f2', desc: 'В шлеме и с ранцем',
+      perk: { plus: 'Шлем держит удар', minus: 'Ранец тяжёлый',
+              apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 500;
+                              s.speedMul = (s.speedMul || 1) * 0.88; } } },
+
+    { id: 'kitty',         name: 'Кошечка',        price: 450, spriteKey: 'skin_kitty',         menuKey: 'm_skin_kitty',
+      body: '#f2a6c8', desc: 'Уши торчком, хвост трубой',
+      perk: { plus: 'Видит дальше в темноте', minus: 'Пугливая — на сердце меньше',
+              apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.25;
+                              s.maxHp = Math.max(3, s.maxHp - 1); } } }
 ];
 
 // === CONSUMABLES — bought before a run, spent by starting one ===

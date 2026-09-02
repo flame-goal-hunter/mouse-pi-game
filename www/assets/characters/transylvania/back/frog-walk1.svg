@@ -1,26 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230"><defs>
-    <style>.outline {{ stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }}</style>
+    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
   </defs>
   
-  <!-- Tail -->
-  <path d="M 150 156 Q 168 152 172 138" fill="none" stroke="#3f8f4a" stroke-width="5" stroke-linecap="round"/>
+  <!-- Long back leg instead of a tail -->
+  <path d="M 148 168 Q 172 166 176 146" fill="none" stroke="#2f7a3a" stroke-width="9" stroke-linecap="round"/>
   <!-- Feet -->
   <ellipse cx="72" cy="198" rx="16" ry="9" fill="#2f7a3a" class="outline"/>
   <ellipse cx="128" cy="212" rx="16" ry="9" fill="#2f7a3a" class="outline"/>
-  <!-- Body -->
-  <ellipse cx="100" cy="160" rx="48" ry="42" fill="#4caf50" class="outline"/>
-  <ellipse cx="100" cy="170" rx="24" ry="18" fill="#8fd49a"/>
+  <!-- Webbed toes -->
+  <path d="M 66 208 l -6 6 M 78 210 v 7 M 90 208 l 6 6" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 110 208 l -6 6 M 122 210 v 7 M 134 208 l 6 6" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round"/>
+  <ellipse cx="100" cy="160" rx="50" ry="40" fill="#4caf50" class="outline"/>
+  <ellipse cx="100" cy="172" rx="30" ry="18" fill="#a5e6b0"/>
   <!-- Arms -->
   <ellipse cx="50" cy="160" rx="11" ry="18" fill="#4caf50" class="outline" transform="rotate(-26 50 160)"/>
   <ellipse cx="150" cy="156" rx="11" ry="18" fill="#4caf50" class="outline" transform="rotate(10 150 156)"/>
-  <!-- Ears -->
-  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#4caf50" class="outline"/>
-  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#4caf50" class="outline"/>
-  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#8fd49a"/>
-  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#8fd49a"/>
-  <!-- Head -->
-  <circle cx="100" cy="102" r="43" fill="#4caf50" class="outline"/>
-  <!-- Water bead -->
-  <ellipse cx="122" cy="78" rx="5" ry="7" fill="#9fe0ff" class="outline" stroke-width="1.5" opacity="0.9"/>
+  <!-- Head sits low and wide; the domes above it are the whole silhouette -->
+  <ellipse cx="100" cy="106" rx="45" ry="38" fill="#4caf50" class="outline"/>
+  <circle cx="82" cy="74" r="17" fill="#4caf50" class="outline"/>
+  <circle cx="118" cy="74" r="17" fill="#4caf50" class="outline"/>
+  <circle cx="82" cy="72" r="11" fill="#ffffff" class="outline" stroke-width="2"/>
+  <circle cx="118" cy="72" r="11" fill="#ffffff" class="outline" stroke-width="2"/>
+  <ellipse cx="82" cy="73" rx="4" ry="6" fill="#1a1a1a"/>
+  <ellipse cx="118" cy="73" rx="4" ry="6" fill="#1a1a1a"/>
+  <circle cx="84" cy="69" r="2" fill="#ffffff"/>
+  <circle cx="120" cy="69" r="2" fill="#ffffff"/>
   
 </svg>
