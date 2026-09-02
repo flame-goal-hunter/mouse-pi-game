@@ -98,8 +98,12 @@ const UI_F = {
     body: '"Nunito", "Roboto", system-ui, sans-serif',
 };
 // Tile indices in www/assets/tiles/<biome>.svg (see tools/gen_tiles.py)
-const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10, WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13, EMPTY: 14, WEAK_CRACK: 15 };
-const TILES_PER_SHEET = 16;
+// Walls are a bit-field from TILE.WALL: +1 cap (nothing above), +2 skirt (floor
+// below), +4 left edge, +8 right edge — the corner tiles finding 20 asked for.
+const TILE = { PLATE_A: 0, PLATE_B: 4, CRACK: 8, PEBBLES: 9, WALL: 10,
+               WALL_CAP: 11, WALL_SKIRT: 12, WALL_CAP_SKIRT: 13,
+               EMPTY: 26, WEAK_CRACK: 27 };
+const TILES_PER_SHEET = 28;
 // World sprites: key -> [file, cssW, cssH] (loaded at cssSize × dpr, displayed at 1/dpr)
 const WORLD_SVGS = {
     prop_skull: ['skull', 24, 24], prop_bone: ['bone', 24, 16], prop_mushroom: ['mushroom', 24, 24], prop_cobweb: ['cobweb', 32, 32],
@@ -1437,7 +1441,12 @@ export class DungeonScene extends Phaser.Scene {
         const grid = this.navGrid;
         const wallAbove = grid[r - 1]?.[c] === 'wall' && this.isBorderWall(r - 1, c);
         const floorBelow = grid[r + 1]?.[c] === 'floor';
-        return TILE.WALL + (wallAbove ? 0 : 1) + (floorBelow ? 2 : 0);
+        // A run of wall used to be four variants with no sides, so every join looked
+        // sliced. The ends of a run now carry their own face.
+        const wallLeft = grid[r]?.[c - 1] === 'wall';
+        const wallRight = grid[r]?.[c + 1] === 'wall';
+        return TILE.WALL + (wallAbove ? 0 : 1) + (floorBelow ? 2 : 0)
+                         + (wallLeft ? 0 : 4) + (wallRight ? 0 : 8);
     }
     // True for a wall cell whose centre lies inside a room rect (pillar interiors)
     _isInsideRoom(r, c) {

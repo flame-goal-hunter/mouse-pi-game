@@ -305,15 +305,23 @@ WALL_STYLE = {'kitchen': _wall_glazed, 'library': _wall_shelf,
               'garden': _wall_hedge, 'throne': _wall_drape}
 
 
-def wall(fill, shadow, highlight, cap, skirt, biome='dungeon'):
+def wall(fill, shadow, highlight, cap, skirt, biome='dungeon', edge_l=False, edge_r=False):
     s_, h = hex6(shadow), hex6(highlight)
     parts = WALL_STYLE.get(biome, _wall_brick)(fill, shadow, highlight)
     if cap:
-        parts.append(f'<rect x="0" y="0" width="{T}" height="4" fill="{s_}" opacity="0.85"/>')
-        parts.append(f'<rect x="0" y="4" width="{T}" height="2" fill="{h}" opacity="0.9"/>')
+        # Top face: a deeper recess plus a lit lip, so the wall reads as having height
+        parts.append(f'<rect x="0" y="0" width="{T}" height="5" fill="{s_}" opacity="0.9"/>')
+        parts.append(f'<rect x="0" y="5" width="{T}" height="2.5" fill="{h}" opacity="0.9"/>')
     if skirt:
         parts.append(f'<rect x="0" y="{T-3}" width="{T}" height="1" fill="{s_}" opacity="0.9"/>')
         parts.append(f'<rect x="0" y="{T-2}" width="{T}" height="2" fill="{GOLD}" opacity="0.6"/>')
+    # Side faces — the corner tiles the registry asked for
+    if edge_l:
+        parts.append(f'<rect x="0" y="0" width="3" height="{T}" fill="{s_}" opacity="0.75"/>')
+        parts.append(f'<rect x="3" y="0" width="1.5" height="{T}" fill="{h}" opacity="0.45"/>')
+    if edge_r:
+        parts.append(f'<rect x="{T-3}" y="0" width="3" height="{T}" fill="{s_}" opacity="0.75"/>')
+        parts.append(f'<rect x="{T-4.5}" y="0" width="1.5" height="{T}" fill="{h}" opacity="0.45"/>')
     return parts
 
 
@@ -331,17 +339,20 @@ def build_sheet(b):
             tiles.append(plate_quarter(fill, b['grid'], q, b['id'], seam_on=(plate == 0)))
     tiles.append(crack(b['grid']))
     tiles.append(pebbles(b['grid']))
-    for cap, skirt in ((False, False), (True, False), (False, True), (True, True)):
-        tiles.append(wall(b['wallFill'], b['wallShadow'], b['wallHighlight'], cap, skirt, b['id']))
-    tiles.append([])                    # 14 empty
-    tiles.append(weak_crack())          # 15
-    assert len(tiles) == 16
+    # 10..25 — wall bit-field: +1 cap, +2 skirt, +4 left edge, +8 right edge
+    for m in range(16):
+        tiles.append(wall(b['wallFill'], b['wallShadow'], b['wallHighlight'],
+                          bool(m & 1), bool(m & 2), b['id'],
+                          edge_l=bool(m & 4), edge_r=bool(m & 8)))
+    tiles.append([])                    # 26 empty
+    tiles.append(weak_crack())          # 27
+    assert len(tiles) == 28, len(tiles)
     groups = []
     for i, parts in enumerate(tiles):
         inner = '\n    '.join(parts)
         groups.append(f'  <g transform="translate({i * T},0)" clip-path="url(#cell)">\n    {inner}\n  </g>')
     body = '\n'.join(groups)
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {16 * T} {T}" shape-rendering="geometricPrecision">\n'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {len(tiles) * T} {T}" shape-rendering="geometricPrecision">\n'
             f'  <defs><clipPath id="cell"><rect x="0" y="0" width="{T}" height="{T}"/></clipPath></defs>\n'
             f'{body}\n</svg>\n')
 
