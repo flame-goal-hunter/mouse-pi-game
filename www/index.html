@@ -10,9 +10,9 @@
     <meta name="screen-orientation" content="landscape">
     <title>Мышонок Пи</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-v2.png">
-    <link rel="icon" sizes="32x32" href="assets/icons/favicon-32-v2.png">
-    <link rel="icon" sizes="256x256" href="assets/icons/icon-256-v2.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon-v3.png">
+    <link rel="icon" sizes="32x32" href="assets/icons/favicon-32-v3.png">
+    <link rel="icon" sizes="256x256" href="assets/icons/icon-256-v3.png">
     <link rel="stylesheet" href="assets/fonts/nunito.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="js/storage/FavoritesManager.js"></script>
@@ -10840,6 +10840,8 @@
       #installNo  { min-height: 44px; padding: 0 16px; border-radius: 12px;
                     border: 2px solid #4a3a63; background: transparent; color: #b9a6d4;
                     font-weight: 700; font-size: 15px; }
+      #installCard button { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+      #installCard button:active { transform: scale(0.96); filter: brightness(1.15); }
       #installNever { display: block; margin: 8px auto 0; min-height: 36px; padding: 0 10px;
                       border: none; background: transparent; color: #8f7fae;
                       text-decoration: underline; font-size: 13px; }
@@ -10869,7 +10871,7 @@
     </style>
     <div id="installCard" hidden>
       <div class="ic-row">
-        <img src="assets/icons/icon-256-v2.png" alt="">
+        <img src="assets/icons/icon-256-v3.png" alt="">
         <div style="flex:1;min-width:0">
           <div class="ic-title">Установить Мышонка Пи</div>
           <div id="installWhy">Появится на экране телефона и будет открываться как обычное
@@ -10916,10 +10918,16 @@
         var K_OLD = 'pi_install_dismissed';    // key used by the first version of this card
         var SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
-        // Private mode throws on every localStorage touch, so nothing here may assume it works.
-        function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-        function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-        function del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+        // Private mode and blocked site data throw on every localStorage touch. Without a
+        // memory copy the answer is lost, the card returns 4 s later, and the buttons look
+        // broken — so every choice is held here too, for this session at least.
+        var mem = {};
+        function get(k) {
+            if (k in mem) return mem[k];
+            try { return localStorage.getItem(k); } catch (e) { return null; }
+        }
+        function set(k, v) { mem[k] = v; try { localStorage.setItem(k, v); } catch (e) {} }
+        function del(k) { delete mem[k]; try { localStorage.removeItem(k); } catch (e) {} }
 
         // Anyone who dismissed the older card meant "stop asking" — carry that over.
         if (get(K_OLD) === '1') { set(K_NEVER, '1'); del(K_OLD); }
@@ -11006,7 +11014,14 @@
             maybeShow();
         });
 
-        yes.addEventListener('click', function () {
+        // Every button on this page listens for click AND touchend — 23 of them do it
+        // already. A tap that only fires touchend would otherwise do nothing at all.
+        function onTap(el, fn) {
+            el.addEventListener('click', fn);
+            el.addEventListener('touchend', function (e) { e.preventDefault(); fn(); });
+        }
+
+        onTap(yes, function () {
             if (iosManual) { snooze(); return; }
             if (!deferred) { hide(); return; }        // event lost — offer again next time, do not silence
             var d = deferred;
@@ -11027,8 +11042,8 @@
                 Promise.resolve(d.userChoice).then(decide).catch(function () { decide(null); });
             } catch (e) { decide(null); }
         });
-        no.addEventListener('click', snooze);
-        never.addEventListener('click', stopAsking);
+        onTap(no, snooze);
+        onTap(never, stopAsking);
 
         window.addEventListener('appinstalled', function () {
             deferred = null;

@@ -4,7 +4,7 @@
 // first time they are used, so the first load stays small.
 // Bump CACHE_VERSION whenever shipping new files.
 // ============================================
-const CACHE_VERSION = 'mousiepi-be9da899df';
+const CACHE_VERSION = 'mousiepi-114117eb75';
 const SHELL = [
   './',
   './index.html',
@@ -16,11 +16,11 @@ const SHELL = [
   './lib/phaser-3.70.0.min.js',
   './lib/nipplejs-0.10.2.min.js',
   './assets/fonts/nunito.css',
-  './assets/icons/icon-256-v2.png',
-  './assets/icons/icon-512-v2.png',
-  './assets/icons/icon-maskable-512-v2.png',
-  './assets/icons/apple-touch-icon-v2.png',
-  './assets/icons/favicon-32-v2.png',
+  './assets/icons/icon-256-v3.png',
+  './assets/icons/icon-512-v3.png',
+  './assets/icons/icon-maskable-512-v3.png',
+  './assets/icons/apple-touch-icon-v3.png',
+  './assets/icons/favicon-32-v3.png',
 ];
 
 self.addEventListener('install', (e) => {
