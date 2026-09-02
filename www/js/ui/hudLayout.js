@@ -8,7 +8,7 @@ export function uiScaleFor(W, H) {
 
 const BASE = {
     margin: 12, heart: 26, heartGap: 4, keyW: 40, keyH: 21, keyGap: 10,
-    rowGap: 8, statusH: 28, meterR: 14, eye: 16, bookIcon: 22, bookFont: 17, paw: 22, itemGap: 10,
+    rowGap: 8, statusH: 28, meterR: 14, eye: 16, bookIcon: 24, bookFont: 20, paw: 24, itemGap: 10,
     powerIcon: 22, powerFont: 18,
     cheeseW: 24, cheeseH: 20, cheeseGap: 6, cheeseFont: 22, cheeseTextW: 72, comboFont: 26, comboGap: 4, comboTextW: 110,
     exitR: 22, exitIcon: 44, compassLabel: 26, compassArrow: 18,

@@ -274,6 +274,8 @@ export class DungeonScene extends Phaser.Scene {
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this._keyIconHas = undefined;
+        this._crouchIconOn = undefined;
         this._backGuardOn = false;
         this._heartbeatNext = 0;
         // Relic effects are re-applied below from collectedRelics — clear them first or
@@ -473,6 +475,7 @@ export class DungeonScene extends Phaser.Scene {
         this.buildWorld();
         this.spawnPlayer();
         this._armBackGuard();
+        this._applyMotionPreference();
         this.spawnExitDoor();
         this.spawnKey();
         this.spawnEnemies();
@@ -4509,9 +4512,27 @@ export class DungeonScene extends Phaser.Scene {
     // Tiered camera shake — consistent feel per impact size.
     _shake(tier) {
         const cam = this.cameras?.main;
-        if (!cam) return;
+        if (!cam || this._reducedMotion) return;
         const cfg = SHAKE_CFG[tier] || SHAKE_CFG.sm;
         cam.shake(cfg.dur, cfg.amt);
+    }
+
+    // Respect the system's reduced-motion setting: wrap the camera so every shake and
+    // flash in the scene is calmed at the source instead of at 18 call sites.
+    _applyMotionPreference() {
+        let reduced = false;
+        try {
+            reduced = typeof window !== 'undefined' && window.matchMedia &&
+                      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        } catch (e) {}
+        this._reducedMotion = reduced;
+        if (!reduced) return;
+        const cam = this.cameras.main;
+        if (cam._piMotionWrapped) return;
+        cam._piMotionWrapped = true;
+        cam.shake = () => cam;
+        const flash = cam.flash.bind(cam);
+        cam.flash = (dur, r, g, b, force) => flash(Math.min(dur || 0, 90), r, g, b, force);
     }
 
     // Brief slow-motion freeze for impact emphasis.
@@ -5662,7 +5683,7 @@ export class DungeonScene extends Phaser.Scene {
               ((this.biome?.ambient || 'Подземелье темнее и опаснее').replace(/[.!]?$/, '.')) + '\n' +
               'Найди ключ и иди по лестнице вниз.';
         const hintLabel = IS_TOUCH
-            ? 'Левый стик — ходьба   ·   Правый — прицел и огонь   ·   Кнопка — рывок'
+            ? 'Стики — ходьба и огонь   ·   Кнопки справа — рывок,\nслева — красться и бросить книгу'
             : 'WASD — ходьба   ·   Мышь — прицел   ·   ЛКМ / Space — огонь   ·   SHIFT — рывок   ·   C — красться';
         const place = (this.biome?.name || '').toUpperCase();
         const counter = this.isFinalFloor
@@ -5695,11 +5716,11 @@ export class DungeonScene extends Phaser.Scene {
         const measure = (k) => {
             title.setFontSize(Math.max(20, Math.round(34 * k)));
             subtitle.setFontSize(Math.max(13, Math.round(19 * k)));
-            floorTxt.setFontSize(Math.max(11, Math.round(13 * k)));
-            body.setFontSize(Math.max(13, Math.round(17 * k)));
+            floorTxt.setFontSize(Math.max(14, Math.round(15 * k)));
+            body.setFontSize(Math.max(15, Math.round(18 * k)));
             body.setLineSpacing(Math.round(3 * k));
             body.setWordWrapWidth(textW);
-            hint.setFontSize(Math.max(11, Math.round(13 * k)));
+            hint.setFontSize(Math.max(13, Math.round(14 * k)));
             hint.setWordWrapWidth(panelW - PAD * 2);
             const g = (v) => Math.max(4, Math.round(v * k));
             const pillH = Math.round(floorTxt.height + 10 * k);
@@ -5837,14 +5858,15 @@ export class DungeonScene extends Phaser.Scene {
         this.bossBarBg = this.add.graphics().setScrollFactor(0).setDepth(D).setVisible(false);
         this.bossBarFill = this.add.graphics().setScrollFactor(0).setDepth(D + 1).setVisible(false);
         this.bossBarName = this.add.text(0, 0, 'ДРАКУЛА', {
-            fontFamily: FONT, fontSize: '14px', color: '#ffd9e8',
+            fontFamily: FONT, fontSize: '16px', color: '#ffd9e8',
             stroke: '#0a0410', strokeThickness: 4, fontStyle: '900',
         }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(D + 1).setVisible(false);
         this._bossBarShown = 0;
         this.objectiveText = this.add.text(0, 0, 'Найди ключ', {
-            fontFamily: FONT, fontSize: '17px', fontStyle: '500',
-            color: '#f0d8ff', stroke: '#0a0410', strokeThickness: 3
+            fontFamily: FONT, fontSize: '17px', fontStyle: '700',
+            color: '#f0d8ff', stroke: '#0a0410', strokeThickness: 4
         }).setScrollFactor(0).setDepth(D);
+        this._objectiveWas = null;
         this.scoreText = this.add.text(0, 0, '0', {
             fontFamily: FONT, fontSize: '22px',
             color: '#ffffff', stroke: '#0a0410', strokeThickness: 4, fontStyle: '700',
@@ -5926,7 +5948,11 @@ export class DungeonScene extends Phaser.Scene {
         this.cheeseText.setPosition(L.cheese.textX, L.cheese.textY).setFontSize(L.cheese.fontSize);
         this.comboText.setPosition(L.combo.x, L.combo.y).setFontSize(L.combo.fontSize);
         // === MINIMAL HUD — stat counters hidden; floor/score shown by intro and win/lose screens ===
-        this.objectiveText.setVisible(false);
+        // The objective line stays: it is the only place the goal is written down.
+        this.objectiveText.setOrigin(0.5, 0)
+            .setPosition(Math.round(this.viewW / 2), Math.round(L.cheese.textY + L.cheese.fontSize * 0.8))
+            .setFontSize(Math.max(14, Math.round(15 * L.s)))
+            .setVisible(true);
         this.scoreText.setVisible(false);
         this.chapterText.setVisible(false);
         this.upgradeIconsText.setVisible(false);
@@ -5994,11 +6020,19 @@ export class DungeonScene extends Phaser.Scene {
         }
         this.cheeseText.setText(`${this.cheeseGot}/${this.cheeseTotal}`);
         this.scoreText.setText(String(this.score));
-        this.keyIcon.setAlpha(this.hasKey ? 1 : 0.25);
+        if (this._keyIconHas !== this.hasKey) {
+            this._keyIconHas = this.hasKey;
+            this.keyIcon.setTexture(this.hasKey ? 'd_key' : 'lock');
+            this.keyIcon.setAlpha(this.hasKey ? 1 : 0.75);
+            this.keyIcon.setTint(this.hasKey ? 0xffffff : 0x9a86b8);
+            const L = this._hudLayout;
+            if (L) this.keyIcon.setDisplaySize(L.key.w, L.key.h);
+        }
         // Objective text hidden permanently — compass arrow conveys "where to go"
         // COMPASS — points to current objective from screen center
         this.updateCompass();
         this.updateBossBar();
+        this.updateObjective();
 
         // Combo expires
         if (this.time.now > this._comboExpire) this._combo = 0;
@@ -6038,7 +6072,14 @@ export class DungeonScene extends Phaser.Scene {
         // Book counter
         this.bookCounterText.setText(`×${this.distractionBooks || 0}`);
         // Crouch
-        if (this.crouchIcon) this.crouchIcon.setAlpha(this.player?.crouch ? 1 : 0.35);
+        if (this.crouchIcon) {
+            const cr = !!this.player?.crouch;
+            if (this._crouchIconOn !== cr) {
+                this._crouchIconOn = cr;
+                this.crouchIcon.setAlpha(cr ? 1 : 0.7);
+                this.crouchIcon.setTint(cr ? 0x7fd4ff : 0x8a7aa8);
+            }
+        }
 
         // Active power-up timer — cache color + only setText when string actually changed
         if (this.activePowerup && this.time.now < this.activePowerup.endTime) {
@@ -6500,6 +6541,18 @@ export class DungeonScene extends Phaser.Scene {
         if (mouseRecentlyUsed && this.game.canvas && this.game.canvas.style && this.game.canvas.style.cursor !== 'none') {
             this.game.canvas.style.cursor = 'none';
         }
+    }
+
+    updateObjective() {
+        if (!this.objectiveText) return;
+        let t;
+        if (this.captive && !this.captive.freed) t = 'Освободи бабушку';
+        else if (this._bossBarShown) t = 'Победи графа';
+        else if (!this.hasKey) t = 'Найди ключ';
+        else t = 'Иди к лестнице вниз';
+        if (this._objectiveWas === t) return;
+        this._objectiveWas = t;
+        this.objectiveText.setText(t);
     }
 
     updateBossBar() {
