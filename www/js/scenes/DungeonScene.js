@@ -3,7 +3,7 @@
 // Mousie Pi vs Count Ratula's dungeon: find key, fight monsters, escape
 // ============================================
 
-import { Progress, SKINS, PERMANENT_UPGRADES } from '../storage/ProgressStore.js';
+import { Progress, SKINS, PERMANENT_UPGRADES, CONSUMABLES } from '../storage/ProgressStore.js';
 import { biomeForFloor, modifierForFloor, weightedPick, pickDecor } from './Biomes.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
@@ -293,11 +293,20 @@ export class DungeonScene extends Phaser.Scene {
         this.runAlarmCount = data?.runAlarmCount || 0;     // for ghost-run achievement
         this.collectedRelics = data?.collectedRelics || [];
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
+        // Kit bought in the shop: spent once when the descent starts, then carried like
+        // the rest of the run state so every floor rebuilds from the same list.
+        if (data?.runLoadout) {
+            this.runLoadout = data.runLoadout;
+        } else {
+            try { this.runLoadout = Progress.spendConsumablesForRun() || []; }
+            catch (e) { this.runLoadout = []; }
+        }
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
         this.floorGoal = 'key';
         this.goalTomes = [];
         this.goalTreasure = null;
+        this.startUnlocked = false;
         this._recoil = null;
         this.floorMod = null;
         this._keyIconHas = undefined;
@@ -342,6 +351,11 @@ export class DungeonScene extends Phaser.Scene {
         for (const id of this.upgradeIds) {
             const upg = upgradeById(id);
             if (upg) upg.apply(this);
+        }
+        // Kit from the shop, applied before the skin so a sidegrade can still trade on top
+        for (const cid of (this.runLoadout || [])) {
+            const def = CONSUMABLES.find(u => u.id === cid);
+            if (def && typeof def.apply === 'function') def.apply(this);
         }
         // The chosen skin is a sidegrade, not a costume — its perk applies like the rest
         try {
@@ -527,6 +541,10 @@ export class DungeonScene extends Phaser.Scene {
         this.spawnExitDoor();
         this.spawnKey();
         if (this.floorGoal === 'escape') this.unlockExit();   // open, but the prize is the lock
+        else if (this.startUnlocked && this.chapter === 1) {
+            this.hasKey = true;                                // Отмычка, bought in the shop
+            this.unlockExit();
+        }
         this.spawnEnemies();
         this.spawnCheese();
         this.spawnPowerups();
@@ -7196,6 +7214,7 @@ export class DungeonScene extends Phaser.Scene {
                         runStartTime: this.runStartTime,
                         runAlarmCount: this.runAlarmCount,
                         runBookDmg: this.runBookDmg,
+                        runLoadout: this.runLoadout,
                         collectedRelics: nextRelics
                     });
                     return;
@@ -7363,6 +7382,7 @@ export class DungeonScene extends Phaser.Scene {
                         runStartTime: this.runStartTime,
                         runAlarmCount: this.runAlarmCount,
                         runBookDmg: this.runBookDmg,
+                        runLoadout: this.runLoadout,
                         collectedRelics: nextRelics
                     });
                     return;
@@ -7389,6 +7409,7 @@ export class DungeonScene extends Phaser.Scene {
                     runStartTime: this.runStartTime,
                     runAlarmCount: this.runAlarmCount,
                     runBookDmg: this.runBookDmg,
+                    runLoadout: this.runLoadout,
                     collectedRelics: this.collectedRelics
                 });
             };

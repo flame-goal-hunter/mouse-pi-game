@@ -92,6 +92,24 @@ export const SKINS = [
                               s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } }
 ];
 
+// === CONSUMABLES — bought before a run, spent by starting one ===
+// Everything held is consumed at the start of a descent and lasts the whole run, so
+// there is no in-run inventory to manage — the choice is made in the shop.
+export const CONSUMABLES = [
+    { id: 'pies',     icon: 'd_pie',     name: 'Запасные пироги', price: 20,
+      desc: 'На два пирога больше в лапах',
+      apply: (s) => { s.clipBonus = (s.clipBonus || 0) + 2; } },
+    { id: 'candle',   icon: 'ui_flame',  name: 'Свеча в дорогу',  price: 15,
+      desc: 'Фонарик светит дальше',
+      apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.25; } },
+    { id: 'pastry',   icon: 'ui_heart',  name: 'Пирожок в дорогу', price: 25,
+      desc: 'Лишнее сердце на весь забег',
+      apply: (s) => { s.maxHp += 1; } },
+    { id: 'lockpick', icon: 'd_key',     name: 'Отмычка',          price: 30,
+      desc: 'Первая лестница открыта сразу',
+      apply: (s) => { s.startUnlocked = true; } }
+];
+
 // === PERMANENT UPGRADES — bought once, stack each run forever ===
 // dmg1 maxLevel dropped to 1 to keep boss tension (Q1 recommended)
 export const PERMANENT_UPGRADES = [
@@ -110,6 +128,7 @@ const DEFAULT_STATE = {
     skinsUnlocked: ['blue'],
     currentSkin: 'blue',
     upgrades: {},               // id -> level
+    consumables: {},            // id -> count held, spent at the start of a run
 
     // === Per-mode stats ===
     stats: {
@@ -260,6 +279,34 @@ export const Progress = {
         s.upgrades[id] = cur + 1;
         save();
         return true;
+    },
+
+    // === Consumables ===
+    getConsumable(id) { return (load().consumables || {})[id] || 0; },
+    getConsumables() { return { ...(load().consumables || {}) }; },
+    buyConsumable(id) {
+        const def = CONSUMABLES.find(u => u.id === id);
+        if (!def) return false;
+        const s = load();
+        s.consumables = s.consumables || {};
+        if ((s.consumables[id] || 0) >= 9) return false;      // a sane cap, not a stockpile
+        if (s.cheeseBank < def.price) return false;
+        s.cheeseBank -= def.price;
+        s.consumables[id] = (s.consumables[id] || 0) + 1;
+        save();
+        return true;
+    },
+    // Called once when a descent begins: hands back the ids it spent.
+    spendConsumablesForRun() {
+        const s = load();
+        const held = s.consumables || {};
+        const spent = [];
+        for (const k of Object.keys(held)) {
+            if (held[k] > 0) { spent.push(k); held[k] -= 1; }
+            if (held[k] <= 0) delete held[k];
+        }
+        if (spent.length) { s.consumables = held; save(); }
+        return spent;
     },
 
     // === Mode-aware stats ===

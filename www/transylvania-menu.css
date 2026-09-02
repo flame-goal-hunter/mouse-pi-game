@@ -988,6 +988,24 @@ button:focus-visible,
     gap: var(--space-2);
 }
 
+/* Consumables share the upgrades column — a sink that never closes belongs where the
+   player already looks for something to spend on. */
+.kit-head {
+    margin-top: var(--space-3);
+    padding: 0 2px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--gold);
+}
+.kit-note {
+    padding: 0 2px var(--space-1);
+    font-size: 11px;
+    color: var(--text-dim, #b9a6d4);
+}
+.upgrade-card.kit-card { border-style: dashed; }
+
 .upgrade-card {
     display: flex;
     align-items: center;

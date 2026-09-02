@@ -3,7 +3,7 @@
 // Replaces TransylvaniaScene. No Phaser. Drives ProgressStore + DOM.
 // ============================================
 
-import { Progress, SKINS, PERMANENT_UPGRADES } from './js/storage/ProgressStore.js';
+import { Progress, SKINS, PERMANENT_UPGRADES, CONSUMABLES } from './js/storage/ProgressStore.js';
 import { playMenuSound } from './js/audio/menuAudio.js';
 
 // ----- Asset path helpers -----
@@ -21,6 +21,12 @@ function skinSrc(skinId) {
 // ----- Shop icon kit — no emoji anywhere in the shop -----
 const CHEESE_ICON = 'assets/characters/transylvania/cheese.svg';
 // PERMANENT_UPGRADES ids (ProgressStore.js) mapped to icons from the kit.
+const KIT_ICONS = {
+    pies: 'assets/characters/transylvania/pie.svg',
+    candle: 'assets/world/candle.svg',
+    pastry: 'assets/ui/heart.svg',
+    lockpick: 'assets/characters/transylvania/key.svg',
+};
 const UPGRADE_ICONS = {
     hp1:     'assets/ui/heart.svg',
     speed1:  'assets/ui/bolt.svg',
@@ -337,6 +343,57 @@ function renderUpgradeList() {
 
         upgradeListEl.appendChild(card);
     });
+
+    const head = document.createElement('div');
+    head.className = 'kit-head';
+    head.textContent = 'СНАРЯЖЕНИЕ НА ЗАБЕГ';
+    upgradeListEl.appendChild(head);
+
+    const note = document.createElement('div');
+    note.className = 'kit-note';
+    note.textContent = 'Тратится, когда начинаешь спуск';
+    upgradeListEl.appendChild(note);
+
+    CONSUMABLES.forEach(item => {
+        const held = Progress.getConsumable(item.id);
+        const affordable = cheese >= item.price;
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'upgrade-card kit-card' + (affordable ? '' : ' unaffordable');
+        card.setAttribute('data-kit-id', item.id);
+        if (!affordable) card.setAttribute('aria-disabled', 'true');
+        card.appendChild(iconImg(UPGRADE_ICONS[item.id] || KIT_ICONS[item.id] || UPGRADE_ICON_DEFAULT, 'upgrade-icon'));
+
+        const info = document.createElement('span');
+        info.className = 'upgrade-info';
+        const title = document.createElement('span');
+        title.className = 'upgrade-title';
+        title.appendChild(document.createTextNode(item.name));
+        if (held > 0) {
+            const tag = document.createElement('span');
+            tag.className = 'upgrade-level';
+            tag.textContent = `(в сумке: ${held})`;
+            title.appendChild(tag);
+        }
+        info.appendChild(title);
+        const desc = document.createElement('span');
+        desc.className = 'upgrade-desc';
+        desc.textContent = item.desc;
+        info.appendChild(desc);
+        card.appendChild(info);
+
+        card.appendChild(pricePill(item.price, 'upgrade-price'));
+        card.addEventListener('click', () => onKitClick(item));
+        upgradeListEl.appendChild(card);
+    });
+}
+
+function onKitClick(item) {
+    const ok = Progress.buyConsumable(item.id);
+    if (!ok) { flashNoCheese(); return; }
+    playMenuSound('buy');
+    renderShop();
+    renderHeader();
 }
 
 function onUpgradeClick(upg) {
