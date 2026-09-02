@@ -138,6 +138,81 @@ export const RELICS = [
         name: 'Сырный взрыв',
         desc: 'Сыр взрывается и задевает врагов',
         apply: (s) => { s.relicCheeseBoom = true; }
+    },
+
+    // --- Finding 08: the pool was 16, and now that a relic is the guaranteed reward
+    // after every floor a run saw most of it. These fourteen use levers the scene
+    // already has, so none of them needs new machinery.
+    {
+        id: 'quick_paws', rarity: 'common', icon: 'ui_bolt', name: 'Быстрые лапы',
+        desc: 'Пи бегает заметно быстрее',
+        apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.12; }
+    },
+    {
+        id: 'deep_pockets', rarity: 'common', icon: 'd_pie', name: 'Глубокие карманы',
+        desc: 'На три пирога больше в лапах',
+        apply: (s) => { s.clipBonus = (s.clipBonus || 0) + 3; }
+    },
+    {
+        id: 'quick_hands', rarity: 'common', icon: 'ui_target', name: 'Ловкие лапы',
+        desc: 'Быстрее набирает пироги',
+        apply: (s) => { s.reloadMul = (s.reloadMul || 1) * 0.72; }
+    },
+    {
+        id: 'bright_lamp', rarity: 'common', icon: 'ui_flame', name: 'Яркий фонарь',
+        desc: 'Видно гораздо дальше',
+        apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.35; }
+    },
+    {
+        id: 'cat_step', rarity: 'common', icon: 'ui_paw', name: 'Кошачий шаг',
+        desc: 'Враги замечают Пи медленнее',
+        apply: (s) => { s.stealthMul = (s.stealthMul || 1) * 0.7; }
+    },
+    {
+        id: 'heavy_pie', rarity: 'rare', icon: 'ui_flame', name: 'Тяжёлый пирог',
+        desc: 'Пирог бьёт сильнее',
+        apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1; }
+    },
+    {
+        id: 'thick_crust', rarity: 'rare', icon: 'ui_heart', name: 'Толстая корка',
+        desc: 'Два лишних сердца',
+        apply: (s) => { s.maxHp += 2; if (s.player) s.player.hp = s.maxHp; }
+    },
+    {
+        id: 'cheese_nose', rarity: 'rare', icon: 'd_cheese', name: 'Сырный нюх',
+        desc: 'Заметно больше сыра за кусочек',
+        apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.5; }
+    },
+    {
+        id: 'second_wind', rarity: 'rare', icon: 'relic_blood_drop', name: 'Второе дыхание',
+        desc: 'Часто возвращает сердечко за врага',
+        apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.25; }
+    },
+    {
+        id: 'spring_paws', rarity: 'rare', icon: 'ui_dash', name: 'Пружинки в лапах',
+        desc: 'Рывок готов почти сразу',
+        apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.6; }
+    },
+    {
+        id: 'double_pierce', rarity: 'rare', icon: 'ui_target', name: 'Двойной прокол',
+        desc: 'Пирог пробивает ещё двоих',
+        apply: (s) => { s.relicPierce = (s.relicPierce || 0) + 2; }
+    },
+    {
+        id: 'sticky_pie', rarity: 'rare', icon: 'relic_bounce', name: 'Липкий пирог',
+        desc: 'Пироги отскакивают ещё дважды',
+        apply: (s) => { s.relicBounce = (s.relicBounce || 0) + 2; }
+    },
+    {
+        id: 'sharp_eye', rarity: 'legendary', icon: 'relic_crit', name: 'Острый глаз',
+        desc: 'Часто бьёт втрое сильнее',
+        apply: (s) => { s.relicCritChance = (s.relicCritChance || 0) + 0.3; }
+    },
+    {
+        id: 'roly_poly', rarity: 'legendary', icon: 'relic_crown', name: 'Неваляшка',
+        desc: 'Ещё раз спасёт от гибели и дольше не бьют',
+        apply: (s) => { s.relicUndying = (s.relicUndying || 0) + 1;
+                        s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 400; }
     }
 ];
 
