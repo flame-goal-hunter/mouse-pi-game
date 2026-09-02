@@ -16,7 +16,7 @@ export const BIOMES = [
         gridColor:   0x120820,
         wallFill:    0x2a1a3e, wallShadow: 0x120818, wallHighlight: 0x3e2a56,
         // Warm gothic: violet stone, amber torch pools; darkest of the "normal" floors
-        darknessColor: 0x171033, darknessAlpha: 0.36,
+        darknessColor: 0x171033, darknessAlpha: 0.30,
         decorWeights: [
             { type: 'mushroom', w: 3 },
             { type: 'bone',     w: 3 },
@@ -28,7 +28,7 @@ export const BIOMES = [
         mechanic: null,
         hazardTile: null,
         particles: { type: 'drip', color: 0x80a0c0, count: 6, riseSpeed: -50 },
-        roomConfig: { targetCount: 14, minSize: 280, maxSize: 480, pad: 90 },
+        roomConfig: { targetCount: 10, minSize: 280, maxSize: 480, pad: 90 },
         // Stealth: gentle intro on floor 1+. Only sleeping zombies have cones.
         coneEnemyKinds: ['zombie'],
         stealthRoomsPerFloor: 1,
@@ -147,7 +147,7 @@ export const BIOMES = [
         gridColor:   0x0a0208,
         wallFill:    0x4a0a18, wallShadow: 0x180408, wallHighlight: 0x7a1830,
         // Crimson-tinted darkness — throne feel
-        darknessColor: 0x2e1420, darknessAlpha: 0.38,
+        darknessColor: 0x2e1420, darknessAlpha: 0.46,
         decorWeights: [
             { type: 'goblet',     w: 3 },
             { type: 'bone',       w: 2 },
@@ -159,10 +159,10 @@ export const BIOMES = [
         mechanic: null,
         hazardTile: null,
         particles: { type: 'embers', color: 0xff6020, count: 12, riseSpeed: 25 },
-        roomConfig: { targetCount: 7, minSize: 360, maxSize: 600, pad: 130 },
+        roomConfig: { targetCount: 7, minSize: 340, maxSize: 600, pad: 120 },   // unused: generateThrone builds its own spine
         // Throne is boss focus, optional one stealth room
         coneEnemyKinds: ['skeleton'],
-        stealthRoomsPerFloor: 0,
+        stealthRoomsPerFloor: 1,
         stealthFlavor: 'bat-patrol',
         enemyDensityMul: 0.6,
         ambientCloud: null,

@@ -1125,7 +1125,10 @@ export class DungeonScene extends Phaser.Scene {
         corridors.push({ from: 0, to: 1 });
         corridors.push({ from: 1, to: 2 });
         // Side alcoves for stealth / the key — position and count vary per floor
-        const alcoves = Phaser.Math.Between(2, 3);
+        // The finale was the smallest floor in the game — the registry's finding 10.
+        // generateThrone builds its own spine, so roomConfig.targetCount never reached
+        // it; the alcove count is the number that actually moves.
+        const alcoves = Phaser.Math.Between(4, 5);
         for (let i = 0; i < alcoves; i++) {
             const w = Phaser.Math.Between(280, 340), h = Phaser.Math.Between(250, 320);
             const top = (i % 2 === 0);
@@ -5168,8 +5171,14 @@ export class DungeonScene extends Phaser.Scene {
         // Throne floor — exit is ALWAYS the huge arena (room 2)
         if (this.biome?.id === 'throne') {
             this.exitRoomIdx = 2;
-            this.keyRoomIdx = (Math.random() < 0.5) ? 3 : 4;
-            this.stealthRoomIdxs = [];
+            const alcoves = [];
+            for (let i = 3; i < this.dungeon.rooms.length; i++) alcoves.push(i);
+            Phaser.Utils.Array.Shuffle(alcoves);
+            this.keyRoomIdx = alcoves.length ? alcoves[0] : 1;
+            // One guarded alcove on the finale too: the chapter spends three floors
+            // teaching vision cones and used to switch them off for the climax.
+            const want = this.biome.stealthRoomsPerFloor || 0;
+            this.stealthRoomIdxs = alcoves.slice(1, 1 + want);
             return;
         }
         const distances = this.roomDistances(0);
