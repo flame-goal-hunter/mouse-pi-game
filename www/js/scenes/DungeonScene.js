@@ -4,7 +4,7 @@
 // ============================================
 
 import { Progress, SKINS, PERMANENT_UPGRADES } from '../storage/ProgressStore.js';
-import { biomeForFloor, weightedPick, pickDecor } from './Biomes.js';
+import { biomeForFloor, modifierForFloor, weightedPick, pickDecor } from './Biomes.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX, UI, BGM } from '../audio/SoundKeys.js';
 import { preloadAudio } from '../audio/AudioManager.js';
@@ -274,6 +274,7 @@ export class DungeonScene extends Phaser.Scene {
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this.floorMod = null;
         this._keyIconHas = undefined;
         this._crouchIconOn = undefined;
         this._backGuardOn = false;
@@ -325,6 +326,14 @@ export class DungeonScene extends Phaser.Scene {
         const dbgBiome = new URLSearchParams(window.location.search).get('biome');
         const dbgChapter = { dungeon: 1, kitchen: 2, library: 3, garden: 4, throne: 5 }[dbgBiome];
         if (dbgChapter) this.biome = biomeForFloor(dbgChapter);
+        // Endless floor modifier — applied after upgrades and relics so it multiplies
+        // the finished values rather than being overwritten by the replay.
+        this.floorMod = modifierForFloor(this.chapter, this.runMode);
+        if (this.floorMod) {
+            const m = this.floorMod.id;
+            if (m === 'feast') this.cheeseMul = (this.cheeseMul || 1) * 1.6;
+            if (m === 'swift') this.speedMul = (this.speedMul || 1) * 1.15;
+        }
     }
 
     preload() {
@@ -678,7 +687,8 @@ export class DungeonScene extends Phaser.Scene {
         this._darknessColor = b.darknessColor;
         this.lightRT = this.add.renderTexture(0, 0, this.viewW, this.viewH)
             .setOrigin(0).setScrollFactor(0).setDepth(700);
-        this.lightRT.setAlpha(b.darknessAlpha != null ? b.darknessAlpha : 0.78);
+        const darkBoost = this.floorMod?.id === 'dark' ? 0.14 : 0;
+        this.lightRT.setAlpha(Math.min(0.9, (b.darknessAlpha != null ? b.darknessAlpha : 0.78) + darkBoost));
 
         // Player's aim angle (for cone direction) - initialized to right
         this.player.aimAngle = 0;
@@ -2946,7 +2956,8 @@ export class DungeonScene extends Phaser.Scene {
             shapeSum += share;
         }
         // Pass 2 — stretch that shape to fit the floor's budget.
-        const budget = enemyBudgetForFloor(this.chapter, this.runMode, this.isFinalFloor);
+        let budget = enemyBudgetForFloor(this.chapter, this.runMode, this.isFinalFloor);
+        if (this.floorMod?.id === 'crowd') budget = Math.round(budget * 1.4);
         const k = shapeSum > 0 ? budget / shapeSum : 0;
         let placed = 0;
         for (const slot of plan) {
@@ -2981,7 +2992,8 @@ export class DungeonScene extends Phaser.Scene {
                 if (enemy) {
                     enemy.roomId = i;       // tag with originating room for per-room alarm scope
                     if (this.chapter > 1) {
-                        enemy.hp = Math.ceil(enemy.def.hp * chapterMul);
+                        const hpMod = this.floorMod?.id === 'crowd' ? 0.7 : 1;
+                        enemy.hp = Math.max(1, Math.ceil(enemy.def.hp * chapterMul * hpMod));
                         enemy.maxHp = enemy.hp;
                     }
                 }
@@ -3424,7 +3436,7 @@ export class DungeonScene extends Phaser.Scene {
         // Crouch + ghost-walk relic: slower suspicion ramp
         let ramp = this.player?.crouch ? 0.5 : 1.0;
         if (this.relicGhostWalk) ramp *= 0.5;
-        const detectSecs = 0.8;  // full alarm in 0.8s of solid stare
+        const detectSecs = this.floorMod?.id === 'quiet' ? 0.5 : 0.8;  // full alarm after this much solid stare
         if (inCone) {
             e.suspicion = Math.min(1.0, sus + ramp * dt / detectSecs);
             // Brief sus-tick chirp
@@ -3585,7 +3597,8 @@ export class DungeonScene extends Phaser.Scene {
         // Big bonus if you sneaked past unalarmed, small bonus otherwise
         let cheeseGain, scoreGain, msg, msgColor;
         if (stealthSuccess) {
-            cheeseGain = 12 + Math.floor(Math.random() * 7);
+            const quiet = this.floorMod?.id === 'quiet' ? 1.5 : 1;
+            cheeseGain = Math.round((12 + Math.floor(Math.random() * 7)) * quiet);
             scoreGain = 150;
             msg = `Тихо! +${cheeseGain} сыра, +${scoreGain}`;
             msgColor = '#80ff80';
@@ -5672,7 +5685,9 @@ export class DungeonScene extends Phaser.Scene {
                   'Замок снится ему снова — и во сне у замка нет дна.'
                 : 'Пи спускается всё глубже во сне.\n' +
                   ((this.biome?.ambient || '').replace(/[.!]?$/, '.')) + '\n' +
-                  (this.isSubBossFloor ? 'Этот этаж кто-то сторожит.' : 'Найди ключ и иди по лестнице вниз.'))
+                  (this.floorMod ? this.floorMod.desc + '.'
+                     : this.isSubBossFloor ? 'Этот этаж кто-то сторожит.'
+                     : 'Найди ключ и иди по лестнице вниз.'))
             : this.isFinalFloor
             ? 'Пи дошёл до самого низа замка!\n' +
               'Где-то здесь граф Ратула держит бабушку.\n' +
@@ -5691,7 +5706,8 @@ export class DungeonScene extends Phaser.Scene {
             : this.runMode === 'endless'
                 ? (this.isSubBossFloor ? `${this.chapter} — СТРАЖ` : `${this.chapter}`)
                 : `${this.chapter}/${TOTAL_FLOORS}`;
-        const floorLabel = place ? `${place} · ${counter}` : `Этаж ${counter}`;
+        let floorLabel = place ? `${place} · ${counter}` : `Этаж ${counter}`;
+        if (this.floorMod) floorLabel += ` · ${this.floorMod.name}`;
 
         const title = addEl(this.add.text(0, 0, 'МЫШОНОК ПИ', {
             fontFamily: UI_F.display, fontStyle: '700', color: '#f6d77a',

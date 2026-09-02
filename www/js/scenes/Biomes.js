@@ -170,8 +170,37 @@ export const BIOMES = [
     }
 ];
 
+// Floors 1-5 are the story's fixed tour of the castle. Past that the descent picks
+// its own order — a strict modulo meant floor 26 was floor 1 exactly, and an endless
+// run was five maps on a loop forever. Deterministic per floor so every call inside
+// one floor agrees.
 export function biomeForFloor(floor) {
-    return BIOMES[(floor - 1) % BIOMES.length] || BIOMES[0];
+    if (floor <= BIOMES.length) return BIOMES[(floor - 1) % BIOMES.length] || BIOMES[0];
+    let h = Math.imul(floor ^ 0x9e3779b9, 0x85ebca6b);
+    h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+    const prev = (floor - 2) % BIOMES.length;          // what the previous floor showed
+    let idx = Math.abs(h) % BIOMES.length;
+    if (idx === prev) idx = (idx + 1) % BIOMES.length;  // never the same place twice running
+    return BIOMES[idx] || BIOMES[0];
+}
+
+// Endless-only run modifiers. From floor 6 every other floor carries one, so the
+// descent has texture instead of only bigger numbers.
+export const FLOOR_MODIFIERS = [
+    { id: 'feast',   name: 'ПИР',          desc: 'Всюду больше сыра' },
+    { id: 'crowd',   name: 'ТОЛПА',        desc: 'Врагов больше, но они слабее' },
+    { id: 'dark',    name: 'ГЛУХАЯ НОЧЬ',  desc: 'Темнее обычного' },
+    { id: 'swift',   name: 'СКОЛЬЗКИЙ ПОЛ', desc: 'Все двигаются быстрее' },
+    { id: 'quiet',   name: 'ТИШИНА',       desc: 'Враги слышат лучше, сундуки богаче' }
+];
+
+export function modifierForFloor(floor, mode) {
+    if (mode !== 'endless' || floor < 6 || floor % 2 !== 0) return null;
+    let h = floor * 0x9e3779b1;
+    h ^= h >>> 16; h = Math.imul(h, 0x21f0aaad);
+    h ^= h >>> 15; h = Math.imul(h, 0x735a2d97);
+    h ^= h >>> 15;
+    return FLOOR_MODIFIERS[Math.abs(h) % FLOOR_MODIFIERS.length];
 }
 
 // Pick weighted random key from {key: weight} map
