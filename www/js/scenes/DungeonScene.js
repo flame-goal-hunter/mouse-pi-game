@@ -1959,7 +1959,11 @@ export class DungeonScene extends Phaser.Scene {
                 placed++;
             }
             // Biome-themed props
-            const propCount = (this.biome.id === 'library') ? 6 : 5;
+            // Five props filled a small chamber and left a 600px throne hall looking
+            // abandoned. Scale with the floor area the room actually has.
+            const area = room.w * room.h;
+            const propCount = Math.max(5, Math.min(14, Math.round(area / 20000)))
+                            + (this.biome.id === 'library' ? 1 : 0);
             for (let i = 0; i < propCount; i++) {
                 const x = Phaser.Math.Between(room.x + 60, room.x + room.w - 60);
                 const y = Phaser.Math.Between(room.y + 60, room.y + room.h - 60);
