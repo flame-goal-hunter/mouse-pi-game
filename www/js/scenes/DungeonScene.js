@@ -362,7 +362,8 @@ export class DungeonScene extends Phaser.Scene {
         this.load.svg('d_pi_walk2', base + 'pi-walk2.svg', { width: 150, height: 172 });
         // === Pi SKINS — nested under transylvania/skins (stand + walk1 + walk2 per skin) ===
         const skinBase = 'assets/characters/transylvania/skins/';
-        const skinKeys = ['brown', 'pink', 'yellow-antler', 'robot', 'green-monster', 'shadow', 'devil', 'angel', 'yellow-lion'];
+        const skinKeys = ['brown', 'pink', 'yellow-antler', 'robot', 'green-monster', 'shadow', 'devil', 'angel', 'yellow-lion',
+                          'bear', 'frog', 'professor'];
         for (const k of skinKeys) {
             const safeId = k.replace(/-/g, '_');
             this.load.svg('skin_' + safeId,          skinBase + k + '.svg',         { width: 150, height: 172 });

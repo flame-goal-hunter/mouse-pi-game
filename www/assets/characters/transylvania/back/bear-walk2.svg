@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230"><defs>
+    <style>.outline {{ stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }}</style>
+  </defs>
+  
+  <!-- Tail -->
+  <ellipse cx="152" cy="150" rx="9" ry="7" fill="#8a5a2e" class="outline" stroke-width="2"/>
+  <!-- Feet -->
+  <ellipse cx="72" cy="212" rx="16" ry="9" fill="#6d4522" class="outline"/>
+  <ellipse cx="128" cy="198" rx="16" ry="9" fill="#6d4522" class="outline"/>
+  <!-- Body -->
+  <ellipse cx="100" cy="160" rx="48" ry="42" fill="#a06a34" class="outline"/>
+  <ellipse cx="100" cy="170" rx="24" ry="18" fill="#c99055"/>
+  <!-- Arms -->
+  <ellipse cx="50" cy="156" rx="11" ry="18" fill="#a06a34" class="outline" transform="rotate(-10 50 156)"/>
+  <ellipse cx="150" cy="160" rx="11" ry="18" fill="#a06a34" class="outline" transform="rotate(26 150 160)"/>
+  <!-- Ears -->
+  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#a06a34" class="outline"/>
+  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#a06a34" class="outline"/>
+  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#c99055"/>
+  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#c99055"/>
+  <!-- Head -->
+  <circle cx="100" cy="102" r="43" fill="#a06a34" class="outline"/>
+  <!-- Honey drop on the brow -->
+  <path d="M 100 66 Q 106 76 100 80 Q 94 76 100 66 Z" fill="#ffd040" class="outline" stroke-width="2"/>
+  
+</svg>

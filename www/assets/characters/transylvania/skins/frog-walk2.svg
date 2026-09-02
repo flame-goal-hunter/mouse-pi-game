@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <style>.outline {{ stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }}</style>
+  </defs>
+  <!-- Tail -->
+  <path d="M 150 156 Q 168 152 172 138" fill="none" stroke="#3f8f4a" stroke-width="5" stroke-linecap="round"/>
+  <!-- Feet -->
+  <ellipse cx="72" cy="212" rx="16" ry="9" fill="#2f7a3a" class="outline"/>
+  <ellipse cx="128" cy="198" rx="16" ry="9" fill="#2f7a3a" class="outline"/>
+  <!-- Body -->
+  <ellipse cx="100" cy="160" rx="48" ry="42" fill="#4caf50" class="outline"/>
+  <ellipse cx="100" cy="170" rx="24" ry="18" fill="#8fd49a"/>
+  <!-- Arms -->
+  <ellipse cx="50" cy="156" rx="11" ry="18" fill="#4caf50" class="outline" transform="rotate(-10 50 156)"/>
+  <ellipse cx="150" cy="160" rx="11" ry="18" fill="#4caf50" class="outline" transform="rotate(26 150 160)"/>
+  <!-- Ears -->
+  <ellipse cx="65" cy="70" rx="17" ry="20" fill="#4caf50" class="outline"/>
+  <ellipse cx="135" cy="70" rx="17" ry="20" fill="#4caf50" class="outline"/>
+  <ellipse cx="65" cy="73" rx="8" ry="11" fill="#8fd49a"/>
+  <ellipse cx="135" cy="73" rx="8" ry="11" fill="#8fd49a"/>
+  <!-- Head -->
+  <circle cx="100" cy="102" r="43" fill="#4caf50" class="outline"/>
+  <!-- Water bead -->
+  <ellipse cx="122" cy="78" rx="5" ry="7" fill="#9fe0ff" class="outline" stroke-width="1.5" opacity="0.9"/>
+  <!-- Eyes -->
+  <circle cx="86" cy="108" r="9" fill="#ffffff" class="outline" stroke-width="2"/>
+  <circle cx="114" cy="108" r="9" fill="#ffffff" class="outline" stroke-width="2"/>
+  <circle cx="86" cy="109" r="4.5" fill="#1a1a1a"/>
+  <circle cx="114" cy="109" r="4.5" fill="#1a1a1a"/>
+  <circle cx="88" cy="106" r="1.8" fill="#ffffff"/>
+  <circle cx="116" cy="106" r="1.8" fill="#ffffff"/>
+  <!-- Nose -->
+  <ellipse cx="100" cy="124" rx="5" ry="4" fill="#1a1a1a" class="outline" stroke-width="2"/>
+  <path d="M 82 132 Q 100 146 118 132" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

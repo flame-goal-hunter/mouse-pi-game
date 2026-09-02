@@ -68,6 +68,27 @@ export const SKINS = [
       desc: 'Король сырных земель',
       perk: { plus: 'Бегает быстрее всех', minus: 'Пирог бьёт слабее',
               apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.12;
+                              s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } },
+
+    // First new family (see docs/.../2026-09-02-skin-style-brief.md): the nine had no
+    // big-and-kind, no watery one and no bookish one. Drawn on the same skeleton and
+    // given sidegrades that do not repeat any existing pair.
+    { id: 'bear',          name: 'Медвежонок',     price: 300, spriteKey: 'skin_bear',          menuKey: 'm_skin_bear',
+      desc: 'Большой, тёплый, с мёдом',
+      perk: { plus: 'Иногда сердечко за врага', minus: 'Бегает медленнее',
+              apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.2;
+                              s.speedMul = (s.speedMul || 1) * 0.92; } } },
+
+    { id: 'frog',          name: 'Лягушонок',      price: 400, spriteKey: 'skin_frog',          menuKey: 'm_skin_frog',
+      desc: 'Прыгает дальше всех',
+      perk: { plus: 'Рывок готов гораздо быстрее', minus: 'Меньше пирогов в лапах',
+              apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.6;
+                              s.clipBonus = (s.clipBonus || 0) - 2; } } },
+
+    { id: 'professor',     name: 'Профессор',      price: 600, spriteKey: 'skin_professor',     menuKey: 'm_skin_professor',
+      desc: 'Читал про этот замок всё',
+      perk: { plus: 'Больше сыра за кусочек', minus: 'Пирог бьёт слабее',
+              apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.4;
                               s.pieDmgBonus = (s.pieDmgBonus || 0) - 1; } } }
 ];
 
