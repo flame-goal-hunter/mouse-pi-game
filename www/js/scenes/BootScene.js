@@ -249,7 +249,10 @@ export class BootScene extends Phaser.Scene {
             // into DungeonScene. Otherwise, hand off to the native HTML menu so we
             // avoid spinning up Phaser just to render menu chrome.
             const runMode = config.runMode || null;
-            if (runMode === 'story' || runMode === 'endless') {
+            if (runMode === 'sneak') {
+                console.log('[BootScene] mode=transylvania runMode=sneak → SneakScene');
+                this.scene.start('SneakScene', { roomIndex: 0 });
+            } else if (runMode === 'story' || runMode === 'endless') {
                 console.log('[BootScene] mode=transylvania runMode=' + runMode + ' → DungeonScene');
                 this.scene.start('DungeonScene', { runMode, chapter: 1 });
             } else {

@@ -98,6 +98,7 @@ const heroPlateEl = $('#hero-plate');
 const heroNameEl = $('#hero-name');
 const storyHintEl = $('#story-hint');
 const endlessHintEl = $('#endless-hint');
+const sneakHintEl = $('#sneak-hint');
 const shopModal = $('#shop-modal');
 const codexModal = $('#codex-modal');
 const shopBalanceEl = $('#shop-balance-value');
@@ -132,14 +133,19 @@ function renderHero() {
 function renderModeHints() {
     let sStat = { wins: 0 };
     let eStat = { bestFloor: 0 };
+    let nStat = { clears: 0 };
     try { sStat = Progress.getStoryStats() || sStat; } catch (e) {}
     try { eStat = Progress.getEndlessStats() || eStat; } catch (e) {}
+    try { nStat = Progress.getSneakStats() || nStat; } catch (e) {}
     storyHintEl.textContent = sStat.wins > 0
         ? `Спасений: ${sStat.wins}`
         : '5 этажей · босс · спасение';
     endlessHintEl.textContent = eStat.bestFloor > 0
         ? `Лучший этаж: ${eStat.bestFloor}`
         : 'Спускайся вечно · растущая сложность';
+    sneakHintEl.textContent = nStat.clears > 0
+        ? `Ночей пройдено: ${nStat.clears}`
+        : 'Прячься · не дерись · унеси добычу';
 }
 
 function renderAll() {
@@ -443,6 +449,7 @@ function wireEvents() {
     $('#btn-back').addEventListener('click', handleBack);
     $('#card-story').addEventListener('click', () => { playMenuSound('click'); startRun('story'); });
     $('#card-endless').addEventListener('click', () => { playMenuSound('click'); startRun('endless'); });
+    $('#card-sneak').addEventListener('click', () => { playMenuSound('click'); startRun('sneak'); });
     $('#btn-shop').addEventListener('click', () => openShop());     // openShop plays 'open'
     $('#btn-codex').addEventListener('click', () => openCodex());   // openCodex plays 'open'
 

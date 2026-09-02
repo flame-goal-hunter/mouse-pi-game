@@ -619,6 +619,15 @@ button:focus-visible,
 .mode-card-endless .card-stripe { background: var(--danger); }
 .mode-card-endless .card-title { color: var(--text); }
 
+/* Tertiary — green accent, matches the Phaser hub's sneak card. */
+.mode-card-sneak {
+    background: #0f2a1c;
+    border-color: #80c090;
+}
+
+.mode-card-sneak .card-stripe { background: #80c090; }
+.mode-card-sneak .card-title { color: #c8e8d0; }
+
 /* ===== Footer ===== */
 #footer {
     display: flex;
