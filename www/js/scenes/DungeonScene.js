@@ -130,6 +130,7 @@ const PLAYER = {
 };
 
 const PIE = { speed: 580, life: 1400, radius: 10, damage: 2 };
+const POWERUP_TINTS = { triple: 0xff70a0, speed: 0xfff060, shield: 0x60a0ff, fire: 0xff8030 };
 
 // Feel: aim assist cone/reach, the dash-press buffer, and the haptic pulse lengths (ms)
 const AIM_ASSIST = { cone: Math.PI / 18, range: 420 };   // +-10 deg
@@ -434,6 +435,15 @@ export class DungeonScene extends Phaser.Scene {
         this.ambientClouds = [];
         this.flourClouds = [];
         this.activePowerup = null;
+        // Shop upgrade 'powerup' — a random buff to open the floor with
+        try {
+            if (Progress.getUpgradeLevel && Progress.getUpgradeLevel('powerup') > 0) {
+                const kinds = ['triple', 'speed', 'shield', 'fire'];
+                const t = kinds[Math.floor(Math.random() * kinds.length)];
+                this.activePowerup = { type: t, tint: POWERUP_TINTS[t] || 0xffffff,
+                                       endTime: this.time.now + 12000 };
+            }
+        } catch (e) {}
         this.cheeseTotal = 0;
         this.cheeseGot = 0;
         // Combo state
@@ -453,6 +463,7 @@ export class DungeonScene extends Phaser.Scene {
         // Per-floor stealth tooling
         this.distractionBooks = 3;
         this.runAlarmCount = this.runAlarmCount || 0;
+        this._floorAlarmCount = 0;      // the sneak bonus is judged per floor, not per run
 
         // === BIOME BGM — looping OGG (the procedural synth tanked fps to ~2 on Pixel 9a).
         // The same track across floors of one biome keeps playing: playBgm no-ops on the same key.
@@ -2990,7 +3001,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     placePowerup(x, y, type) {
-        const tint  = { triple: 0xff70a0, speed: 0xfff060, shield: 0x60a0ff, fire: 0xff8030 }[type];
+        const tint  = POWERUP_TINTS[type];
         const sprite = this.add.image(x, y, POWERUP_ICON[type] || 'ui_bolt')
             .setDisplaySize(34, 34).setDepth(160);
         const glow = this.add.circle(x, y, 28, tint, 0.30).setDepth(159);
@@ -3372,6 +3383,7 @@ export class DungeonScene extends Phaser.Scene {
         if (!this._everAlarmedRooms) this._everAlarmedRooms = new Set();
         if (e.roomId !== undefined) { this._alarmedRooms.add(e.roomId); this._everAlarmedRooms.add(e.roomId); }
         this.runAlarmCount = (this.runAlarmCount || 0) + 1;
+        this._floorAlarmCount = (this._floorAlarmCount || 0) + 1;
         bus.emit(SFX.ALARM_TRIGGER);
         // Red camera flash — player feels "I'm caught"
         this.cameras.main.flash(280, 200, 30, 30);
@@ -6489,13 +6501,16 @@ export class DungeonScene extends Phaser.Scene {
         this.score += floorBonus;
         // Ghost-run bonus: 0 alarms AND biome had stealth rooms -> +cheese + score + log progress
         const hadStealth = (this.biome?.stealthRoomsPerFloor || 0) > 0;
-        if (hadStealth && (this.runAlarmCount || 0) === 0) {
+        if (hadStealth && (this._floorAlarmCount || 0) === 0) {
             const ghostCheese = 10 * this.chapter;
             this.runCheeseTotal = (this.runCheeseTotal || 0) + ghostCheese;
             this.score += 200;
             this.showFloatingText(this.player.x, this.player.y - 60, `Тихая лапка! +${ghostCheese}`, '#80ff80', 26, 'ui_cheese');
-            try { Progress.incrementGhostRuns(); } catch (e) {}
             bus.emit(SFX.GHOST_RUN);
+        }
+        // The achievement stays a whole-run feat — it is only counted when the run ends.
+        if (this.isFinalFloor && (this.runAlarmCount || 0) === 0) {
+            try { Progress.incrementGhostRuns(); } catch (e) {}
         }
         const totalScore = this.runScore + this.score;
 

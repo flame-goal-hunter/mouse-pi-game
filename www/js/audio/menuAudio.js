@@ -85,9 +85,10 @@ export function playMenuSound(name) {
 // Browsers block autoplay, so it starts on the player's first interaction and
 // obeys the same music/master/mute preferences as the game.
 // ============================================
-const BGM_KEY = 'hall';
+const BGM_KEY = 'throne';   // 'hall' is the kitchen floor's track — too familiar for the menu
 let _bgm = null;
 let _fade = null;
+let _started = false;
 
 function bgmVolume() {
     const p = safePrefs();
@@ -98,6 +99,19 @@ function bgmVolume() {
     return Math.max(0, Math.min(1, base * music * master));
 }
 
+function fadeTo(target) {
+    if (_fade) clearInterval(_fade);
+    const step = Math.max(0.005, target / 20);
+    _fade = setInterval(() => {                       // ~1 s fade-in, no sudden blast
+        const v = Math.min(target, (_bgm.volume || 0) + step);
+        _bgm.volume = v;
+        if (v >= target) { clearInterval(_fade); _fade = null; }
+    }, 50);
+}
+
+// Mirrors AudioManager._startEl: try to play straight away, and only fall back to
+// waiting for a gesture if the browser actually refuses. The old version never tried,
+// so the menu sat silent until you happened to tap something.
 export function startMenuMusic() {
     const target = bgmVolume();
     if (!_bgm) {
@@ -107,16 +121,12 @@ export function startMenuMusic() {
         _bgm.preload = 'auto';
         _bgm.volume = 0;
     }
-    if (target <= 0) { _bgm.pause(); return; }
-    const play = _bgm.play();
-    if (play && play.catch) play.catch(() => {});
-    if (_fade) clearInterval(_fade);
-    const step = target / 20;
-    _fade = setInterval(() => {                       // ~1 s fade-in, no sudden blast
-        const v = Math.min(target, (_bgm.volume || 0) + step);
-        _bgm.volume = v;
-        if (v >= target) { clearInterval(_fade); _fade = null; }
-    }, 50);
+    if (target <= 0) { _bgm.pause(); return Promise.resolve(false); }
+    let pr = null;
+    try { pr = _bgm.play(); } catch (e) { return Promise.resolve(false); }
+    if (!pr || typeof pr.then !== 'function') { _started = true; fadeTo(target); return Promise.resolve(true); }
+    return pr.then(() => { _started = true; fadeTo(target); return true; })
+             .catch(() => false);
 }
 
 export function refreshMenuMusicVolume() {
@@ -127,15 +137,24 @@ export function refreshMenuMusicVolume() {
     if (target <= 0) _bgm.pause();
 }
 
-// Autoplay policy: the first touch/click/key anywhere is our permission to start.
 if (typeof window !== 'undefined') {
+    // The gesture hook is a fallback, and it stays armed until a play() actually
+    // resolves — dropping it after one blocked attempt meant silence for the whole
+    // session on a device that refuses the first try.
     const kick = () => {
-        startMenuMusic();
+        if (_started) { detach(); return; }
+        startMenuMusic().then((ok) => { if (ok) detach(); });
+    };
+    const detach = () => {
         window.removeEventListener('pointerdown', kick);
+        window.removeEventListener('touchstart', kick);
         window.removeEventListener('keydown', kick);
     };
-    window.addEventListener('pointerdown', kick, { once: false });
-    window.addEventListener('keydown', kick, { once: false });
-    // Leaving for a run: stop cleanly so the game's own music takes over.
-    window.addEventListener('pagehide', () => { if (_bgm) { _bgm.pause(); } });
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('touchstart', kick);
+    window.addEventListener('keydown', kick);
+    // Try immediately: in the Capacitor WebView, and on an origin the browser already
+    // trusts, this succeeds and the menu has music the moment it opens.
+    startMenuMusic().then((ok) => { if (ok) detach(); });
+    window.addEventListener('pagehide', () => { if (_bgm) _bgm.pause(); });
 }
