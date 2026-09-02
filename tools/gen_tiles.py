@@ -76,7 +76,7 @@ def parse_biomes(src):
     return biomes
 
 
-def _stone_quarter(fill, grid, q):
+def _stone_quarter(fill, grid, q, seam_on=True):
     """Default: an 80x80 bevelled stone plate, split into 40x40 quarters."""
     light = mix(fill, 0xffffff, 0.24)
     dark = mix(fill, 0x000000, 0.22)
@@ -91,10 +91,14 @@ def _stone_quarter(fill, grid, q):
         parts.append(f'<rect x="0" y="{T-3}" width="{T}" height="2" fill="{dark}" opacity="0.6"/>')
     if q in ('TR', 'BR'):
         parts.append(f'<rect x="{T-3}" y="0" width="2" height="{T}" fill="{dark}" opacity="0.5"/>')
-    if q in ('TL', 'TR'):
-        parts.append(f'<rect x="0" y="0" width="{T}" height="1" fill="{seam}" opacity="0.7"/>')
-    if q in ('TL', 'BL'):
-        parts.append(f'<rect x="0" y="0" width="1" height="{T}" fill="{seam}" opacity="0.7"/>')
+    # Finding 17 — the most harmful visual defect in the registry: every plate drew its
+    # own edge seam, so a seam landed on every cell and the floor read as a ruled table.
+    # Only the A plate seams, and softly; B is seamless, so the two break the grid up.
+    if seam_on:
+        if q in ('TL', 'TR'):
+            parts.append(f'<rect x="0" y="0" width="{T}" height="1" fill="{seam}" opacity="0.34"/>')
+        if q in ('TL', 'BL'):
+            parts.append(f'<rect x="0" y="0" width="1" height="{T}" fill="{seam}" opacity="0.34"/>')
     spots = {'TL': [(12, 27, 1.4), (29, 9, 1.0)], 'TR': [(9, 14, 1.2), (24, 31, 1.5)],
              'BL': [(27, 12, 1.1), (14, 24, 1.4)], 'BR': [(8, 30, 1.0), (30, 20, 1.3)]}[q]
     for (x, y, r) in spots:
@@ -179,8 +183,12 @@ FLOOR_STYLE = {'kitchen': _tile_quarter, 'library': _plank_quarter,
                'garden': _flag_quarter, 'throne': _marble_quarter}
 
 
-def plate_quarter(fill, grid, q, biome='dungeon'):
-    return FLOOR_STYLE.get(biome, _stone_quarter)(fill, grid, q)
+def plate_quarter(fill, grid, q, biome='dungeon', seam_on=True):
+    fn = FLOOR_STYLE.get(biome, _stone_quarter)
+    try:
+        return fn(fill, grid, q, seam_on)
+    except TypeError:
+        return fn(fill, grid, q)
 
 
 def fill_hex(v):
@@ -318,9 +326,9 @@ def weak_crack():
 
 def build_sheet(b):
     tiles = []
-    for fill in (b['floorA'], b['floorB']):
+    for plate, fill in enumerate((b['floorA'], b['floorB'])):
         for q in ('TL', 'TR', 'BL', 'BR'):
-            tiles.append(plate_quarter(fill, b['grid'], q, b['id']))
+            tiles.append(plate_quarter(fill, b['grid'], q, b['id'], seam_on=(plate == 0)))
     tiles.append(crack(b['grid']))
     tiles.append(pebbles(b['grid']))
     for cap, skirt in ((False, False), (True, False), (False, True), (True, True)):

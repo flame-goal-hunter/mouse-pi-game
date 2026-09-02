@@ -12,6 +12,14 @@ import { RELICS, pickRandomRelics, relicById, RARITY_COLORS } from './Relics.js'
 
 const RARITY_NAMES = { common: 'ОБЫЧНАЯ', rare: 'РЕДКАЯ', legendary: 'ЛЕГЕНДАРНАЯ' };
 
+// Blend two 0xRRGGBB ints toward the second by t.
+function mixHex(c, target, t) {
+    const r = Math.round(((c >> 16) & 255) * (1 - t) + ((target >> 16) & 255) * t);
+    const g = Math.round(((c >> 8) & 255) * (1 - t) + ((target >> 8) & 255) * t);
+    const b = Math.round((c & 255) * (1 - t) + (target & 255) * t);
+    return (r << 16) | (g << 8) | b;
+}
+
 // What a floor asks of the player. Floor 1 and the story finale stay on the key so the
 // tutorial and the climax are predictable; everything between varies.
 const FLOOR_GOALS = {
@@ -631,7 +639,10 @@ export class DungeonScene extends Phaser.Scene {
             const cam = this.cameras.main, k = 1 / (this.dpr * this.dpr), origShake = cam.shake;
             cam.shake = (duration, intensity, ...rest) => origShake.call(cam, duration, (intensity == null ? 0.05 : intensity) * k, ...rest);
         }
-        this.cameras.main.setBackgroundColor(0x000000);
+        // Not pure black: the void beyond the rooms should read as unlit castle, not as
+        // the end of the world (finding 23 — up to a third of the frame was nothing).
+        const voidTint = (this.biome && this.biome.darknessColor) || 0x120a20;
+        this.cameras.main.setBackgroundColor(mixHex(voidTint, 0x000000, 0.55));
         this.cameras.main.startFollow(this.player.sprite, true, 0.10, 0.10);
         this.cameras.main.fadeIn(400, 0, 0, 0);
 
@@ -2037,16 +2048,34 @@ export class DungeonScene extends Phaser.Scene {
             const area = room.w * room.h;
             const propCount = Math.max(5, Math.min(14, Math.round(area / 20000)))
                             + (this.biome.id === 'library' ? 1 : 0);
-            for (let i = 0; i < propCount; i++) {
-                const x = Phaser.Math.Between(room.x + 60, room.x + room.w - 60);
-                const y = Phaser.Math.Between(room.y + 60, room.y + room.h - 60);
-                const gc = Math.floor(x / NAV_CELL);
-                const gr = Math.floor(y / NAV_CELL);
-                if (this.navGrid[gr]?.[gc] !== 'floor') continue;
-                if (this.pointInWalls(x, y, 18)) continue;   // keep prop bodies off the brick edge
-                if (this.biomeTiles.some(t => Math.hypot(t.x - x, t.y - y) < t.radius + 18)) continue;   // not under a puddle/patch
-                const type = pickDecor(this.biome.decorWeights);
-                if (type) this.drawDecor(x, y, type);
+            // Anchors: corners and wall runs first, open floor only as a fallback.
+            const M = 64;
+            const anchors = [
+                { x: room.x + M, y: room.y + M }, { x: room.x + room.w - M, y: room.y + M },
+                { x: room.x + M, y: room.y + room.h - M }, { x: room.x + room.w - M, y: room.y + room.h - M },
+                { x: room.x + room.w * 0.5, y: room.y + M }, { x: room.x + room.w * 0.5, y: room.y + room.h - M },
+                { x: room.x + M, y: room.y + room.h * 0.5 }, { x: room.x + room.w - M, y: room.y + room.h * 0.5 },
+            ];
+            Phaser.Utils.Array.Shuffle(anchors);
+            const free = (x, y) => {
+                const gc = Math.floor(x / NAV_CELL), gr = Math.floor(y / NAV_CELL);
+                if (this.navGrid[gr]?.[gc] !== 'floor') return false;
+                if (this.pointInWalls(x, y, 18)) return false;
+                return !this.biomeTiles.some(t => Math.hypot(t.x - x, t.y - y) < t.radius + 18);
+            };
+            let propsPlaced = 0, ai = 0;
+            while (propsPlaced < propCount && ai < anchors.length * 3) {
+                const a = anchors[ai % anchors.length];
+                ai++;
+                // A cluster of two or three, scattered tightly around the anchor
+                const cluster = Math.min(propCount - propsPlaced, Phaser.Math.Between(2, 3));
+                for (let k = 0; k < cluster; k++) {
+                    const x = a.x + Phaser.Math.Between(-30, 30);
+                    const y = a.y + Phaser.Math.Between(-24, 24);
+                    if (!free(x, y)) continue;
+                    const type = pickDecor(this.biome.decorWeights);
+                    if (type) { this.drawDecor(x, y, type); propsPlaced++; }
+                }
             }
         }
         // NO corridor torches — only wall-attached ones in rooms (per user request)
