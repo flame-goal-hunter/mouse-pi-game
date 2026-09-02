@@ -15,7 +15,7 @@ import { positionAt } from '../sneak/PatrolCycle.js';
 import { cheeseOnCapture, nightReward } from '../sneak/SneakEconomy.js';
 
 const CELL = SNEAK.CELL;
-const DEPTH = { FLOOR: 10, PROP: 40, HOLE: 45, PLAYER: 60, MONSTER: 62, CONE: 55, HUD: 900 };
+const DEPTH = { FLOOR: 10, FLOOR_MARK: 14, PROP: 40, HOLE: 45, PLAYER: 60, MONSTER: 62, CONE: 55, HUD: 900 };
 
 export class SneakScene extends Phaser.Scene {
     constructor() { super({ key: 'SneakScene' }); }
@@ -61,6 +61,7 @@ export class SneakScene extends Phaser.Scene {
 
         this.drawRoom();
         this.setupCamera();
+        this.drawPatrolRoute();
         this.spawnPlayer();
         this.spawnMonster();
 
@@ -207,8 +208,9 @@ export class SneakScene extends Phaser.Scene {
         // Выход — последний элемент exits; вход это первый.
         const ex = this.tpl.exits[this.tpl.exits.length - 1];
         this.exitPoint = { x: (ex.x + 0.5) * CELL, y: (ex.y + 0.5) * CELL };
-        this.add.circle(this.exitPoint.x, this.exitPoint.y, CELL * 0.4, 0x80ff80, 0.35)
+        this.exitDisc = this.add.circle(this.exitPoint.x, this.exitPoint.y, CELL * 0.4, 0x80ff80, 0.35)
             .setDepth(DEPTH.PROP);
+        this.spawnPrize();
 
         // Реквизит: сыр и пироги подбираются, остальное декоративно.
         this.pickups = [];
@@ -222,15 +224,79 @@ export class SneakScene extends Phaser.Scene {
         }
     }
 
-    // Комната видна целиком — механика требует читать весь маршрут патруля.
+    // Finding 26: rooms had no goal but a green circle, so the honest verdict was
+    // 'просто мимо пробегаешь'. Every room holds a prize under the guard's nose and
+    // the way out stays shut until it is lifted.
+    spawnPrize() {
+        // The prize sits at the far end of the patrol route, or the corner furthest
+        // from the exit — guarded by construction either way.
+        let best = null, bestD = -1;
+        const cand = [];
+        if (Array.isArray(this.tpl.patrol)) {
+            for (const q of this.tpl.patrol) cand.push({ x: (q.x + 0.5) * CELL, y: (q.y + 0.5) * CELL });
+        }
+        for (let r = 0; r < this.tpl.grid.length; r++) {
+            const row = this.tpl.grid[r];
+            for (let c = 0; c < row.length; c++) {
+                if (row[c] === '.') cand.push({ x: (c + 0.5) * CELL, y: (r + 0.5) * CELL });
+            }
+        }
+        // Furthest from the exit is usually the entrance, i.e. where Pi is standing —
+        // he would pocket it on the first frame. Take the cell that is far from BOTH.
+        const en = this.tpl.exits[0];
+        const entry = { x: (en.x + 0.5) * CELL, y: (en.y + 0.5) * CELL };
+        for (const q of cand) {
+            const dExit = Math.hypot(q.x - this.exitPoint.x, q.y - this.exitPoint.y);
+            const dEntry = Math.hypot(q.x - entry.x, q.y - entry.y);
+            if (dEntry < CELL * 2.5) continue;             // never in Pi's lap
+            const d = Math.min(dExit, dEntry);
+            if (d > bestD) { bestD = d; best = q; }
+        }
+        if (!best) { this.prize = null; return; }
+        const glow = this.add.circle(best.x, best.y, 20, 0xffd040, 0.28).setDepth(DEPTH.PROP - 1);
+        const spr = this.add.image(best.x, best.y, 'd_cheese').setDisplaySize(30, 25).setDepth(DEPTH.PROP);
+        this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.1,
+            duration: 950, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        this.prize = { x: best.x, y: best.y, spr, glow, taken: false };
+        this.exitDisc.setFillStyle(0xff6060, 0.22);   // shut until the prize is lifted
+    }
+
+    // Камера идёт за Пи и не мельчит: маршрут патруля показан линией на полу,
+    // а не тем, что комната втиснута в экран целиком (находка 28 реестра).
     setupCamera() {
         const w = this.tpl.grid[0].length * CELL;
         const h = this.tpl.grid.length * CELL;
         const pad = 24;
-        const zoom = Math.min((this.viewW - pad * 2) / w, (this.viewH - pad * 2) / h, 1.6);
+        const fit = Math.min((this.viewW - pad * 2) / w, (this.viewH - pad * 2) / h, 1.6);
         const cam = this.cameras.main;
-        cam.setZoom(Math.max(0.5, zoom));
+        // Never below 1:1 — that is what made everything tiny on a phone.
+        cam.setZoom(Math.max(1.0, Math.min(1.6, fit * 1.6)));
+        cam.setBounds(0, 0, w, h);
         cam.centerOn(w / 2, h / 2);
+        this._camReady = true;
+    }
+
+    // The patrol route, drawn once as a dotted trail with a marker at each turn, so a
+    // player can still read where the guard will be without zooming the world out.
+    drawPatrolRoute() {
+        if (!this.tpl.patrol || this.tpl.patrol.length < 2) return;
+        const g = this.add.graphics().setDepth(DEPTH.FLOOR_MARK ?? 1);
+        g.setAlpha(0.5);
+        const pts = this.tpl.patrol.map(p => ({ x: (p.x + 0.5) * CELL, y: (p.y + 0.5) * CELL }));
+        for (let i = 0; i < pts.length; i++) {
+            const a = pts[i], b = pts[(i + 1) % pts.length];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const dots = Math.max(1, Math.round(len / 22));
+            for (let k = 0; k < dots; k++) {
+                const t = k / dots;
+                g.fillStyle(0xe8b54a, 0.55);
+                g.fillCircle(a.x + dx * t, a.y + dy * t, 2.4);
+            }
+            g.fillStyle(0xe8b54a, 0.9);
+            g.fillCircle(a.x, a.y, 5);
+        }
+        this.patrolRouteGfx = g;
     }
 
     spawnPlayer() {
@@ -238,6 +304,7 @@ export class SneakScene extends Phaser.Scene {
         const py = (this.tpl.entry.y + 0.5) * CELL;
         this.player = { x: px, y: py, vx: 0, vy: 0, hidden: false };
         this.player.sprite = this.add.image(px, py, 'd_pi').setDepth(DEPTH.PLAYER).setScale(0.32);
+        if (this._camReady) this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     }
 
     spawnMonster() {
@@ -274,6 +341,7 @@ export class SneakScene extends Phaser.Scene {
     updateHoleHold(dt, actionDown) {
         if (!actionDown) this.holdArmed = true;
         const near = this.nearestHole();
+        this._showHoleHint(near, actionDown);
         if (!near || !actionDown || this.player.hidden || !this.holdArmed) {
             this.holdMs = 0;
             if (this.holdRing) { this.holdRing.destroy(); this.holdRing = null; }
@@ -361,6 +429,27 @@ export class SneakScene extends Phaser.Scene {
         });
     }
 
+    // A prompt at the mouth of a hole: nothing told the player it is a hold, not a tap.
+    _showHoleHint(near, actionDown) {
+        if (!near || this.player.hidden) {
+            if (this.holeHint) { this.holeHint.destroy(); this.holeHint = null; this._hintFor = null; }
+            return;
+        }
+        if (this.holeHint && this._hintFor === near) {
+            this.holeHint.setAlpha(actionDown ? 0.35 : 1);
+            return;
+        }
+        if (this.holeHint) this.holeHint.destroy();
+        this._hintFor = near;
+        this.holeHint = this.add.text(near.x, near.y - CELL * 0.75, 'ДЕРЖИ', {
+            fontFamily: '"Nunito", sans-serif', fontStyle: '900', fontSize: '15px',
+            color: '#1a0c2e', backgroundColor: '#e8b54a', padding: { x: 7, y: 3 },
+        }).setOrigin(0.5, 1).setDepth(DEPTH.HUD);
+        this.uiCam.ignore(this.holeHint);
+        this.tweens.add({ targets: this.holeHint, y: near.y - CELL * 0.95,
+            duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+
     pieLanded(x, y) {
         const m = this.monster;
         // Роль 1: попадание в монстра — ослепление.
@@ -368,7 +457,8 @@ export class SneakScene extends Phaser.Scene {
             m.state = 'confused';
             m.confusedUntil = this.time.now + SNEAK.PIE_BLIND_MS;
             m.suspicion = 0;
-            this.showFloatingText(m.x, m.y - 40, 'ой!', '#ffd040');
+            this.showFloatingText(m.x, m.y - 40, 'НИЧЕГО НЕ ВИДНО!', '#ffd040');
+            this._markBlinded(m);
             return;
         }
         // Роль 2: попадание в стену или пол — шум, монстр идёт на звук.
@@ -377,11 +467,39 @@ export class SneakScene extends Phaser.Scene {
             m.noiseX = x;
             m.noiseY = y;
             m.noiseUntil = this.time.now + SNEAK.PIE_NOISE_MS;
-            this.showFloatingText(x, y, '?', '#ffffff');
+            this.showFloatingText(x, y - 20, 'ШУМ — он пойдёт сюда', '#ffffff');
+            this._markNoise(x, y);
         }
     }
 
     // Роль 3: удержание кнопки броска — съесть пирог, снять одышку.
+    // A badge over a blinded guard, and a ring where the noise landed: without them
+    // the pie's three jobs are invisible.
+    _markBlinded(m) {
+        const b = this.add.text(m.x, m.y - 58, '✖ ✖', {
+            fontFamily: '"Nunito", sans-serif', fontStyle: '900', fontSize: '16px', color: '#ffd040',
+        }).setOrigin(0.5).setDepth(DEPTH.HUD);
+        this.uiCam.ignore(b);
+        const until = m.confusedUntil;
+        const tick = this.time.addEvent({ delay: 60, loop: true, callback: () => {
+            if (!b.scene) { tick.remove(); return; }
+            b.setPosition(m.x, m.y - 58);
+            if (this.time.now > until || m.state !== 'confused') { b.destroy(); tick.remove(); }
+        }});
+    }
+
+    _markNoise(x, y) {
+        const g = this.add.graphics().setDepth(DEPTH.FLOOR_MARK);
+        this.uiCam.ignore(g);
+        g.lineStyle(3, 0xffffff, 0.8);
+        g.strokeCircle(x, y, CELL * 0.3);
+        this.tweens.add({ targets: g, alpha: 0, duration: SNEAK.PIE_NOISE_MS,
+            onComplete: () => g.destroy() });
+        this.tweens.add({ targets: { r: 0 }, r: 1, duration: 600, repeat: 1,
+            onUpdate: (tw, t) => { g.clear(); g.lineStyle(3, 0xffffff, 0.8 * (1 - t.r));
+                g.strokeCircle(x, y, CELL * (0.3 + t.r * 0.5)); } });
+    }
+
     eatPie() {
         if (this.pies <= 0 || !this.winded) {
             if (!this.winded) this.showFloatingText(this.player.x, this.player.y - 30, 'не хочу', '#a090b8');
@@ -419,8 +537,8 @@ export class SneakScene extends Phaser.Scene {
                 m.angle = Math.atan2(dy, dx);
                 const step = this.tpl.patrolSpeed * dt;
                 if (d > step) {
-                    m.x += (dx / d) * step;
-                    m.y += (dy / d) * step;
+                    // The 'heading for the noise' branch ignored walls too
+                    this.moveMonsterBy(m, (dx / d) * step, (dy / d) * step);
                 } else {
                     m.x = target.x; m.y = target.y;
                 }
@@ -469,8 +587,17 @@ export class SneakScene extends Phaser.Scene {
         const maxTurn = (Math.PI / (SNEAK.TURN_BRAKE_MS / 1000)) * dt;
         m.angle += Math.max(-maxTurn, Math.min(maxTurn, delta));
 
-        m.x += Math.cos(m.angle) * speed * dt;
-        m.y += Math.sin(m.angle) * speed * dt;
+        this.moveMonsterBy(m, Math.cos(m.angle) * speed * dt, Math.sin(m.angle) * speed * dt);
+    }
+
+    // The monster gets the same wall check the player has had all along.
+    moveMonsterBy(m, dx, dy) {
+        const nx = m.x + dx, ny = m.y + dy;
+        const cyOld = Math.floor(m.y / CELL);
+        if (isFloor(this.tpl, Math.floor(nx / CELL), cyOld)) m.x = nx;
+        const cxNew = Math.floor(m.x / CELL);
+        if (isFloor(this.tpl, cxNew, Math.floor(ny / CELL))) m.y = ny;
+        if (m.sprite) m.sprite.setPosition(m.x, m.y);
     }
 
     drawCone() {
@@ -604,6 +731,16 @@ export class SneakScene extends Phaser.Scene {
                 this.showFloatingText(p.x, p.y, '+1 \u{1F967}', '#f0c060');
             }
         }
+        if (this.prize && !this.prize.taken) {
+            if (Math.hypot(this.prize.x - this.player.x, this.prize.y - this.player.y) < CELL * 0.6) {
+                this.prize.taken = true;
+                this.cheeseThisNight += 12;
+                this.prize.spr.destroy(); this.prize.glow.destroy();
+                this.showFloatingText(this.prize.x, this.prize.y - 30, 'ДОБЫЧА! Теперь к выходу', '#ffd040');
+                this.exitDisc.setFillStyle(0x80ff80, 0.35);
+            }
+        }
+        if (this.prize && !this.prize.taken) return;   // the way out stays shut
         if (Math.hypot(this.exitPoint.x - this.player.x, this.exitPoint.y - this.player.y) < CELL * 0.5) {
             this.nextRoom();
         }
