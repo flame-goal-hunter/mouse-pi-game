@@ -417,7 +417,11 @@ export class AudioManager {
         const id = String(name || '').replace(/^bgm:/, '');
         const key = BGM_FILES[name] ? name
             : (BIOME_BGM[id] || (id === 'menu' ? 'hall' : null));
-        if (!key) return;
+        if (!key) {
+            // No file for this biome — it has a procedural preset of its own instead.
+            if (BGM_PRESETS[id]) this.playBgmPreset(id);
+            return;
+        }
         const el = this._bgmElement(key);
         if (!el) {
             // No such track — keep the floor from being silent with the procedural preset

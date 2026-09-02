@@ -277,6 +277,8 @@ export class DungeonScene extends Phaser.Scene {
         this.floorMod = null;
         this._keyIconHas = undefined;
         this._crouchIconOn = undefined;
+        this._objectiveBelow = undefined;
+        this._speechBubbles = [];
         this._backGuardOn = false;
         this._heartbeatNext = 0;
         // Relic effects are re-applied below from collectedRelics — clear them first or
@@ -365,6 +367,7 @@ export class DungeonScene extends Phaser.Scene {
             this.load.svg('skin_' + safeId + '_w2_b',  backBase + k + '-walk2.svg',   { width: 150, height: 172 });
         }
         this.load.svg('d_zombie',   base + 'zombie.svg',   { width: 180, height: 210 });
+        this.load.svg('d_count',    base + 'count.svg',    { width: 200, height: 234 });
         this.load.svg('d_cat',      base + 'cat.svg',      { width: 165, height: 150 });
         this.load.svg('d_slime',    base + 'slime.svg',    { width: 180, height: 135 });
         this.load.svg('d_cheese',   base + 'cheese.svg',   { width: 48,  height: 40 });
@@ -3831,14 +3834,15 @@ export class DungeonScene extends Phaser.Scene {
         const def = ENEMY_DEFS[kind];
         // New biome enemies reuse existing sprites with tints
         let spriteKey;
-        if (kind === 'boss' || kind === 'guard') spriteKey = 'd_zombie';
+        if (kind === 'boss') spriteKey = 'd_count';
+        else if (kind === 'guard') spriteKey = 'd_zombie';
         else if (kind === 'chef') spriteKey = 'd_cat';            // chef-cat — tinted white
         else if (kind === 'librarian') spriteKey = 'd_zombie';    // tinted bronze
         else if (kind === 'snapdragon') spriteKey = 'd_slime';    // tinted magenta
         else spriteKey = 'd_' + kind;
         const sprite = this.add.image(x, y, spriteKey)
             .setOrigin(0.5, 0.5).setScale(def.scale).setDepth(190);
-        if (kind === 'boss') sprite.setTint(0xc080ff);
+        if (kind === 'boss') sprite.clearTint();   // the Count has his own art now
         if (kind === 'ghost') sprite.setAlpha(0.4);
         if (kind === 'chef') sprite.setTint(0xffe0c0);
         if (kind === 'librarian') sprite.setTint(0xc88060);
@@ -3946,7 +3950,7 @@ export class DungeonScene extends Phaser.Scene {
                 e.hurtTimer -= dt * 1000;
                 e.sprite.setTint(0xff8080);
             } else {
-                if (e.kind === 'boss') e.sprite.setTint(0xc080ff);
+                if (e.kind === 'boss') e.sprite.clearTint();
                 else e.sprite.clearTint();
             }
         }
@@ -5175,6 +5179,19 @@ export class DungeonScene extends Phaser.Scene {
         this.tweens.add({ targets: this.exit.glow, alpha: 0.30, duration: 600 });
     }
 
+    // Everything the run was drawing over the world goes away when a result panel opens.
+    _clearSpeech() {
+        for (const t of (this._speechBubbles || [])) { if (t && t.scene) t.destroy(); }
+        this._speechBubbles = [];
+        this._setHudVisible(false);
+        if (this.bossBarBg) {
+            this._bossBarShown = 0;
+            this.bossBarBg.setVisible(false);
+            this.bossBarFill.setVisible(false);
+            this.bossBarName.setVisible(false);
+        }
+    }
+
     _speak(x, y, text, color = '#fff8e0', ms = 2600) {
         const t = this.add.text(x, y, text, {
             fontFamily: UI_F.body, fontStyle: '700', fontSize: '17px',
@@ -5182,6 +5199,7 @@ export class DungeonScene extends Phaser.Scene {
             padding: { x: 12, y: 7 }, align: 'center',
             wordWrap: { width: 420 }
         }).setOrigin(0.5, 1).setDepth(LAYER.UI_COMPASS_LABEL).setAlpha(0);
+        (this._speechBubbles = this._speechBubbles || []).push(t);
         this.tweens.add({ targets: t, alpha: 1, y: y - 10, duration: 220, ease: 'Back.easeOut' });
         this.time.delayedCall(ms, () => {
             if (!t.scene) return;
@@ -6570,6 +6588,17 @@ export class DungeonScene extends Phaser.Scene {
         else if (this._bossBarShown) t = 'Победи графа';
         else if (!this.hasKey) t = 'Найди ключ';
         else t = 'Иди к лестнице вниз';
+        // The boss bar owns the band under the counter while a fight is on — drop the
+        // objective below it instead of printing the two on top of each other.
+        const below = this._bossBarShown && this._bossBar
+            ? this._bossBar.y + this._bossBar.h + 6
+            : null;
+        if (this._objectiveBelow !== below) {
+            this._objectiveBelow = below;
+            const L = this._hudLayout;
+            const base = L ? Math.round(L.cheese.textY + L.cheese.fontSize * 0.8) : 40;
+            this.objectiveText.setY(below != null ? Math.round(below) : base);
+        }
         if (this._objectiveWas === t) return;
         this._objectiveWas = t;
         this.objectiveText.setText(t);
@@ -6696,6 +6725,7 @@ export class DungeonScene extends Phaser.Scene {
             this.powerupIcon, this.powerupText, this.suspicionMeter, this.suspicionLabel,
             this.bookCounterIcon, this.bookCounterText, this.crouchIcon, this.exitBtnBg, this.exitBtn,
             this.crouchBtnBase, this.crouchBtnLabel, this.bookBtnBase, this.bookBtnLabel,
+            this.objectiveText,
             this.pauseBtnBg, this.pauseBtn, this.pauseHit,
         ];
         for (const o of objs) if (o) o.setVisible(v);
@@ -6724,6 +6754,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this.state !== 'play') return;
         this.state = 'won';
         this.setTouchUIVisible(false);
+        this._clearSpeech();
         const bonus = this.player.hp * 25;
         this.score += bonus;
         // Per-floor completion bonus + cheese
@@ -6755,7 +6786,7 @@ export class DungeonScene extends Phaser.Scene {
                 'Бабушка режет пирог. Граф — в бумажном колпаке.\n' +
                 'Он говорит, это его первый день рождения.\n' +
                 'Конец... до следующего пирога.',
-                0xffd040, ['d_grandma', this._heroKey(), 'd_zombie'],
+                0xffd040, ['d_grandma', this._heroKey(), 'd_count'],
                 'ИГРАТЬ ЗАНОВО',
                 () => this.scene.start('DungeonScene', { runMode: 'story', chapter: 1 }),
                 'В ЛАВКУ',
@@ -7753,6 +7784,7 @@ export class DungeonScene extends Phaser.Scene {
         }
         this.state = 'lost';
         this.setTouchUIVisible(false);
+        this._clearSpeech();
         bus.emit(SFX.PLAYER_DEATH);
         // Endless: full bank of run cheese (it's a separate "deposit on death" model since no boss caps the run)
         // Story: half-cheese rescue
