@@ -89,6 +89,7 @@ const BGM_KEY = 'throne';   // 'hall' is the kitchen floor's track — too famil
 let _bgm = null;
 let _fade = null;
 let _started = false;
+let _suspended = false;   // paused because the app went to the background
 
 function bgmVolume() {
     const p = safePrefs();
@@ -157,6 +158,7 @@ if (typeof window !== 'undefined') {
     // costs one paused check a second and stops asking once the track is running.
     let ticks = 0;
     const watchdog = setInterval(() => {
+        if (document.hidden || _suspended) return;    // backgrounded: do not fight the pause
         if (bgmVolume() <= 0) return;                 // muted on purpose: leave it alone
         if (_bgm && !_bgm.paused) { _started = true; return; }
         if (++ticks > 600) { clearInterval(watchdog); return; }   // give up after 10 min
@@ -167,6 +169,12 @@ if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', () => { if (_bgm) { try { _bgm.pause(); } catch (e) {} } });
     // Coming back to the menu from the game: resume rather than stay silent.
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && _bgm && _bgm.paused) attempt();
+        if (document.hidden) {
+            _suspended = !!(_bgm && !_bgm.paused);
+            if (_bgm) { try { _bgm.pause(); } catch (e) {} }
+            return;
+        }
+        if (_suspended) { _suspended = false; attempt(); }
+        else if (_bgm && _bgm.paused) attempt();
     });
 }
