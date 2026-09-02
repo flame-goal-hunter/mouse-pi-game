@@ -124,6 +124,8 @@ const PLAYER = {
     maxHp: 5,
     invulnMs: 900,
     fireCooldownMs: 260,
+    clipSize: 6,            // pies in a row before Pi has to dig out more
+    reloadMs: 1100,
     // Dash — fast directional rush with brief invulnerability
     dashSpeed: 780,
     dashDurationMs: 200,
@@ -251,8 +253,8 @@ const UPGRADES = [
       apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.15; } },
     { id: 'damage',    cap: 2, icon: 'ui_flame', name: 'Острый пирог',    desc: 'Пирог бьёт сильнее',
       apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1; } },
-    { id: 'firerate',  cap: 2, icon: 'ui_target', name: 'Скорострел',      desc: 'Стреляешь чаще',
-      apply: (s) => { s.fireCdMul = (s.fireCdMul || 1) * 0.75; } },
+    { id: 'firerate',  cap: 2, icon: 'ui_target', name: 'Скорострел',      desc: 'Быстрее набирает пироги',
+      apply: (s) => { s.reloadMul = (s.reloadMul || 1) * 0.75; } },
     { id: 'piesize',   cap: 1, icon: 'd_pie', name: 'Большие пироги',  desc: 'Пироги больше — легче попасть',
       apply: (s) => { s.pieSizeMul = (s.pieSizeMul || 1) * 1.5; } },
     { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', name: 'Вампиризм',       desc: 'Иногда сердечко за врага',
@@ -306,6 +308,7 @@ export class DungeonScene extends Phaser.Scene {
         this.speedMul = 1;
         this.dashCdMul = 1;
         this.fireCdMul = 1;
+        this.reloadMul = 1;
         this.pieDmgBonus = this.runBookDmg || 0;   // books earned earlier in the run
         this.pieSizeMul = 1;
         this.cheeseMul = 1;
@@ -668,6 +671,7 @@ export class DungeonScene extends Phaser.Scene {
             }
         }
         if (this.crouchBtnBase && this.crouchBtnBase.visible) this.updateStealthButtons();
+        if (this.clipRing) this.updateClipRing();
         this.updateHUD();
         if (this.player.hp <= 0) this.lose();
     }
@@ -2365,6 +2369,8 @@ export class DungeonScene extends Phaser.Scene {
             facing: 1,
             invulnTimer: 0,
             fireTimer: 0,
+            clip: PLAYER.clipSize,
+            reloadTimer: 0,
             walkPhase: 0,
             speedRef: PLAYER.speed,
             aimAngle: 0,
@@ -2717,6 +2723,14 @@ export class DungeonScene extends Phaser.Scene {
             this.player.sprite.x += this._recoil.x;
             this.player.sprite.y += this._recoil.y;
         }
+        // Reload countdown — refills the clip; the fire ring draws from it
+        if (this.player.reloadTimer > 0) {
+            this.player.reloadTimer -= dt * 1000;
+            if (this.player.reloadTimer <= 0) {
+                this.player.reloadTimer = 0;
+                this.player.clip = PLAYER.clipSize;
+            }
+        }
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
         this.player.shadow.setDisplaySize(74 * (speed > 25 ? 1 + Math.cos(this.player.walkPhase * 2) * 0.05 : 1), 22);
         if (this.player.rim) {
@@ -2801,7 +2815,13 @@ export class DungeonScene extends Phaser.Scene {
 
     tryShoot() {
         if (this.player.fireTimer > 0) return;
-        this.player.fireTimer = PLAYER.fireCooldownMs * (this.fireCdMul || 1);
+        if (this.player.reloadTimer > 0) return;
+        this.player.fireTimer = PLAYER.fireCooldownMs;
+        this.player.clip -= 1;
+        if (this.player.clip <= 0) {
+            this.player.reloadTimer = PLAYER.reloadMs * (this.reloadMul || 1);
+            bus.emit(UI.BUTTON_BACK);
+        }
         bus.emit(SFX.FIRE_PIE);
         this._shotFeedback(this.player.aimAngle || 0);
         // Pie Storm relic — 5-way fan instead of triple-shot
@@ -6248,6 +6268,9 @@ export class DungeonScene extends Phaser.Scene {
         this.bookBtnLabel = this.add.image(0, 0, 'ui_book').setOrigin(0.5).setScrollFactor(0)
             .setDepth(LAYER.UI_TOUCH_LABEL).setDisplaySize(SR * 0.8, SR * 0.8);
         this._crouchBtnOn = undefined; this._bookBtnHas = undefined;
+        // Pie clip ring around the aim stick — pips left, and a sweep while reloading
+        this.clipRing = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_TOUCH_HINT);
+        this._clipDrawn = undefined;
 
         this.input.on('pointerdown', (p) => this.touchDown(this._cssPointer(p)));
         this.input.on('pointermove', (p) => this.touchMove(this._cssPointer(p)));
@@ -6313,6 +6336,47 @@ export class DungeonScene extends Phaser.Scene {
             this.bookBtn.x = cx; this.bookBtn.y = by;
             this.bookBtnBase.setPosition(cx, by);
             this.bookBtnLabel.setPosition(cx, by);
+        }
+    }
+
+    // Pies left, drawn on the aim stick's own rim: full pips while you have them, a
+    // sweep filling back up while Pi digs out more.
+    updateClipRing() {
+        const st = this.aimStick;
+        if (!st || !this.aimStickBase.visible) {
+            if (this._clipDrawn !== null) { this.clipRing.clear(); this._clipDrawn = null; }
+            return;
+        }
+        const clip = Math.max(0, this.player ? this.player.clip : PLAYER.clipSize);
+        const rl = this.player ? this.player.reloadTimer : 0;
+        const full = PLAYER.reloadMs * (this.reloadMul || 1);
+        const prog = rl > 0 ? Math.max(0, Math.min(1, 1 - rl / full)) : 1;
+        const key = `${clip}|${Math.round(prog * 24)}|${Math.round(st.baseX)}|${Math.round(st.baseY)}`;
+        if (this._clipDrawn === key) return;
+        this._clipDrawn = key;
+        const g = this.clipRing;
+        const R = st.R + 9, cx = st.baseX, cy = st.baseY;
+        g.clear();
+        if (rl > 0) {
+            g.lineStyle(4, 0x6a5a8a, 0.55);
+            g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.strokePath();
+            g.lineStyle(4, 0xe8b54a, 0.95);
+            g.beginPath();
+            g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * prog);
+            g.strokePath();
+            return;
+        }
+        // Pips arc toward the middle of the screen — the stick lives in a corner, so a
+        // ring centred on the top would push half of them off the edge.
+        const N = PLAYER.clipSize, span = Math.PI * 0.85;
+        const mid = Math.atan2(this.viewH / 2 - cy, this.viewW / 2 - cx);
+        const start = mid - span / 2;
+        for (let i = 0; i < N; i++) {
+            const a = start + (N === 1 ? 0 : (i / (N - 1)) * span);
+            const px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R;
+            const has = i < clip;
+            g.fillStyle(has ? 0xf6d77a : 0x4a3a63, has ? 0.95 : 0.6);
+            g.fillCircle(px, py, has ? 3.6 : 2.6);
         }
     }
 
@@ -6791,7 +6855,8 @@ export class DungeonScene extends Phaser.Scene {
             this.joyBase, this.joyHints, this.joyKnob,
             this.aimStickBase, this.aimStickHint, this.aimStickKnob,
             this.dashBtnBase, this.dashBtnCdArc, this.dashBtnLabel,
-            this.crouchBtnBase, this.crouchBtnLabel, this.bookBtnBase, this.bookBtnLabel
+            this.crouchBtnBase, this.crouchBtnLabel, this.bookBtnBase, this.bookBtnLabel,
+            this.clipRing
         ];
         for (const it of items) if (it) it.setVisible(visible);
         // Force-clear stick state when hiding so a stale touch can't drive Pi after we transition away
