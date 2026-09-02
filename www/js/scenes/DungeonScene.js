@@ -679,6 +679,22 @@ export class DungeonScene extends Phaser.Scene {
         this.player.aimAngle = 0;
     }
 
+    // Soft contact shadow — a drawn ellipse has a crisp rim and reads as a sticker.
+    // Separate from createLightTextures because the spawners run before that.
+    _ensureShadowTexture() {
+        if (this.textures.exists('softShadow')) return;
+        const d = 128;
+        const cv = this.textures.createCanvas('softShadow', d, d);
+        const c2 = cv.context;
+        const g2 = c2.createRadialGradient(d / 2, d / 2, 0, d / 2, d / 2, d / 2);
+        g2.addColorStop(0.00, 'rgba(0,0,0,0.62)');
+        g2.addColorStop(0.55, 'rgba(0,0,0,0.34)');
+        g2.addColorStop(1.00, 'rgba(0,0,0,0)');
+        c2.fillStyle = g2;
+        c2.fillRect(0, 0, d, d);
+        cv.refresh();
+    }
+
     createLightTextures() {
         // RADIAL gradient — for torches and Pi's ambient halo (256x256 for perf)
         if (!this.textures.exists('lightRadial')) {
@@ -714,6 +730,17 @@ export class DungeonScene extends Phaser.Scene {
             ctx.lineTo(w, h);
             ctx.closePath();
             ctx.fill();
+            // Feather the two straight edges — a beam with a drawn border reads as a
+            // rendering artifact, not as light.
+            const edge = ctx.createLinearGradient(0, 0, 0, h);
+            edge.addColorStop(0.00, 'rgba(0,0,0,0)');
+            edge.addColorStop(0.22, 'rgba(0,0,0,1)');
+            edge.addColorStop(0.78, 'rgba(0,0,0,1)');
+            edge.addColorStop(1.00, 'rgba(0,0,0,0)');
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.fillStyle = edge;
+            ctx.fillRect(0, 0, w, h);
+            ctx.globalCompositeOperation = 'source-over';
             canvas.refresh();
         }
     }
@@ -2281,14 +2308,21 @@ export class DungeonScene extends Phaser.Scene {
     // PLAYER
     // =================================================================
     spawnPlayer() {
+        this._ensureShadowTexture();
         // Spawn at center of first room
         const room = this.dungeon.rooms[0];
         const start = { x: room.x + room.w / 2, y: room.y + room.h / 2 };
         const sprite = this.add.image(start.x, start.y, 'd_pi')
             .setOrigin(0.5, 0.5).setScale(0.34).setDepth(200);
-        const shadow = this.add.ellipse(start.x, start.y + 32, 60, 14, 0x000000, 0.5).setDepth(199);
+        const shadow = this.add.image(start.x, start.y + 32, 'softShadow')
+            .setDisplaySize(74, 22).setDepth(199);
+        // 30. A blue mouse on a blue-grey floor is hard to find. A faint rim copy behind
+        // him lifts the silhouette off every biome without touching the daughter's art.
+        const rim = this.add.image(start.x, start.y, 'd_pi')
+            .setOrigin(0.5, 0.5).setScale(0.34 * 1.09).setDepth(199.5)
+            .setTint(0xfff0d0).setAlpha(0.30);
         this.player = {
-            sprite, shadow,
+            sprite, shadow, rim,
             x: start.x, y: start.y,
             vx: 0, vy: 0,
             hp: this.maxHp,
@@ -2643,7 +2677,14 @@ export class DungeonScene extends Phaser.Scene {
             this._stepDust(this.player.x, this.player.y + 28, this.player.facing || 1);
         }
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
-        this.player.shadow.setScale(speed > 25 ? 1 + Math.cos(this.player.walkPhase * 2) * 0.05 : 1, 1);
+        this.player.shadow.setDisplaySize(74 * (speed > 25 ? 1 + Math.cos(this.player.walkPhase * 2) * 0.05 : 1), 22);
+        if (this.player.rim) {
+            this.player.rim.setPosition(this.player.sprite.x, this.player.sprite.y);
+            this.player.rim.setTexture(this.player.sprite.texture.key);
+            this.player.rim.setScale(this.player.sprite.scaleX * 1.09, this.player.sprite.scaleY * 1.09);
+            this.player.rim.setFlipX(this.player.sprite.flipX);
+            this.player.rim.setAlpha(0.30 * this.player.sprite.alpha);   // follow the invuln flicker
+        }
 
         if (this.player.invulnTimer > 0) {
             this.player.invulnTimer -= dt * 1000;
@@ -3717,19 +3758,27 @@ export class DungeonScene extends Phaser.Scene {
             if (sus > 0.5) e._wasAlarmedSprite = true;
         }
         const steps = 10;
-        g.fillStyle(color, alpha);
-        g.lineStyle(2, color, 0.50);
-        g.beginPath();
-        g.moveTo(x, y);
+        // Ray lengths are the expensive part — cast once and reuse for every layer.
+        const lens = [];
         for (let i = 0; i <= steps; i++) {
-            const t = i / steps;
-            const ang = a - half + half * 2 * t;
-            const len = this.castRay(x, y, ang, range);
-            g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+            const ang = a - half + half * 2 * (i / steps);
+            lens.push(this.castRay(x, y, ang, range));
         }
-        g.closePath();
-        g.fillPath();
-        g.strokePath();
+        // Brightest at the eye, fading outward: three nested wedges instead of one flat
+        // slab with a drawn border.
+        const LAYERS = [[1.00, 0.42], [0.66, 0.34], [0.33, 0.24]];
+        for (const [reach, share] of LAYERS) {
+            g.fillStyle(color, alpha * share);
+            g.beginPath();
+            g.moveTo(x, y);
+            for (let i = 0; i <= steps; i++) {
+                const ang = a - half + half * 2 * (i / steps);
+                const len = lens[i] * reach;
+                g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+            }
+            g.closePath();
+            g.fillPath();
+        }
     }
 
     castRay(x, y, angle, maxLen) {
@@ -3774,6 +3823,7 @@ export class DungeonScene extends Phaser.Scene {
         if (kind === 'snapdragon') sprite.setTint(0xff60c0);
         // Mimic starts disguised as a chest (kept below)
         // Mimic disguise — show a chest decoy over the sprite, hide real sprite until revealed
+        this._ensureShadowTexture();
         let mimicDecoy = null;
         if (kind === 'mimic') {
             sprite.setVisible(false);
@@ -3784,9 +3834,9 @@ export class DungeonScene extends Phaser.Scene {
         // NEW: only enemies in biome.coneEnemyKinds get cones (bats etc. never have cones)
         const coneKinds = this.biome?.coneEnemyKinds || [];
         const stealthMode = coneKinds.includes(kind) && kind !== 'boss';
-        const shadow = this.add.ellipse(x, y + (kind === 'boss' ? 46 : (kind === 'bat' ? 18 : 26)),
-            (kind === 'boss' ? 130 : 70) * def.scale * 1.6,
-            kind === 'boss' ? 22 : 14, 0x000000, 0.5).setDepth(189);
+        const shadow = this.add.image(x, y + (kind === 'boss' ? 46 : (kind === 'bat' ? 18 : 26)), 'softShadow')
+            .setDisplaySize((kind === 'boss' ? 150 : 84) * def.scale * 1.6,
+                            kind === 'boss' ? 32 : 21).setDepth(189);
         const enemy = {
             kind, def, sprite, shadow,
             x, y, vx: 0, vy: 0,
