@@ -10819,29 +10819,68 @@
         gameLoop();
     </script>
     <!-- ===== Install as an app (browser only) ===== -->
-    <div id="installCard" hidden
-         style="position:fixed;left:50%;transform:translateX(-50%);
-                bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:1200;
-                width:min(92vw,440px);box-sizing:border-box;padding:14px 16px;border-radius:16px;
-                border:2px solid #e8b54a;background:#241338;color:#f4ecff;
-                font:400 14px 'Nunito',system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5)">
-      <div style="display:flex;align-items:center;gap:12px">
-        <img src="assets/icons/icon-256.png" alt="" width="44" height="44"
-             style="border-radius:11px;flex:none">
+    <style>
+      #installCard {
+        position: fixed; z-index: 1200; box-sizing: border-box;
+        left: 50%; transform: translateX(-50%);
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        width: min(92vw, 440px); padding: 14px 16px; border-radius: 16px;
+        border: 2px solid #e8b54a; background: #241338; color: #f4ecff;
+        font: 400 14px 'Nunito', system-ui, sans-serif;
+        box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      }
+      #installCard .ic-row { display: flex; align-items: center; gap: 12px; }
+      #installCard img { width: 44px; height: 44px; border-radius: 11px; flex: none; }
+      #installCard .ic-title { font-weight: 700; font-size: 15px; color: #f6d77a; }
+      #installWhy { opacity: .85; line-height: 1.35; }
+      #installCard .ic-btns { display: flex; gap: 8px; margin-top: 12px; }
+      #installCard button { font-family: 'Nunito', sans-serif; cursor: pointer; }
+      #installYes { flex: 1; min-height: 44px; border-radius: 12px; border: none;
+                    background: #e8b54a; color: #2a1206; font-weight: 700; font-size: 15px; }
+      #installNo  { min-height: 44px; padding: 0 16px; border-radius: 12px;
+                    border: 2px solid #4a3a63; background: transparent; color: #b9a6d4;
+                    font-weight: 700; font-size: 15px; }
+      #installNever { display: block; margin: 8px auto 0; min-height: 36px; padding: 0 10px;
+                      border: none; background: transparent; color: #8f7fae;
+                      text-decoration: underline; font-size: 13px; }
+
+      /* Телефон в ландшафте: экран низкий и меню занимает его целиком, свободного
+         угла нет. Карточка становится нижней панелью в одну строку — она садится
+         под кнопки меню, а не поверх «Играть!». */
+      @media (max-height: 520px) {
+        #installCard {
+          left: 0; right: 0; bottom: 0; transform: none; width: auto;
+          display: flex; align-items: center; gap: 10px;
+          border-width: 2px 0 0 0; border-radius: 14px 14px 0 0;
+          padding: 8px calc(12px + env(safe-area-inset-right, 0px))
+                   calc(8px + env(safe-area-inset-bottom, 0px))
+                   calc(12px + env(safe-area-inset-left, 0px));
+        }
+        #installCard .ic-row { flex: 1; min-width: 0; gap: 9px; }
+        #installCard img { width: 32px; height: 32px; border-radius: 8px; }
+        #installCard .ic-title { font-size: 13px; }
+        #installWhy { font-size: 12px; line-height: 1.25; white-space: nowrap;
+                      overflow: hidden; text-overflow: ellipsis; }
+        #installCard .ic-btns { margin-top: 0; flex: none; gap: 8px; }
+        #installYes { flex: none; padding: 0 18px; font-size: 14px; }
+        #installNo { padding: 0 14px; font-size: 14px; }
+        #installNever { margin: 0; flex: none; min-height: 44px; padding: 0 10px; font-size: 12px; }
+      }
+    </style>
+    <div id="installCard" hidden>
+      <div class="ic-row">
+        <img src="assets/icons/icon-256.png" alt="">
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:15px;color:#f6d77a">Установить Мышонка Пи</div>
-          <div id="installWhy" style="opacity:.85;line-height:1.35">Появится на экране телефона и будет
-            открываться как обычное приложение — на весь экран и без интернета.</div>
+          <div class="ic-title">Установить Мышонка Пи</div>
+          <div id="installWhy">Появится на экране телефона и будет открываться как обычное
+            приложение — на весь экран и без интернета.</div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button id="installYes" type="button"
-                style="flex:1;min-height:44px;border-radius:12px;border:none;background:#e8b54a;
-                       color:#2a1206;font:700 15px 'Nunito',sans-serif;cursor:pointer">Установить</button>
-        <button id="installNo" type="button"
-                style="min-height:44px;padding:0 16px;border-radius:12px;border:2px solid #4a3a63;
-                       background:transparent;color:#b9a6d4;font:700 15px 'Nunito',sans-serif;cursor:pointer">Потом</button>
+      <div class="ic-btns">
+        <button id="installYes" type="button">Установить</button>
+        <button id="installNo" type="button">Потом</button>
       </div>
+      <button id="installNever" type="button">Больше не предлагать</button>
     </div>
     <script>
     (function () {
@@ -10854,14 +10893,32 @@
         var card = document.getElementById('installCard');
         var yes = document.getElementById('installYes');
         var no = document.getElementById('installNo');
+        var never = document.getElementById('installNever');
         var why = document.getElementById('installWhy');
-        var deferred = null;
-        var KEY = 'pi_install_dismissed';
+        var deferred = null;          // beforeinstallprompt, held until the player taps Установить
+        var shown = false;
+        var ready = false;            // Chrome fires beforeinstallprompt during load; let the menu settle first
 
-        function installed() {
+        var K_NEVER = 'pi_install_never';
+        var K_SNOOZE = 'pi_install_snooze';    // ms timestamp: do not offer before this
+        var K_OLD = 'pi_install_dismissed';    // key used by the first version of this card
+        var SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+        // Private mode throws on every localStorage touch, so nothing here may assume it works.
+        function get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+        function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+        function del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+        // Anyone who dismissed the older card meant "stop asking" — carry that over.
+        if (get(K_OLD) === '1') { set(K_NEVER, '1'); del(K_OLD); }
+
+        // True only while the page runs in the installed window. From a normal tab this is
+        // false even when the app IS installed — that case is caught by Chrome simply not
+        // firing beforeinstallprompt, and by getInstalledRelatedApps below.
+        function launchedAsApp() {
             try {
-                return window.matchMedia('(display-mode: fullscreen)').matches ||
-                       window.matchMedia('(display-mode: standalone)').matches ||
+                return ['fullscreen', 'standalone', 'minimal-ui', 'window-controls-overlay']
+                        .some(function (m) { return window.matchMedia('(display-mode: ' + m + ')').matches; }) ||
                        window.navigator.standalone === true;
             } catch (e) { return false; }
         }
@@ -10869,42 +10926,93 @@
         function inApp() {
             return !!(window.Capacitor || /\bwv\b/.test(navigator.userAgent));
         }
-        function dismissed() {
-            try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+        function silenced() {
+            if (get(K_NEVER) === '1') return true;
+            var until = parseInt(get(K_SNOOZE) || '0', 10);
+            return until > Date.now();
         }
-        function hide(remember) {
-            card.hidden = true;
-            if (remember) { try { localStorage.setItem(KEY, '1'); } catch (e) {} }
-        }
-        function show() {
-            if (installed() || inApp() || dismissed()) return;
-            card.hidden = false;
+        // Offer only on the main menu — never over a running game or a result screen.
+        function atMenu() {
+            try {
+                if (typeof gameRunning !== 'undefined' && gameRunning) return false;
+            } catch (e) {}
+            var st = document.getElementById('startScreen');
+            var rot = document.getElementById('rotateWarning');
+            if (rot && getComputedStyle(rot).display !== 'none') return false;
+            return !!(st && st.classList.contains('visible'));
         }
 
-        window.addEventListener('beforeinstallprompt', function (e) {
-            e.preventDefault();
-            deferred = e;
-            show();
-        });
-        yes.addEventListener('click', function () {
-            if (!deferred) { hide(true); return; }
-            deferred.prompt();
-            deferred.userChoice.finally(function () { deferred = null; hide(false); });
-        });
-        no.addEventListener('click', function () { hide(true); });
-        window.addEventListener('appinstalled', function () { hide(true); });
+        function hide() { card.hidden = true; shown = false; }
+        function snooze() { set(K_SNOOZE, String(Date.now() + SNOOZE_MS)); hide(); }
+        function stopAsking() { set(K_NEVER, '1'); hide(); }
 
-        // iOS Safari never fires beforeinstallprompt — there the install is a manual
-        // menu action, so offer the instruction instead of a button that cannot work.
-        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        var isSafari = isIOS && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
-        if (isSafari && !installed() && !inApp() && !dismissed()) {
+        // iOS Safari never fires beforeinstallprompt — there the install is a manual menu
+        // action, so offer the instruction instead of a button that cannot work.
+        var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        var iosManual = isIOS && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent) && !inApp();
+        if (iosManual) {
             why.textContent = 'Нажми «Поделиться» внизу Safari, затем «На экран «Домой»» — ' +
                               'игра появится на экране телефона.';
             yes.textContent = 'Понятно';
-            yes.onclick = function () { hide(true); };
-            setTimeout(function () { card.hidden = false; }, 2500);
         }
+
+        function maybeShow() {
+            // Left the menu (or started playing) with the card up — take it down, no penalty.
+            if (shown && !atMenu()) { hide(); return; }
+            if (!ready || shown || card.hidden === false) return;
+            if (!deferred && !iosManual) return;      // nothing we could actually do
+            if (launchedAsApp() || inApp() || silenced() || !atMenu()) return;
+            card.hidden = false;
+            shown = true;
+        }
+
+        // Chrome can report the installed PWA back to the tab it was installed from.
+        // It only answers when the manifest lists this app in related_applications; when it
+        // does not, this resolves empty and we fall through to the checks above.
+        if (navigator.getInstalledRelatedApps) {
+            navigator.getInstalledRelatedApps().then(function (apps) {
+                if (apps && apps.length) { hide(); deferred = null; }
+            }).catch(function () {});
+        }
+
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();                       // keep the mini-infobar off the game
+            deferred = e;
+            maybeShow();
+        });
+
+        yes.addEventListener('click', function () {
+            if (iosManual) { snooze(); return; }
+            if (!deferred) { hide(); return; }        // event lost — offer again next time, do not silence
+            var d = deferred;
+            deferred = null;
+            hide();
+            try {
+                d.prompt();
+                d.userChoice.then(function (r) {
+                    // Dismissing the system dialog is not "never" — back off for a week.
+                    if (!r || r.outcome !== 'accepted') snooze();
+                }).catch(function () {});
+            } catch (e) { snooze(); }
+        });
+        no.addEventListener('click', snooze);
+        never.addEventListener('click', stopAsking);
+
+        window.addEventListener('appinstalled', function () {
+            deferred = null;
+            hide();
+            del(K_SNOOZE);
+            del(K_NEVER);      // if it is ever uninstalled, offering again is the right call
+        });
+
+        // The offer waits for a calm moment: after the menu has settled, and again whenever
+        // the player comes back to it or a snooze runs out.
+        setTimeout(function () { ready = true; maybeShow(); }, 4000);
+        setInterval(maybeShow, 4000);
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) setTimeout(maybeShow, 500);
+        });
     })();
     </script>
 </body>
