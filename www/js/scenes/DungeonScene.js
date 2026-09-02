@@ -276,6 +276,7 @@ export class DungeonScene extends Phaser.Scene {
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this._recoil = null;
         this.floorMod = null;
         this._keyIconHas = undefined;
         this._crouchIconOn = undefined;
@@ -1941,7 +1942,18 @@ export class DungeonScene extends Phaser.Scene {
         if (!this.textures.exists(key)) { console.warn('[DungeonScene] unknown decor type', type); return; }
         // Anchor near the base so props read as standing on the floor; carpets/cobwebs/lilypads are flat
         const flat = (t === 'redCarpet' || t === 'cobweb' || t === 'lilypad');
-        this.decorSprites.push(this._worldImage(x, y, key, LAYER.DECOR, 0.5, flat ? 0.5 : 0.8));
+        const sprite = this._worldImage(x, y, key, LAYER.DECOR, 0.5, flat ? 0.5 : 0.8);
+        this.decorSprites.push(sprite);
+        if (!flat) {
+            // Standing props get the same soft contact shadow the characters use,
+            // sized from the sprite so a goblet does not cast a barrel's shadow.
+            this._ensureShadowTexture();
+            const w = Math.max(10, sprite.displayWidth * 0.78);
+            const sh = this.add.image(x, y + 2, 'softShadow')
+                .setDisplaySize(w, Math.max(5, w * 0.30))
+                .setDepth(LAYER.DECOR - 1).setAlpha(0.7);
+            this.decorSprites.push(sh);
+        }
     }
 
     placeRandomTorches() {
@@ -2700,6 +2712,11 @@ export class DungeonScene extends Phaser.Scene {
             bus.emit(SFX.FOOTSTEP, this.player.crouch ? { vol: 0.45 } : undefined);
             this._stepDust(this.player.x, this.player.y + 28, this.player.facing || 1);
         }
+        // Shot recoil rides on top of whatever animateSprite just set
+        if (this._recoil && (this._recoil.x || this._recoil.y)) {
+            this.player.sprite.x += this._recoil.x;
+            this.player.sprite.y += this._recoil.y;
+        }
         this.player.shadow.setPosition(this.player.x, this.player.y + 32);
         this.player.shadow.setDisplaySize(74 * (speed > 25 ? 1 + Math.cos(this.player.walkPhase * 2) * 0.05 : 1), 22);
         if (this.player.rim) {
@@ -2786,6 +2803,7 @@ export class DungeonScene extends Phaser.Scene {
         if (this.player.fireTimer > 0) return;
         this.player.fireTimer = PLAYER.fireCooldownMs * (this.fireCdMul || 1);
         bus.emit(SFX.FIRE_PIE);
+        this._shotFeedback(this.player.aimAngle || 0);
         // Pie Storm relic — 5-way fan instead of triple-shot
         this._pieStormBurst = this.relicPieStorm === true;
         let angle = this.player.aimAngle || 0;
@@ -4593,6 +4611,40 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     // Squash bounce on hit — quick scale pulse.
+    // Recoil, a muzzle flash, a crosshair pulse and a squash on Pi. Four small things
+    // that turn the press into an event; all of them cancel themselves.
+    _shotFeedback(angle) {
+        const spr = this.player && this.player.sprite;
+        if (!spr) return;
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        // Recoil — nudge against the shot and settle back
+        if (!this._recoil) this._recoil = { x: 0, y: 0 };
+        this._recoil.x = -cos * 4;
+        this._recoil.y = -sin * 4;
+        this.tweens.add({ targets: this._recoil, x: 0, y: 0, duration: 90, ease: 'Quad.easeOut' });
+        // Squash, reusing the same shape the hit juice uses
+        const bx = spr._baseScaleX || spr.scaleX, by = spr._baseScaleY || spr.scaleY;
+        spr._baseScaleX = bx; spr._baseScaleY = by;
+        this.tweens.killTweensOf(spr);
+        spr.setScale(bx * 1.06, by * 0.94);
+        this.tweens.add({ targets: spr, scaleX: bx, scaleY: by, duration: 110, ease: 'Quad.easeOut' });
+        // Muzzle flash 20px along the aim
+        this._ensureShadowTexture();
+        const fx = this.player.x + cos * 20, fy = this.player.y + sin * 20 - 6;
+        const flash = this.add.circle(fx, fy, 9, 0xffe0a0, 0.85).setDepth(LAYER.DECOR + 60);
+        this.tweens.add({ targets: flash, scale: 0.2, alpha: 0, duration: 110,
+            onComplete: () => flash.destroy() });
+        // Crosshair pulse
+        const ind = this.aimIndicator;
+        if (ind && ind.visible) {
+            const s0 = ind._baseScale || ind.scaleX;
+            ind._baseScale = s0;
+            this.tweens.killTweensOf(ind);
+            ind.setScale(s0 * 1.15);
+            this.tweens.add({ targets: ind, scaleX: s0, scaleY: s0, duration: 80, ease: 'Quad.easeOut' });
+        }
+    }
+
     _hitSquash(e, tier) {
         const target = e.sprite || e.gfx;
         if (!target) return;
