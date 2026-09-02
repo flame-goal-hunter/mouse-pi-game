@@ -274,6 +274,7 @@ export class DungeonScene extends Phaser.Scene {
         this.runBookDmg = data?.runBookDmg || 0;   // forbidden-book damage, kept across floors
         this.maxHp = PLAYER.maxHp;
         this._dmgMul = 1;
+        this._backGuardOn = false;
         this._heartbeatNext = 0;
         // Relic effects are re-applied below from collectedRelics — clear them first or
         // they compound once per floor (the Scene instance survives scene.start).
@@ -471,6 +472,7 @@ export class DungeonScene extends Phaser.Scene {
         this.computeRoomGoals();    // pick key/exit rooms BEFORE walls so pillars skip them
         this.buildWorld();
         this.spawnPlayer();
+        this._armBackGuard();
         this.spawnExitDoor();
         this.spawnKey();
         this.spawnEnemies();
@@ -5889,7 +5891,7 @@ export class DungeonScene extends Phaser.Scene {
         this.exitBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.exitBtn = this.add.image(0, 0, 'ui_close').setOrigin(0.5).setScrollFactor(0).setDepth(D)
             .setInteractive(new Phaser.Geom.Circle(0, 0, 1), Phaser.Geom.Circle.Contains)
-            .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.exitToMenu(); });
+            .on('pointerdown', () => { bus.emit(UI.BUTTON_CLICK); this.openPauseMenu(); });
         // Pause button — same disc beside the exit one, with its own 52 px tap rect
         this.pauseBtnBg = this.add.graphics().setScrollFactor(0).setDepth(LAYER.UI_HUD_BG);
         this.pauseBtn = this.add.image(0, 0, 'ui_pause').setOrigin(0.5).setScrollFactor(0).setDepth(D);
@@ -5956,8 +5958,11 @@ export class DungeonScene extends Phaser.Scene {
             hitArea.radius = Math.max(fw / 2, 24 * fw / Math.max(1, this.exitBtn.displayWidth));
         }
         // Pause disc: left of the exit one, or under it when the cheese counter is that close
-        const pGap = Math.round(10 * L.s), pR = L.exit.r;
-        let pcx = L.exit.cx - L.exit.r - pGap - pR, pcy = L.exit.cy;
+        const pR = L.exit.r;
+        const PAUSE_HIT_HALF = 26;              // pauseHit is a 52x52 rectangle
+        const exitHitHalf = Math.max(24, pR);   // exit's tap disc is at least 48 across
+        const pGap = Math.max(Math.round(10 * L.s), 8 + PAUSE_HIT_HALF - pR);
+        let pcx = L.exit.cx - exitHitHalf - pGap - pR, pcy = L.exit.cy;
         const chRect = L.rects.find(r => r.name === 'cheese');
         if (chRect && pcx - pR < chRect.x + chRect.w + Math.round(8 * L.s)) {
             pcx = L.exit.cx; pcy = L.exit.cy + L.exit.r + pGap + pR;
@@ -6628,7 +6633,8 @@ export class DungeonScene extends Phaser.Scene {
         const items = [
             this.joyBase, this.joyHints, this.joyKnob,
             this.aimStickBase, this.aimStickHint, this.aimStickKnob,
-            this.dashBtnBase, this.dashBtnCdArc, this.dashBtnLabel
+            this.dashBtnBase, this.dashBtnCdArc, this.dashBtnLabel,
+            this.crouchBtnBase, this.crouchBtnLabel, this.bookBtnBase, this.bookBtnLabel
         ];
         for (const it of items) if (it) it.setVisible(visible);
         // Force-clear stick state when hiding so a stale touch can't drive Pi after we transition away
@@ -6644,6 +6650,7 @@ export class DungeonScene extends Phaser.Scene {
     win() {
         if (this.state !== 'play') return;
         this.state = 'won';
+        this.setTouchUIVisible(false);
         const bonus = this.player.hp * 25;
         this.score += bonus;
         // Per-floor completion bonus + cheese
@@ -7376,6 +7383,28 @@ export class DungeonScene extends Phaser.Scene {
     // =================================================================
     // PAUSE / SETTINGS — the only place to change volume or mute
     // =================================================================
+    // Keep one spare history entry while a run is live, so the system back gesture
+    // pops into the pause menu instead of leaving the page.
+    _armBackGuard() {
+        if (this._backGuardOn || typeof window === 'undefined') return;
+        this._backGuardOn = true;
+        try { history.pushState({ piRun: 1 }, ''); } catch (e) {}
+        this._onPopState = () => {
+            if (this.state === 'play') {
+                try { history.pushState({ piRun: 1 }, ''); } catch (e) {}
+                this.openPauseMenu();
+            } else if (this._pauseElements) {
+                try { history.pushState({ piRun: 1 }, ''); } catch (e) {}
+                this.closePauseMenu(false);
+            }
+        };
+        window.addEventListener('popstate', this._onPopState);
+        this.events.once('shutdown', () => {
+            window.removeEventListener('popstate', this._onPopState);
+            this._backGuardOn = false;
+        });
+    }
+
     openPauseMenu() {
         if (this.state !== 'play' || this._pauseElements || this._pickerElements || this._shopElements) return;
         bus.emit(UI.MENU_OPEN);
@@ -7639,6 +7668,7 @@ export class DungeonScene extends Phaser.Scene {
             return;
         }
         this.state = 'lost';
+        this.setTouchUIVisible(false);
         bus.emit(SFX.PLAYER_DEATH);
         // Endless: full bank of run cheese (it's a separate "deposit on death" model since no boss caps the run)
         // Story: half-cheese rescue
