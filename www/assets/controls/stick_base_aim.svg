@@ -1,14 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
-    <radialGradient id="g" cx="50%" cy="42%" r="60%">
-      <stop offset="0%" stop-color="#ff8a4a" stop-opacity="0.30"/>
-      <stop offset="70%" stop-color="#ff8a4a" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#0d0618" stop-opacity="0.30"/>
+    <radialGradient id="g" cx="50%" cy="40%" r="62%">
+      <stop offset="0%"   stop-color="#ff9a4a" stop-opacity="0.22"/>
+      <stop offset="70%"  stop-color="#ff9a4a" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#0d0618" stop-opacity="0.34"/>
     </radialGradient>
   </defs>
-  <circle cx="64" cy="64" r="60" fill="#0d0618" opacity="0.38"/>
+  <circle cx="64" cy="64" r="60" fill="#1a0c2e" opacity="0.52"/>
   <circle cx="64" cy="64" r="60" fill="url(#g)"/>
-  <circle cx="64" cy="64" r="60" fill="none" stroke="#ffc08a" stroke-width="3.5" opacity="0.85"/>
-  <circle cx="64" cy="64" r="53" fill="none" stroke="#e8905a" stroke-width="1.5" opacity="0.45"/>
-  <rect x="61" y="12" width="6" height="10" rx="3" fill="#ffc08a" opacity="0.55" transform="rotate(0 64 64)"/><rect x="61" y="12" width="6" height="10" rx="3" fill="#ffc08a" opacity="0.55" transform="rotate(90 64 64)"/><rect x="61" y="12" width="6" height="10" rx="3" fill="#ffc08a" opacity="0.55" transform="rotate(180 64 64)"/><rect x="61" y="12" width="6" height="10" rx="3" fill="#ffc08a" opacity="0.55" transform="rotate(270 64 64)"/>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#e8b54a" stroke-width="3" opacity="0.85"/>
+  <circle cx="64" cy="64" r="53" fill="none" stroke="#e8b54a" stroke-width="1.2" opacity="0.30"/>
+  <rect x="61" y="12" width="6" height="10" rx="3" fill="#e8b54a" opacity="0.5" transform="rotate(0 64 64)"/>
+  <rect x="61" y="12" width="6" height="10" rx="3" fill="#e8b54a" opacity="0.5" transform="rotate(90 64 64)"/>
+  <rect x="61" y="12" width="6" height="10" rx="3" fill="#e8b54a" opacity="0.5" transform="rotate(180 64 64)"/>
+  <rect x="61" y="12" width="6" height="10" rx="3" fill="#e8b54a" opacity="0.5" transform="rotate(270 64 64)"/>
 </svg>
