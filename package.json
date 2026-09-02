@@ -9,7 +9,7 @@
     "cap:init": "npx cap init \"Мышонок Пи\" com.mousiepi.game --web-dir www",
     "cap:add:android": "npx cap add android",
     "stamp": "node tools/stamp_sw.mjs",
-    "cap:sync": "node tools/stamp_sw.mjs && npx cap sync",
+    "cap:sync": "node tools/stamp_sw.mjs && npx cap sync && node tools/prepare_android.mjs",
     "cap:open:android": "npx cap open android",
     "android:build": "cd android && ./gradlew assembleDebug",
     "android:release": "cd android && ./gradlew assembleRelease",

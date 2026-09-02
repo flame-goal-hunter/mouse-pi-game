@@ -10913,6 +10913,12 @@
         var shown = false;
         var ready = false;            // Chrome fires beforeinstallprompt during load; let the menu settle first
 
+        // Belt and braces: in the native shell the card is removed outright, so no later
+        // code path can put it back on screen.
+        if (inApp() && card && card.parentNode) { card.parentNode.removeChild(card); card = null; }
+        // No card (native shell, or tools/prepare_android.mjs stripped it) — nothing left to wire.
+        if (!card) return;
+
         var K_NEVER = 'pi_install_never';
         var K_SNOOZE = 'pi_install_snooze';    // ms timestamp: do not offer before this
         var K_OLD = 'pi_install_dismissed';    // key used by the first version of this card
@@ -10946,6 +10952,9 @@
         // bridge may not be injected yet when this runs, and the WebView user agent is
         // not guaranteed, so the serving origin is the reliable signal.
         function inApp() {
+            // Planted by tools/prepare_android.mjs in the copy that goes into the APK,
+            // before any other script — nothing about it depends on timing or user agent.
+            if (window.__NATIVE_SHELL__) return true;
             if (window.Capacitor || window.cordova || window.Ionic) return true;
             var ua = navigator.userAgent || '';
             if (/\bwv\b/.test(ua)) return true;                            // Android WebView marker
@@ -10973,7 +10982,7 @@
             return !!(st && st.classList.contains('visible'));
         }
 
-        function hide() { card.hidden = true; shown = false; }
+        function hide() { if (card) card.hidden = true; shown = false; }
         function snooze() { set(K_SNOOZE, String(Date.now() + SNOOZE_MS)); hide(); }
         function stopAsking() { set(K_NEVER, '1'); hide(); }
 
@@ -10989,6 +10998,7 @@
         }
 
         function maybeShow() {
+            if (!card) return;
             // Left the menu (or started playing) with the card up — take it down, no penalty.
             if (shown && !atMenu()) { hide(); return; }
             if (!ready || shown || card.hidden === false) return;
