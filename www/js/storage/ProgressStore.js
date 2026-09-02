@@ -24,11 +24,11 @@ export const SKINS = [
 // === PERMANENT UPGRADES — bought once, stack each run forever ===
 // dmg1 maxLevel dropped to 1 to keep boss tension (Q1 recommended)
 export const PERMANENT_UPGRADES = [
-    { id: 'hp1',     icon: 'ui_heart', name: '+1 HP',         price: 80,  desc: 'Старт с +1 сердцем', maxLevel: 3 },
-    { id: 'speed1',  icon: 'ui_bolt', name: '+10% скорость', price: 120, desc: 'Чуть быстрее ходишь', maxLevel: 3 },
-    { id: 'dash1',   icon: 'ui_dash', name: 'Быстрый рывок', price: 180, desc: '−15% кулдаун рывка', maxLevel: 2 },
-    { id: 'dmg1',    icon: 'ui_flame', name: '+1 урон',       price: 250, desc: 'Пироги бьют сильнее', maxLevel: 1 },
-    { id: 'powerup', icon: 'relic_gift', name: 'Стартовый бонус', price: 350, desc: 'Случайный power-up в начале', maxLevel: 1 }
+    { id: 'hp1',     icon: 'ui_heart', name: 'Лишнее сердце', price: 80,  desc: 'Начинаешь с ещё одним сердцем', maxLevel: 3 },
+    { id: 'speed1',  icon: 'ui_bolt', name: 'Лёгкие лапы',   price: 120, desc: 'Пи бегает чуть быстрее', maxLevel: 3 },
+    { id: 'dash1',   icon: 'ui_dash', name: 'Быстрый рывок', price: 180, desc: 'Рывок готов быстрее', maxLevel: 2 },
+    { id: 'dmg1',    icon: 'ui_flame', name: 'Острый пирог',  price: 250, desc: 'Пироги бьют сильнее', maxLevel: 1 },
+    { id: 'powerup', icon: 'relic_gift', name: 'Стартовый бонус', price: 350, desc: 'Начинаешь этаж с подарком', maxLevel: 1 }
 ];
 
 const DEFAULT_STATE = {

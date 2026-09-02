@@ -226,11 +226,11 @@ function enemyBudgetForFloor(chapter, mode, isFinal) {
 // Effects must be idempotent under replay: create() re-applies every collected id from
 // a clean slate each floor, so these adjust reset stats, never grant one-off amounts.
 const FILLERS = [
-    { id: 'cheesebag', cap: 99, icon: 'ui_cheese', name: 'Сырный дух', desc: '+25% сыра за подбор',
+    { id: 'cheesebag', cap: 99, icon: 'ui_cheese', name: 'Сырный дух', desc: 'Чуть больше сыра за кусочек',
       apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.25; } },
     { id: 'magnet',    cap: 99, icon: 'relic_magnet', name: 'Магнит', desc: 'Сыр липнет издалека',
       apply: (s) => { s.relicMagnetRange = (s.relicMagnetRange || 0) + 80; } },
-    { id: 'tough',     cap: 99, icon: 'ui_heart', name: 'Твёрдый лоб', desc: '+150 мс неуязвимости',
+    { id: 'tough',     cap: 99, icon: 'ui_heart', name: 'Твёрдый лоб', desc: 'Дольше не бьют после удара',
       apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 150; } }
 ];
 
@@ -241,21 +241,21 @@ function upgradeById(id) {
 
 // Upgrade roster — player picks one after every floor. cap = max stacks per run.
 const UPGRADES = [
-    { id: 'hp',        cap: 4, icon: 'ui_heart', name: 'Крепкое сердце', desc: '+1 максимум HP',
+    { id: 'hp',        cap: 4, icon: 'ui_heart', name: 'Крепкое сердце', desc: 'Ещё одно сердечко',
       apply: (s) => { s.maxHp += 1; if (s.player) s.player.hp = s.maxHp; } },
-    { id: 'dash',      cap: 2, icon: 'ui_dash', name: 'Быстрый рывок',  desc: '−28% кулдаун рывка',
+    { id: 'dash',      cap: 2, icon: 'ui_dash', name: 'Быстрый рывок',  desc: 'Рывок готов быстрее',
       apply: (s) => { s.dashCdMul = (s.dashCdMul || 1) * 0.72; } },
-    { id: 'speed',     cap: 3, icon: 'ui_bolt', name: 'Лёгкие ноги',     desc: '+15% скорость ходьбы',
+    { id: 'speed',     cap: 3, icon: 'ui_bolt', name: 'Лёгкие ноги',     desc: 'Пи бегает быстрее',
       apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.15; } },
-    { id: 'damage',    cap: 2, icon: 'ui_flame', name: 'Острый пирог',    desc: '+1 урон пирогом',
+    { id: 'damage',    cap: 2, icon: 'ui_flame', name: 'Острый пирог',    desc: 'Пирог бьёт сильнее',
       apply: (s) => { s.pieDmgBonus = (s.pieDmgBonus || 0) + 1; } },
-    { id: 'firerate',  cap: 2, icon: 'ui_target', name: 'Скорострел',      desc: '−25% перезарядка',
+    { id: 'firerate',  cap: 2, icon: 'ui_target', name: 'Скорострел',      desc: 'Стреляешь чаще',
       apply: (s) => { s.fireCdMul = (s.fireCdMul || 1) * 0.75; } },
-    { id: 'piesize',   cap: 1, icon: 'd_pie', name: 'Большие пироги',  desc: '+50% размер снаряда',
+    { id: 'piesize',   cap: 1, icon: 'd_pie', name: 'Большие пироги',  desc: 'Пироги больше — легче попасть',
       apply: (s) => { s.pieSizeMul = (s.pieSizeMul || 1) * 1.5; } },
-    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', name: 'Вампиризм',       desc: 'Шанс вернуть HP с убитого',
+    { id: 'lifesteal', cap: 3, icon: 'relic_blood_drop', name: 'Вампиризм',       desc: 'Иногда сердечко за врага',
       apply: (s) => { s.lifestealChance = (s.lifestealChance || 0) + 0.20; } },
-    { id: 'cheese',    cap: 2, icon: 'd_cheese', name: 'Сырный нос',      desc: '+50% сыра за подбор',
+    { id: 'cheese',    cap: 2, icon: 'd_cheese', name: 'Сырный нос',      desc: 'Больше сыра за кусочек',
       apply: (s) => { s.cheeseMul = (s.cheeseMul || 1) * 1.5; } }
 ];
 
@@ -6939,7 +6939,7 @@ export class DungeonScene extends Phaser.Scene {
             const owned = stacks[upg.id] || 0;
             const cap = upg.cap || 1;
             const pill = (cap > 1 && owned > 0)
-                ? this._statPill(null, `Ур. ${owned}/${cap}`, {
+                ? this._statPill(null, `${owned} из ${cap}`, {
                       fontSize: Math.max(9, Math.round(11 * k)), depth: D + 6 })
                 : null;
             const onPick = () => {
@@ -7599,16 +7599,27 @@ export class DungeonScene extends Phaser.Scene {
             addEl(labels[i], D + 6);
             const g = addEl(this.add.graphics(), D + 5);
             bars.push({ key, g });
-            const setLevel = (d) => {
-                const p = Progress.getAudioPrefs();
-                const lvl = Math.max(0, Math.min(segN, Math.round((p[key] != null ? p[key] : 1) * segN) + d));
-                Progress.setAudioPref(key, lvl / segN);
+            const applyLevel = (lvl) => {
+                const clamped = Math.max(0, Math.min(segN, lvl));
+                Progress.setAudioPref(key, clamped / segN);
                 try { window.audio && window.audio.applyPrefs && window.audio.applyPrefs(Progress.getAudioPrefs()); } catch (e) {}
                 bus.emit(UI.BUTTON_CLICK);
                 refresh();
             };
+            const setLevel = (d) => {
+                const p = Progress.getAudioPrefs();
+                applyLevel(Math.round((p[key] != null ? p[key] : 1) * segN) + d);
+            };
             stepper(minusCx, rcy, '−', () => setLevel(-1));
             stepper(plusCx, rcy, '+', () => setLevel(1));
+            // Tapping a bar jumps straight to that level. The hit rect is full row
+            // height so the target clears 44px even though the bar is drawn thin.
+            for (let sIdx = 0; sIdx < segN; sIdx++) {
+                const sx = barX0 + sIdx * (segW + segGap) + segW / 2;
+                addEl(this.add.rectangle(sx, rcy, segW + segGap, Math.max(44, rowH), 0xffffff, 0.001)
+                    .setInteractive({ useHandCursor: true })
+                    .on('pointerdown', () => applyLevel(sIdx + 1)), D + 6);
+            }
             g.y = rcy;
         });
 

@@ -28,7 +28,7 @@ export const RELICS = [
         rarity: 'common',
         icon: 'relic_star_spread',
         name: 'Разлёт',
-        desc: 'Каждый 4-й пирог стреляет двумя дополнительными в стороны',
+        desc: 'Иногда летят сразу три пирога',
         apply: (s) => { s.relicSpreadEvery = (s.relicSpreadEvery || 5) - 1; }   // every Nth fire
     },
     {
@@ -36,7 +36,7 @@ export const RELICS = [
         rarity: 'common',
         icon: 'ui_shield',
         name: 'Толстокожий',
-        desc: '+0.5с неуязвимости после получения урона',
+        desc: 'Дольше не бьют после удара',
         apply: (s) => { s.relicInvulnBonusMs = (s.relicInvulnBonusMs || 0) + 500; }
     },
     {
@@ -44,7 +44,7 @@ export const RELICS = [
         rarity: 'common',
         icon: 'ui_flame',
         name: 'Огненный след',
-        desc: 'Рывок оставляет горящий след — 1 урон по врагам',
+        desc: 'Рывок оставляет огненный след',
         apply: (s) => { s.relicFlameTrail = true; }
     },
 
@@ -62,7 +62,7 @@ export const RELICS = [
         rarity: 'rare',
         icon: 'relic_crit',
         name: 'Критический сыр',
-        desc: '20% шанс x3 урона',
+        desc: 'Иногда пирог бьёт втрое сильнее',
         apply: (s) => { s.relicCritChance = (s.relicCritChance || 0) + 0.20; }
     },
     {
@@ -70,7 +70,7 @@ export const RELICS = [
         rarity: 'rare',
         icon: 'relic_thorns',
         name: 'Колючий мех',
-        desc: 'Враг получает 2 урона за каждое касание',
+        desc: 'Кто тронет Пи — получит сдачи',
         apply: (s) => { s.relicThornDmg = (s.relicThornDmg || 0) + 2; }
     },
     {
@@ -78,7 +78,7 @@ export const RELICS = [
         rarity: 'rare',
         icon: 'ui_heart',
         name: 'Комбо-сердце',
-        desc: 'Каждое 5-е комбо-убийство восстанавливает HP',
+        desc: 'За серию побед — сердечко',
         apply: (s) => { s.relicComboHeart = true; }
     },
     {
@@ -86,7 +86,7 @@ export const RELICS = [
         rarity: 'rare',
         icon: 'ui_dash',
         name: 'Взрывной рывок',
-        desc: 'В конце рывка — мини-взрыв на 80px вокруг Пи',
+        desc: 'Рывок заканчивается взрывом',
         apply: (s) => { s.relicDashBurst = true; }
     },
     {
@@ -94,7 +94,7 @@ export const RELICS = [
         rarity: 'rare',
         icon: 'd_ghost',
         name: 'Шаг тени',
-        desc: '−50% копится подозрительность врагов',
+        desc: 'Враги замечают Пи вдвое медленнее',
         apply: (s) => { s.relicGhostWalk = true; }
     },
 
@@ -104,7 +104,7 @@ export const RELICS = [
         rarity: 'legendary',
         icon: 'relic_tornado',
         name: 'Пироговый шторм',
-        desc: 'Стреляешь сразу 5-ю пирогами веером',
+        desc: 'Стреляешь веером из пяти пирогов',
         apply: (s) => { s.relicPieStorm = true; }
     },
     {
@@ -112,7 +112,7 @@ export const RELICS = [
         rarity: 'legendary',
         icon: 'prop_skull',
         name: 'Несгибаемый',
-        desc: 'Раз за забег: при смерти выживаешь на 1 HP',
+        desc: 'Один раз спасёт от гибели',
         apply: (s) => { s.relicUndying = (s.relicUndying || 0) + 1; }
     },
     {
@@ -120,7 +120,7 @@ export const RELICS = [
         rarity: 'legendary',
         icon: 'relic_crown',
         name: 'Золотой пирог',
-        desc: 'Каждый 10-й пирог огромен и взрывается',
+        desc: 'Иногда пирог огромный и взрывается',
         apply: (s) => { s.relicGoldPieEvery = 10; }
     },
     {
@@ -128,7 +128,7 @@ export const RELICS = [
         rarity: 'legendary',
         icon: 'relic_hourglass',
         name: 'Замедление',
-        desc: 'Когда HP < 30% — время вокруг тебя замедляется',
+        desc: 'Мало сердечек — время замедляется',
         apply: (s) => { s.relicTimeWarp = true; }
     },
     {
@@ -136,7 +136,7 @@ export const RELICS = [
         rarity: 'legendary',
         icon: 'd_cheese',
         name: 'Сырный взрыв',
-        desc: 'Подбор сыра наносит 2 урона врагам в 100px',
+        desc: 'Сыр взрывается и задевает врагов',
         apply: (s) => { s.relicCheeseBoom = true; }
     }
 ];
