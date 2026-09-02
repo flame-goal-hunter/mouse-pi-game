@@ -1604,7 +1604,7 @@ export class DungeonScene extends Phaser.Scene {
                             bus.emit(SFX.TAKE_DAMAGE);
                             this._haptic(HAPTIC.hurt);
                             this.player.invulnTimer = PLAYER.invulnMs + (this.relicInvulnBonusMs || 0);
-                            this.cameras.main.shake(200, 0.014);
+                            this._shake('big');
                         }
                     }
                     this.poofAt(e.x + Math.cos(e.facingAngle) * 40, e.y + Math.sin(e.facingAngle) * 40, 0xff60c0);
@@ -1749,7 +1749,7 @@ export class DungeonScene extends Phaser.Scene {
                 onUpdate: () => { boss.x = boss.sprite.x; boss.y = boss.sprite.y; },
                 onComplete: () => {
                     this.poofAt(targetX, targetY, 0xff4060);
-                    this.cameras.main.shake(160, 0.018);
+                    this._shake('big');
                     if (Math.hypot(targetX - this.player.x, targetY - this.player.y) < 60
                         && this.player.invulnTimer <= 0) {
                         this.player.hp -= 2;
@@ -2636,8 +2636,8 @@ export class DungeonScene extends Phaser.Scene {
                 bus.emit(SFX.TAKE_DAMAGE);
                 this._haptic(HAPTIC.hurt);
                 this.player._hazardCd = 800;
-                this.player.invulnTimer = 400;
-                this.cameras.main.shake(120, 0.006);
+                this.player.invulnTimer = 400 + (this.relicInvulnBonusMs || 0);
+                this._shake('sm');
                 this.showFloatingText(this.player.x, this.player.y - 30,
                     '', '#ff6060', 24, onHotPan ? 'ui_flame' : 'relic_thorns');
                 this._combo = 0;
@@ -2788,7 +2788,7 @@ export class DungeonScene extends Phaser.Scene {
                 bus.emit(SFX.TAKE_DAMAGE);
                 this._haptic(HAPTIC.hurt);
                 this.player.invulnTimer = PLAYER.invulnMs;
-                this.cameras.main.shake(180, 0.010);
+                this._shake('med');
                 this._combo = 0;
                 b.dead = true;
                 this.poofAt(b.x, b.y, 0xff4060);
@@ -5499,7 +5499,7 @@ export class DungeonScene extends Phaser.Scene {
                     const k = 360, l = d || 1;
                     this.player.vx = (dx / l) * k;
                     this.player.vy = (dy / l) * k;
-                    this.cameras.main.shake(180, 0.008);
+                    this._shake('med');
                     // Combo breaks on damage
                     this._combo = 0;
                     break;
