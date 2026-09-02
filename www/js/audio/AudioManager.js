@@ -2,7 +2,7 @@
 // AudioManager — single owner of all sound playback
 // - 4 channels (master / sfx / music / ui) backed by ProgressStore.audioPrefs
 // - Sampled SFX driven by SoundMap (pitch jitter + retrigger guards)
-// - ProceduralSfx stays as the fallback when a sample is missing from the cache
+// - No synthesis anywhere: a missing sample or track plays nothing rather than a beep
 // - Looping music streamed through an HTMLAudioElement (never decoded to PCM) with fade-in / cross-fade
 // - Listens on EventBus for audio:* events from gameplay code
 // - Handles mobile autoplay (resume on first pointerdown)
@@ -12,8 +12,6 @@
 import { Progress } from '../storage/ProgressStore.js';
 import { bus } from './EventBus.js';
 import { SFX, UI, BGM } from './SoundKeys.js';
-import { ProceduralSfx } from './ProceduralSfx.js';
-import { ProceduralBgm, BGM_PRESETS } from './ProceduralBgm.js';
 import { SFX_FILES, BGM_FILES, EVENT_MAP, FOOTSTEPS, BIOME_BGM } from './SoundMap.js';
 
 const DEFAULT_PREFS = { master: 1.0, sfx: 0.85, music: 0.60, ui: 0.80, muted: false };
@@ -40,45 +38,6 @@ export function preloadAudio(scene) {
     }
 }
 
-// event → ProceduralSfx method — used only when the sample is missing, so a failed
-// download never means silence. Mirrors the pre-sample wiring one for one.
-const FALLBACK = {
-    [UI.BUTTON_CLICK]:   'uiClick',
-    [UI.BUTTON_BACK]:    'uiBack',
-    [UI.SHOP_BUY]:       'uiBuy',
-    [UI.SHOP_DENY]:      'uiDeny',
-    [UI.MENU_OPEN]:      'uiMenuOpen',
-    [UI.MENU_CLOSE]:     'uiBack',
-    [UI.HEARTBEAT_TICK]: 'uiHeartbeat',
-    [SFX.FIRE_PIE]:      'firePie',
-    [SFX.HIT_ENEMY]:     'hitEnemy',
-    [SFX.HIT_WALL]:      'hitWall',
-    [SFX.TAKE_DAMAGE]:   'takeDamage',
-    [SFX.PLAYER_DASH]:   'playerDash',
-    [SFX.PLAYER_DEATH]:  'playerDeath',
-    [SFX.ENEMY_DEATH]:   'enemyDeath',
-    [SFX.BOSS_HIT]:      'bossHit',
-    [SFX.SLIME_SQUELCH]: 'slimeSquelch',
-    [SFX.COLLECT_CHEESE]:  'collectCheese',
-    [SFX.COLLECT_HEART]:   'collectHeart',
-    [SFX.COLLECT_POWERUP]: 'collectPowerup',
-    [SFX.KEY_GRAB]:        'keyGrab',
-    [SFX.OPEN_CHEST]:      'openChest',
-    [SFX.CHEST_COINS]:     'collectCheese',
-    [SFX.LIGHT_TORCH]:     'lightTorch',
-    [SFX.DOOR_OPEN]:       'openChest',
-    [SFX.ALARM_TRIGGER]:    'alarmTrigger',
-    [SFX.SUSPICION_TICK]:   'suspicionTick',
-    [SFX.DISTRACTION_THUD]: 'distractionThud',
-    [SFX.GHOST_RUN]:        'ghostRun',
-    [SFX.BOSS_INTRO]:  'bossIntro',
-    [SFX.BOSS_PHASE]:  'bossPhase',
-    [SFX.WIN_STORY]:   'winStory',
-    [SFX.LOSE_STORY]:  'loseStory',
-    [SFX.FLOOR_ENTER]: 'floorEnter',
-    // SFX.FOOTSTEP has no synth voice on purpose — a beep 2-3× a second is worse than silence.
-};
-
 // Stings that own their moment — the music steps back under them (spec 3.F).
 const DUCK_EVENTS = new Set([
     SFX.WIN_STORY, SFX.LOSE_STORY, SFX.PLAYER_DEATH,
@@ -88,14 +47,11 @@ const DUCK_EVENTS = new Set([
 export class AudioManager {
     constructor(game) {
         this.game = game;
-        this.proc = new ProceduralSfx();
-        this.bgm  = new ProceduralBgm(this.proc);
         this._bgmEls = {};             // track key → HTMLAudioElement (streamed, created on first use)
         this._bgmEl = null;            // element currently owning the music channel
         this._bgmKey = null;
         this._bgmWasPlaying = false;   // was music running when the page went hidden?
         this._pendingBgm = null;       // requested before the audio context was unlocked
-        this._activePresetName = null; // procedural BGM preset name (fallback only)
         this._unlocked = false;
         this._last = {};               // event → last play time (retrigger guard)
         this._biome = 'dungeon';
@@ -117,14 +73,8 @@ export class AudioManager {
         const unlock = () => {
             if (this._unlocked) return;
             this._unlocked = true;
-            this.proc.resume();
-            this.bgm.resume();
             if (game?.sound?.context?.state === 'suspended') {
                 game.sound.context.resume().catch(() => {});
-            }
-            // If a preset was requested before unlock, kick it off now.
-            if (this._activePresetName) {
-                this.bgm.play(this._activePresetName);
             }
             if (this._pendingBgm) {
                 const name = this._pendingBgm;
@@ -152,9 +102,6 @@ export class AudioManager {
         prefs = { ...DEFAULT_PREFS, ...(prefs || {}) };
         this.prefs = prefs;
         const muteMul = prefs.muted ? 0 : 1;
-        this.proc.setVolume('master', prefs.master * muteMul);
-        this.proc.setVolume('sfx',    prefs.sfx);
-        this.proc.setVolume('ui',     prefs.ui);
         if (this.game?.sound) {
             this.game.sound.volume = prefs.master * muteMul;
             this.game.sound.mute = !!prefs.muted;
@@ -166,10 +113,6 @@ export class AudioManager {
         }
         if (this._bgmEl && !this._bgmEl._fadeTimer) {
             try { this._bgmEl.volume = this._musicVolume(this._bgmKey); } catch (e) {}
-        }
-        // Procedural BGM gets the music channel too
-        if (this.bgm) {
-            this.bgm.setVolume(prefs.music * muteMul);
         }
     }
 
@@ -209,7 +152,7 @@ export class AudioManager {
         const key = keys[(Math.random() * keys.length) | 0];
         const entry = SFX_FILES[key];
         if (DUCK_EVENTS.has(event)) this._duckForSample(key);
-        if (!entry || !this.game?.cache?.audio?.exists(key)) { this._fallback(event); return; }
+        if (!entry || !this.game?.cache?.audio?.exists(key)) return;
         const rate = (opts.rate ?? cfg.rate ?? 1) * (1 + (Math.random() * 2 - 1) * (cfg.jitter || 0));
         const vol = entry[1] * (opts.vol ?? 1) * this._catVolume(cfg.cat || 'sfx');
         try {
@@ -217,15 +160,7 @@ export class AudioManager {
             // the only way the 27 RMS-matched samples with vol > 1 reach their intended loudness.
             // Clamping at 1 silently undid the match and left them ~3x too quiet.
             this.game.sound.play(key, { volume: Math.min(3, vol), rate });
-        } catch (e) {
-            this._fallback(event);
-        }
-    }
-
-    _fallback(event) {
-        const method = FALLBACK[event];
-        if (!method || typeof this.proc[method] !== 'function') return;
-        try { this.proc[method](); } catch (e) {}
+        } catch (e) {}
     }
 
     // Consecutive cheese rises in pitch. The scene may pass its own {combo};
@@ -257,22 +192,6 @@ export class AudioManager {
         });
         // Music: bgm:<biome> → track key via BIOME_BGM
         for (const name of Object.values(BGM)) wire(name, () => this.playBgm(name));
-    }
-
-    // === Procedural BGM (preset-based, no files required) — fallback only now ===
-    playBgmPreset(name) {
-        this._activePresetName = name;
-        if (this._unlocked) {
-            this.bgm.play(name);
-        }
-        // Apply current music volume
-        const prefs = this.prefs || safeGetPrefs();
-        this.bgm.setVolume(prefs.music * (prefs.muted ? 0 : 1));
-    }
-
-    stopBgmPreset() {
-        this._activePresetName = null;
-        this.bgm.stop();
     }
 
     // === Ducking — the music steps back under a sting and comes straight back ===
@@ -356,20 +275,10 @@ export class AudioManager {
                 this._stopRamp(el);
                 this._bgmEl = null;
                 this._bgmKey = null;
-                const preset = this._presetFor(key);
-                if (preset) this.playBgmPreset(preset);
             }
         };
         this._bgmEls[key] = el;
         return el;
-    }
-
-    // The procedural preset that stands in for a track when its file will not load.
-    _presetFor(key) {
-        for (const [biome, k] of Object.entries(BIOME_BGM)) {
-            if (k === key && BGM_PRESETS[biome]) return biome;
-        }
-        return BGM_PRESETS[this._biome] ? this._biome : null;
     }
 
     // Manual ramp — the manager owns music across scene restarts, so it can't borrow a
@@ -414,17 +323,10 @@ export class AudioManager {
         const id = String(name || '').replace(/^bgm:/, '');
         const key = BGM_FILES[name] ? name
             : (BIOME_BGM[id] || (id === 'menu' ? 'hall' : null));
-        if (!key) {
-            // No file for this biome — it has a procedural preset of its own instead.
-            if (BGM_PRESETS[id]) this.playBgmPreset(id);
-            return;
-        }
+        // No track for this id — silence. Nothing here ever synthesises a stand-in.
+        if (!key) return;
         const el = this._bgmElement(key);
-        if (!el) {
-            // No such track — keep the floor from being silent with the procedural preset
-            if (BGM_PRESETS[id]) this.playBgmPreset(id);
-            return;
-        }
+        if (!el) return;
         if (this._bgmKey === key && this._bgmEl === el) {
             // Same track: only nudge it if a blocked autoplay (or a stall) left it paused
             if (el.paused && !document.hidden) {
@@ -433,7 +335,6 @@ export class AudioManager {
             }
             return;
         }
-        if (this._activePresetName) this.stopBgmPreset();
         const old = this._bgmEl;
         if (old && old !== el) {
             this._ramp(old, 0, 600, () => { try { old.pause(); old.currentTime = 0; } catch (e) {} });
@@ -448,7 +349,6 @@ export class AudioManager {
 
     stopBgm() {
         this._pendingBgm = null;
-        if (this._activePresetName) this.stopBgmPreset();
         const old = this._bgmEl;
         this._bgmEl = null;
         this._bgmKey = null;
@@ -462,17 +362,11 @@ export class AudioManager {
             this._bgmWasPlaying = !!(this._bgmEl && !this._bgmEl.paused);
             if (this._bgmEl) this._bgmEl.pause();
         } catch (e) {}
-        try { this.bgm?.pause(); } catch (e) {}
-        // The ambient bed and every procedural tail live in proc's own AudioContext,
-        // which nothing here was suspending — so the hum survived being backgrounded.
-        try { this.proc?.suspend?.(); } catch (e) {}
         if (this.game?.sound) this.game.sound.pauseAll?.();
     }
     resumeAll() {
         if (!this._duckTimer && this._duckGain !== 1) this._clearDuck();
         try { if (this._bgmEl && this._bgmWasPlaying) this._startEl(this._bgmEl, this._bgmKey); } catch (e) {}
-        try { this.bgm?.resume(); } catch (e) {}
-        try { this.proc?.resume?.(); } catch (e) {}
         if (this.game?.sound) this.game.sound.resumeAll?.();
     }
 

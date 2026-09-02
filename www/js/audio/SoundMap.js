@@ -87,6 +87,6 @@ export const FOOTSTEPS = {
 };
 
 // biome id → music key
-// Four track files for five biomes plus the menu, so the library takes its own
-// procedural preset (ProceduralBgm 'library') rather than replaying the dungeon's.
+// Four track files for five biomes plus the menu: the library shares the dungeon's
+// cavern loop. Nothing is ever synthesised — a missing track means silence.
 export const BIOME_BGM = { dungeon: 'cavern', kitchen: 'hall', library: 'cavern', garden: 'garden', throne: 'throne' };

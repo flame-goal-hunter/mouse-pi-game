@@ -115,7 +115,7 @@ if (document.fonts && document.fonts.load) {
     _boot();
 }
 
-// Suppress DAC pop + resume both AudioContexts (Phaser + ProceduralSfx) on first gesture.
+// Suppress DAC pop + resume the Phaser AudioContext on first gesture.
 // Capture phase + document so Phaser canvas handlers can't stop propagation.
 function _unlockAllAudio() {
     if (!game) return;
@@ -133,8 +133,6 @@ function _unlockAllAudio() {
             game.sound.mute = muted;
         }, 150));
     }
-    // CRITICAL: resume the ProceduralSfx context too — it's a separate AudioContext
-    try { window.audio?.proc?.resume(); } catch (e) {}
 }
 document.addEventListener('touchstart', _unlockAllAudio, { capture: true });
 document.addEventListener('pointerdown', _unlockAllAudio, { capture: true });
@@ -167,7 +165,5 @@ document.addEventListener('visibilitychange', () => {
             try { muted = !!Progress.getAudioPrefs().muted; } catch (e) {}
             game.sound.mute = muted;
         }, 400);
-        // ProceduralSfx ctx also auto-suspends on Android — resume it too
-        try { window.audio?.proc?.resume(); } catch (e) {}
     }
 });

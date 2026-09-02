@@ -96,11 +96,7 @@ export class TransylvaniaScene extends Phaser.Scene {
             }, 250);
         };
         this.scale.on('resize', onResize);
-        // DIAGNOSTIC: BGM DISABLED in this build to rule out Web Audio as a lag source.
-        // The procedural BGM creates oscillators / setInterval / reverb delay nodes.
-        // If menu FPS jumps with this build, we know BGM was the culprit.
-        // try { window.audio?.playBgmPreset?.('menu'); } catch (e) {}
-        console.log('[Menu] BGM intentionally disabled in this build for diagnostics');
+        // This legacy menu scene plays no music; the HTML hub owns the menu loop.
         // The hub owns the menu loop whichever way it was entered (boot, exit, win, lose overlay).
         try { bus.emit(BGM.MENU); } catch (e) {}
         this.events.once('shutdown', () => {
