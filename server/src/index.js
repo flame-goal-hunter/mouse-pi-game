@@ -4,9 +4,12 @@ import { monitor } from '@colyseus/monitor';
 import express from 'express';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SnowballRoom } from './rooms/SnowballRoom.js';
 
 const PORT = Number(process.env.PORT) || 2567;
+const STARTED_AT = new Date().toISOString();
 
 const app = express();
 app.use(express.json());
@@ -35,6 +38,18 @@ app.use(express.static(WWW, {
 
 app.get('/health', (_req, res) => {
     res.json({ ok: true, rooms: 'snowball' });
+});
+
+// Which build is actually live. Open <адрес>/version on the phone to tell a stale deploy
+// from a real bug: the cache version changes with every content change, and the icon names
+// say straight away whether the new artwork is being served.
+app.get('/version', (_req, res) => {
+    const read = (rel) => { try { return readFileSync(join(WWW, rel), 'utf8'); } catch (e) { return ''; } };
+    const cache = (read('sw.js').match(/CACHE_VERSION\s*=\s*'([^']+)'/) || [])[1] || 'unknown';
+    let icons = [];
+    try { icons = (JSON.parse(read('manifest.webmanifest')).icons || []).map((i) => i.src.split('/').pop()); }
+    catch (e) {}
+    res.json({ ok: true, cacheVersion: cache, icons, startedAt: STARTED_AT });
 });
 
 // Colyseus dashboard for debugging (http://localhost:2567/colyseus)
