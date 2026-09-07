@@ -30,6 +30,7 @@ export const SNEAK = {
 
     // Сетка и производные
     CELL:           40,    // совпадает с NAV_CELL в DungeonScene
+    BODY_R:         15,    // полугабарит корпуса для проверки стен (клетка 40)
     SAFE_RUN_S:      3.6,  // секунд бега после вычета HOLE_HOLD_MS
     MAX_HOLE_DIST:  850,   // px = WALK_SPEED * SAFE_RUN_S, округлено вниз
 

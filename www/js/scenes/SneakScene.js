@@ -5,7 +5,7 @@
 
 import { Progress } from '../storage/ProgressStore.js';
 import { bus } from '../audio/EventBus.js';
-import { SFX, BGM } from '../audio/SoundKeys.js';
+import { SFX, UI, BGM } from '../audio/SoundKeys.js';
 import { preloadAudio } from '../audio/AudioManager.js';
 import { SNEAK } from '../sneak/SneakMetrics.js';
 import { TEMPLATES, BEATS } from '../sneak/templates/index.js';
@@ -52,11 +52,21 @@ export class SneakScene extends Phaser.Scene {
         const base = 'assets/characters/transylvania/';
         this.load.svg('d_pi',  base + 'pi.svg',  { width: 150, height: 172 });
         this.load.svg('d_cat', base + 'cat.svg', { width: 165, height: 150 });
+        // Приз рисуется этой текстурой. Без неё прямой вход в режим давал
+        // квадрат «нет текстуры» вместо сыра.
+        this.load.svg('d_cheese', base + 'cheese.svg', { width: 48, height: 40 });
     }
 
     create() {
         this.viewW = this.scale.width;
         this.viewH = this.scale.height;
+        // Размер игры равен CSS-пикселям, умноженным на DPR (см. main.js). DungeonScene
+        // это учитывает зумом камеры, а здесь не учитывалось — оттого комната и весь
+        // интерфейс были ровно в DPR раз мельче, чем задумано.
+        this.dpr = window.__GAME_DPR || 1;
+        this.cssW = this.viewW / this.dpr;
+        this.cssH = this.viewH / this.dpr;
+        this.ui = (v) => Math.round(v * this.dpr);   // экранный размер -> физические пиксели
         this.cameras.main.setBackgroundColor('#0b0616');
 
         this.drawRoom();
@@ -74,19 +84,36 @@ export class SneakScene extends Phaser.Scene {
 
         this.setupTouch();
         this.buildHud();
+        this.buildHoleButton();
+        this.buildGoalBanner();
 
         this.cursors = this.input.keyboard.createCursorKeys();
 
         // Правая половина экрана — бросок. Левая — стик (setupTouch).
         // Граница задаётся сразу, чтобы обработчики не конфликтовали.
         this.input.on('pointerdown', (p) => {
-            if (this.state !== 'play' || p.x <= this.viewW / 2) return;
+            if (this.state !== 'play') return;
+            // Кнопка норы стоит в правом нижнем углу, то есть внутри зоны броска —
+            // она забирает нажатие себе, иначе Пи кидал бы пирог вместо прыжка.
+            if (this._overHoleButton(p)) {
+                this.holeBtn.held = true;
+                this.holeBtn.id = p.id;
+                this.holeBtn.ring.setFillStyle(0x6a4d90, 0.95);
+                return;
+            }
+            if (p.x <= this.viewW / 2) return;
             const wp = this.cameras.main.getWorldPoint(p.x, p.y);
             this._pieDownAt = this.time.now;
             this._pieId = p.id;
             this._pieTarget = { x: wp.x, y: wp.y };
         });
         this.input.on('pointerup', (p) => {
+            if (this.holeBtn && this.holeBtn.held && p.id === this.holeBtn.id) {
+                this.holeBtn.held = false;
+                this.holeBtn.id = null;
+                this.holeBtn.ring.setFillStyle(0x2a1c44, 0.92);
+                return;
+            }
             if (this.state !== 'play' || !this._pieTarget || p.id !== this._pieId) return;
             const held = this.time.now - this._pieDownAt;
             if (held > 500) this.eatPie();
@@ -98,8 +125,9 @@ export class SneakScene extends Phaser.Scene {
 
     setupTouch() {
         this.joy = { active: false, id: null, baseX: 0, baseY: 0, dx: 0, dy: 0 };
-        const R = 60;
+        const R = this.ui(62);   // радиус в физических пикселях: иначе стик был втрое мельче пальца
 
+        this.joyR = R;
         this.joyBase = this.add.circle(0, 0, R, 0xd8a850, 0.14)
             .setScrollFactor(0).setDepth(DEPTH.HUD).setVisible(false);
         this.joyKnob = this.add.circle(0, 0, R * 0.42, 0xd8a850, 0.5)
@@ -125,7 +153,7 @@ export class SneakScene extends Phaser.Scene {
             let dx = p.x - this.joy.baseX;
             let dy = p.y - this.joy.baseY;
             const d = Math.hypot(dx, dy);
-            const DEAD = 8;
+            const DEAD = this.ui(8);
             if (d < DEAD) { this.joy.dx = 0; this.joy.dy = 0; }
             else {
                 const clamped = Math.min(d, R);
@@ -149,17 +177,92 @@ export class SneakScene extends Phaser.Scene {
         });
     }
 
+    // Вход в нору висел только на клавише «пробел»: на телефоне нажать было нечем,
+    // а подсказка над норой говорила «ДЕРЖИ» и не показывала, что именно.
+    // Кнопка появляется, только когда Пи у норы, — тогда её назначение очевидно.
+    buildHoleButton() {
+        const r = this.ui(38);
+        const cx = this.viewW - r - this.ui(20);
+        const cy = this.viewH - r - this.ui(20);
+        this.holeBtn = {
+            held: false, id: null, r, cx, cy,
+            ring: this.add.circle(cx, cy, r, 0x2a1c44, 0.92).setStrokeStyle(this.ui(3), 0xd8a850),
+            label: this.add.text(cx, cy, 'НОРА', {
+                fontFamily: 'Nunito, sans-serif', fontSize: this.ui(15) + 'px',
+                color: '#ffd040', fontStyle: 'bold',
+            }).setOrigin(0.5),
+        };
+        for (const o of [this.holeBtn.ring, this.holeBtn.label]) {
+            o.setScrollFactor(0).setDepth(DEPTH.HUD + 6).setVisible(false);
+        }
+        this.cameras.main.ignore([this.holeBtn.ring, this.holeBtn.label]);
+    }
+
+    // Что делать в комнате, было видно только по цвету кружка у выхода.
+    // Строка задачи наверху и подпись у выхода снимают этот вопрос.
+    buildGoalBanner() {
+        this.goalText = this.add.text(this.viewW / 2, this.ui(14), '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: this.ui(16) + 'px',
+            color: '#1a0c2e', backgroundColor: '#e8b54a', fontStyle: 'bold',
+            padding: { x: this.ui(12), y: this.ui(5) },
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
+        this.cameras.main.ignore(this.goalText);
+
+        this.exitLabel = this.add.text(this.exitPoint.x, this.exitPoint.y - CELL * 0.62, 'ВЫХОД', {
+            fontFamily: 'Nunito, sans-serif', fontSize: '12px', fontStyle: '900',
+            color: '#0b0616', backgroundColor: '#80ff80', padding: { x: 5, y: 2 },
+        }).setOrigin(0.5, 1).setDepth(DEPTH.PROP + 1);
+        this.uiCam.ignore(this.exitLabel);
+        this.updateGoal();
+
+        if (this.roomIndex === 0) {
+            const tip = this.add.text(this.viewW / 2, this.viewH - this.ui(16),
+                'Стик — идти · справа — бросить пирог · у норы держи «НОРА»', {
+                fontFamily: 'Nunito, sans-serif', fontSize: this.ui(13) + 'px',
+                color: '#e8dcff', backgroundColor: '#2a1c44aa',
+                padding: { x: this.ui(10), y: this.ui(5) },
+            }).setOrigin(0.5, 1).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
+            this.cameras.main.ignore(tip);
+            this.tweens.add({ targets: tip, alpha: 0, delay: 6000, duration: 900,
+                onComplete: () => tip.destroy() });
+        }
+    }
+
+    updateGoal() {
+        if (!this.goalText) return;
+        const need = this.prize && !this.prize.taken;
+        this.goalText.setText(need ? 'Забери добычу' : 'Уходи к выходу');
+        if (this.exitLabel) this.exitLabel.setVisible(!need);
+    }
+
+    _overHoleButton(p) {
+        const b = this.holeBtn;
+        if (!b || !b.ring.visible) return false;
+        // Палец засчитывается с запасом: попадать точно в круг ребёнку не обязательно.
+        return Math.hypot(p.x - b.cx, p.y - b.cy) <= b.r * 1.35;
+    }
+
+    _setHoleButtonVisible(on) {
+        const b = this.holeBtn;
+        if (!b || b.ring.visible === on) return;
+        b.ring.setVisible(on);
+        b.label.setVisible(on);
+        if (!on) { b.held = false; b.id = null; }
+        else b.ring.setScale(0.7), this.tweens.add({ targets: [b.ring], scale: 1, duration: 180, ease: 'Back.easeOut' });
+    }
+
     buildHud() {
-        this.hudPies = this.add.text(14, 12, '', {
-            fontFamily: 'Nunito, sans-serif', fontSize: '18px', color: '#f0c060',
+        const m = this.ui(14);
+        this.hudPies = this.add.text(m, this.ui(12), '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: this.ui(19) + 'px', color: '#f0c060',
         }).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
 
-        this.hudCheese = this.add.text(14, 36, '', {
-            fontFamily: 'Nunito, sans-serif', fontSize: '18px', color: '#ffd040',
+        this.hudCheese = this.add.text(m, this.ui(38), '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: this.ui(19) + 'px', color: '#ffd040',
         }).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
 
-        this.hudRoom = this.add.text(this.viewW - 14, 12, '', {
-            fontFamily: 'Nunito, sans-serif', fontSize: '14px', color: '#a090b8',
+        this.hudRoom = this.add.text(this.viewW - m, this.ui(12), '', {
+            fontFamily: 'Nunito, sans-serif', fontSize: this.ui(15) + 'px', color: '#a090b8',
         }).setOrigin(1, 0).setScrollFactor(0).setDepth(DEPTH.HUD + 5);
 
         this.cameras.main.ignore([this.hudPies, this.hudCheese, this.hudRoom]);
@@ -175,6 +278,20 @@ export class SneakScene extends Phaser.Scene {
 
     drawRoom() {
         const g = this.add.graphics().setDepth(DEPTH.FLOOR);
+        const rows = this.tpl.grid.length;
+        const cols = this.tpl.grid[0].length;
+        // Комната редко совпадает с пропорцией экрана. Поля вокруг заполняются той же
+        // кладкой, иначе половина экрана оставалась чёрной и карта казалась мелкой.
+        const B = 14;
+        for (let y = -B; y < rows + B; y++) {
+            for (let x = -B; x < cols + B; x++) {
+                if (y >= 0 && y < rows && x >= 0 && x < cols) continue;
+                g.fillStyle(0x3d2b57, 1);
+                g.fillRect(x * CELL, y * CELL, CELL, CELL);
+                g.fillStyle(0x543d75, 1);
+                g.fillRect(x * CELL, y * CELL, CELL, 4);
+            }
+        }
         for (let y = 0; y < this.tpl.grid.length; y++) {
             for (let x = 0; x < this.tpl.grid[y].length; x++) {
                 const px = x * CELL;
@@ -261,17 +378,25 @@ export class SneakScene extends Phaser.Scene {
         this.exitDisc.setFillStyle(0xff6060, 0.22);   // shut until the prize is lifted
     }
 
-    // Камера идёт за Пи и не мельчит: маршрут патруля показан линией на полу,
-    // а не тем, что комната втиснута в экран целиком (находка 28 реестра).
+    // Комната занимает экран целиком. Зум считается в CSS-пикселях и лишь потом
+    // умножается на DPR — раньше этого множителя не было, и комната 560x360 рисовалась
+    // на треть экрана.
     setupCamera() {
         const w = this.tpl.grid[0].length * CELL;
         const h = this.tpl.grid.length * CELL;
-        const pad = 24;
-        const fit = Math.min((this.viewW - pad * 2) / w, (this.viewH - pad * 2) / h, 1.6);
+        const pad = 10;
+        // Во сколько раз увеличить комнату, чтобы она заполнила экран по узкой стороне.
+        const fit = Math.min((this.cssW - pad * 2) / w, (this.cssH - pad * 2) / h);
+        const k = Math.max(1.0, Math.min(2.6, fit));
         const cam = this.cameras.main;
-        // Never below 1:1 — that is what made everything tiny on a phone.
-        cam.setZoom(Math.max(1.0, Math.min(1.6, fit * 1.6)));
-        cam.setBounds(0, 0, w, h);
+        cam.setZoom(this.dpr * k);
+        this.roomW = w;
+        this.roomH = h;
+        // Комната целиком в кадре — камера стоит. Иначе идёт за Пи.
+        this.roomFits = (w * k <= this.cssW + 1) && (h * k <= this.cssH + 1);
+        // Границы ставятся только когда есть что ограничивать: при виде шире комнаты
+        // они прижимали её к левому верхнему углу вместо центра.
+        if (!this.roomFits) cam.setBounds(0, 0, w, h);
         cam.centerOn(w / 2, h / 2);
         this._camReady = true;
     }
@@ -303,15 +428,21 @@ export class SneakScene extends Phaser.Scene {
         const px = (this.tpl.entry.x + 0.5) * CELL;
         const py = (this.tpl.entry.y + 0.5) * CELL;
         this.player = { x: px, y: py, vx: 0, vy: 0, hidden: false };
-        this.player.sprite = this.add.image(px, py, 'd_pi').setDepth(DEPTH.PLAYER).setScale(0.32);
-        if (this._camReady) this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+        // Спрайт держится в габарите клетки: при scale 0.32 он был 48x55 px при клетке 40
+        // и половиной корпуса заезжал в стену даже стоя вплотную.
+        this.player.sprite = this.add.image(px, py, 'd_pi').setDepth(DEPTH.PLAYER)
+            .setDisplaySize(CELL * 0.82, CELL * 0.94);
+        this._playerW = CELL * 0.82;
+        this._playerH = CELL * 0.94;
+        if (this._camReady && !this.roomFits) this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
     }
 
     spawnMonster() {
         if (!this.tpl.patrol || this.tpl.patrol.length < 2) return;
         const start = positionAt(this.tpl.patrol, this.tpl.patrolSpeed, CELL, 0);
         this.monster = { t: 0, x: start.x, y: start.y, angle: start.angle, suspicion: 0, state: 'patrol' };
-        this.monster.sprite = this.add.image(start.x, start.y, 'd_cat').setDepth(DEPTH.MONSTER).setScale(0.32);
+        this.monster.sprite = this.add.image(start.x, start.y, 'd_cat').setDepth(DEPTH.MONSTER)
+            .setDisplaySize(CELL * 0.95, CELL * 0.86);
         this.coneGfx = this.add.graphics().setDepth(DEPTH.CONE);
     }
 
@@ -320,7 +451,7 @@ export class SneakScene extends Phaser.Scene {
         if (this.state === 'squeeze') return;
         if (this.state !== 'play') return;
         if (this.winded && this.time.now > this.windedUntil) this.winded = false;
-        const actionDown = this.cursors.space.isDown;
+        const actionDown = this.cursors.space.isDown || !!(this.holeBtn && this.holeBtn.held);
         this.updateHoleHold(dt, actionDown);
         if (this.holdMs === 0) this.updatePlayer(dt);
         this.updateMonster(dt);
@@ -341,6 +472,7 @@ export class SneakScene extends Phaser.Scene {
     updateHoleHold(dt, actionDown) {
         if (!actionDown) this.holdArmed = true;
         const near = this.nearestHole();
+        this._setHoleButtonVisible(!!near && !this.player.hidden);
         this._showHoleHint(near, actionDown);
         if (!near || !actionDown || this.player.hidden || !this.holdArmed) {
             this.holdMs = 0;
@@ -373,13 +505,13 @@ export class SneakScene extends Phaser.Scene {
         const ty = (other.y + 0.5) * CELL;
         this.tweens.add({
             targets: this.player.sprite,
-            x: tx, y: ty, scale: 0.18,
+            x: tx, y: ty, scale: this.player.sprite.scaleX * 0.55,
             duration: SNEAK.HOLE_SQUEEZE_MS,
             ease: 'Quad.easeInOut',
             onComplete: () => {
                 this.player.x = tx;
                 this.player.y = ty;
-                this.player.sprite.setScale(0.32);
+                this.player.sprite.setDisplaySize(this._playerW, this._playerH);
                 this.player.hidden = false;
                 this.state = 'play';
                 if (this.monster && this.monster.state === 'chase') this.monsterLosesPlayer();
@@ -417,8 +549,9 @@ export class SneakScene extends Phaser.Scene {
         const dist = Math.hypot(targetX - startX, targetY - startY);
 
         // Отклик на собственное действие — то, чего не хватало боевым режимам.
-        this.player.sprite.setScale(0.34, 0.30);
-        this.tweens.add({ targets: this.player.sprite, scaleX: 0.32, scaleY: 0.32, duration: 100 });
+        const sx = this.player.sprite.scaleX, sy = this.player.sprite.scaleY;
+        this.player.sprite.setScale(sx * 1.08, sy * 0.92);
+        this.tweens.add({ targets: this.player.sprite, scaleX: sx, scaleY: sy, duration: 100 });
 
         this.tweens.add({
             targets: pie,
@@ -441,8 +574,8 @@ export class SneakScene extends Phaser.Scene {
         }
         if (this.holeHint) this.holeHint.destroy();
         this._hintFor = near;
-        this.holeHint = this.add.text(near.x, near.y - CELL * 0.75, 'ДЕРЖИ', {
-            fontFamily: '"Nunito", sans-serif', fontStyle: '900', fontSize: '15px',
+        this.holeHint = this.add.text(near.x, near.y - CELL * 0.75, 'ДЕРЖИ «НОРА»', {
+            fontFamily: '"Nunito", sans-serif', fontStyle: '900', fontSize: '13px',
             color: '#1a0c2e', backgroundColor: '#e8b54a', padding: { x: 7, y: 3 },
         }).setOrigin(0.5, 1).setDepth(DEPTH.HUD);
         this.uiCam.ignore(this.holeHint);
@@ -549,7 +682,8 @@ export class SneakScene extends Phaser.Scene {
 
         // Подозрение растёт только когда игрок в конусе и не спрятан.
         const sees = !this.player.hidden && m.state !== 'confused'
-            && inCone(this.player.x, this.player.y, m.x, m.y, m.angle, SNEAK.CONE_RANGE, SNEAK.CONE_ANGLE);
+            && inCone(this.player.x, this.player.y, m.x, m.y, m.angle, SNEAK.CONE_RANGE, SNEAK.CONE_ANGLE)
+            && this._lineOfSight(m.x, m.y, this.player.x, this.player.y);
         if (sees) {
             m.suspicion = Math.min(1, m.suspicion + SNEAK.SUSPICION_RISE * dt);
             if (m.suspicion >= 1 && m.state !== 'chase') {
@@ -590,14 +724,38 @@ export class SneakScene extends Phaser.Scene {
         this.moveMonsterBy(m, Math.cos(m.angle) * speed * dt, Math.sin(m.angle) * speed * dt);
     }
 
-    // The monster gets the same wall check the player has had all along.
+    // Монстр проверяется тем же габаритом, что и игрок.
     moveMonsterBy(m, dx, dy) {
-        const nx = m.x + dx, ny = m.y + dy;
-        const cyOld = Math.floor(m.y / CELL);
-        if (isFloor(this.tpl, Math.floor(nx / CELL), cyOld)) m.x = nx;
-        const cxNew = Math.floor(m.x / CELL);
-        if (isFloor(this.tpl, cxNew, Math.floor(ny / CELL))) m.y = ny;
+        const r = SNEAK.BODY_R;
+        if (this._free(m.x + dx, m.y, r)) m.x += dx;
+        if (this._free(m.x, m.y + dy, r)) m.y += dy;
         if (m.sprite) m.sprite.setPosition(m.x, m.y);
+    }
+
+    // Стена перекрывает взгляд. Без этого сторож замечал Пи через кладку, а конус
+    // рисовался поверх стен — выглядело как «сквозь стены всё видно».
+    _lineOfSight(x0, y0, x1, y1) {
+        const dx = x1 - x0, dy = y1 - y0;
+        const dist = Math.hypot(dx, dy);
+        // Шаг мельче половины клетки: на редкой сетке луч перешагивал угол стены.
+        const steps = Math.ceil(dist / (CELL * 0.18));
+        for (let i = 1; i < steps; i++) {
+            const t = i / steps;
+            const x = x0 + dx * t, y = y0 + dy * t;
+            if (!isFloor(this.tpl, Math.floor(x / CELL), Math.floor(y / CELL))) return false;
+        }
+        return true;
+    }
+
+    // Расстояние до первой стены вдоль луча — им обрезается каждый край конуса.
+    _rayHit(x0, y0, angle, maxDist) {
+        const step = CELL * 0.28;
+        const cx = Math.cos(angle), cy = Math.sin(angle);
+        for (let d = step; d <= maxDist; d += step) {
+            const x = x0 + cx * d, y = y0 + cy * d;
+            if (!isFloor(this.tpl, Math.floor(x / CELL), Math.floor(y / CELL))) return d - step;
+        }
+        return maxDist;
     }
 
     drawCone() {
@@ -607,9 +765,16 @@ export class SneakScene extends Phaser.Scene {
         const half = SNEAK.CONE_ANGLE / 2;
         const alpha = m.state === 'chase' ? 0.30 : 0.16;
         this.coneGfx.fillStyle(m.state === 'chase' ? 0xff6060 : 0xd8a850, alpha);
+        // Веер лучей вместо дуги: каждый останавливается о стену, поэтому конус
+        // ложится ровно на то, что сторож действительно видит.
+        const RAYS = 26;
         this.coneGfx.beginPath();
         this.coneGfx.moveTo(m.x, m.y);
-        this.coneGfx.arc(m.x, m.y, SNEAK.CONE_RANGE, m.angle - half, m.angle + half);
+        for (let i = 0; i <= RAYS; i++) {
+            const a = m.angle - half + (SNEAK.CONE_ANGLE * i) / RAYS;
+            const d = this._rayHit(m.x, m.y, a, SNEAK.CONE_RANGE);
+            this.coneGfx.lineTo(m.x + Math.cos(a) * d, m.y + Math.sin(a) * d);
+        }
         this.coneGfx.closePath();
         this.coneGfx.fillPath();
     }
@@ -677,37 +842,58 @@ export class SneakScene extends Phaser.Scene {
         const h = this.viewH;
         const worldObjects = this.children.list.slice();
         const objs = [];
+        const px = (v) => this.ui(v);
 
         const bg = this.add.rectangle(w / 2, h / 2, w, h, 0x0b0616, 0.92).setDepth(DEPTH.HUD);
         objs.push(bg);
-        const panelW = Math.min(320, w - 48);
-        const panel = this.add.rectangle(w / 2, h / 2, panelW, 260, 0x2a1c44, 1)
-            .setStrokeStyle(3, 0x8a68c8).setDepth(DEPTH.HUD + 1);
+
+        // Три ответа вместо одного: раньше после поимки предлагалась только лавка,
+        // то есть переиграть ночь было нельзя вообще.
+        const rows = [
+            { label: 'ЕЩЁ РАЗ', main: true, act: () => this.scene.restart({ roomIndex: 0 }) },
+            { label: 'В ЛАВКУ', act: () => { bus.emit(BGM.MENU); this.scene.start('TransylvaniaScene', { openShop: true }); } },
+            { label: 'В МЕНЮ', act: () => { bus.emit(BGM.MENU); window.location.href = 'transylvania-menu.html'; } },
+        ];
+        const btnH = px(50), gap = px(10);
+        const panelW = Math.min(px(330), w - px(40));
+        const panelH = px(112) + rows.length * (btnH + gap);
+        const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, 0x2a1c44, 1)
+            .setStrokeStyle(px(3), 0x8a68c8).setDepth(DEPTH.HUD + 1);
         objs.push(panel);
-        const titleT = this.add.text(w / 2, h / 2 - 90, title, {
-            fontFamily: 'Nunito, sans-serif', fontSize: '30px', color: '#ffd040', fontStyle: 'bold',
+
+        const top = h / 2 - panelH / 2;
+        const titleT = this.add.text(w / 2, top + px(26), title, {
+            fontFamily: 'Nunito, sans-serif', fontSize: px(27) + 'px', color: '#ffd040', fontStyle: 'bold',
         }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
         objs.push(titleT);
-        const subT = this.add.text(w / 2, h / 2 - 40, sub, {
-            fontFamily: 'Nunito, sans-serif', fontSize: '16px', color: '#e8dcff', align: 'center',
-            wordWrap: { width: panelW - 32 },
+        const subT = this.add.text(w / 2, top + px(58), sub, {
+            fontFamily: 'Nunito, sans-serif', fontSize: px(14) + 'px', color: '#e8dcff', align: 'center',
+            wordWrap: { width: panelW - px(28) },
         }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
         objs.push(subT);
-        const cheeseT = this.add.text(w / 2, h / 2 + 15, `+${cheese} \u{1F9C0}`, {
-            fontFamily: 'Nunito, sans-serif', fontSize: '26px', color: '#ffd040', fontStyle: 'bold',
+        const cheeseT = this.add.text(w / 2, top + px(88), `+${cheese} \u{1F9C0}`, {
+            fontFamily: 'Nunito, sans-serif', fontSize: px(22) + 'px', color: '#ffd040', fontStyle: 'bold',
         }).setOrigin(0.5).setDepth(DEPTH.HUD + 2);
         objs.push(cheeseT);
-        const btnBg = this.add.rectangle(w / 2, h / 2 + 85, 220, 54, 0x6a4d90, 1)
-            .setStrokeStyle(2, 0xd8a850).setDepth(DEPTH.HUD + 2).setInteractive({ useHandCursor: true });
-        objs.push(btnBg);
-        const btnT = this.add.text(w / 2, h / 2 + 85, 'В ЛАВКУ', {
-            fontFamily: 'Nunito, sans-serif', fontSize: '20px', color: '#ffffff', fontStyle: 'bold',
-        }).setOrigin(0.5).setDepth(DEPTH.HUD + 3);
-        objs.push(btnT);
-        btnBg.on('pointerdown', () => {
-            bus.emit(BGM.MENU);
-            this.scene.start('TransylvaniaScene', { openShop: true });
-        });
+
+        let y = top + px(112) + btnH / 2;
+        for (const r of rows) {
+            const bw = panelW - px(40);
+            const b = this.add.rectangle(w / 2, y, bw, btnH, r.main ? 0xd8a850 : 0x6a4d90, 1)
+                .setStrokeStyle(px(2), r.main ? 0xffd040 : 0xd8a850)
+                .setDepth(DEPTH.HUD + 2).setInteractive({ useHandCursor: true });
+            const t = this.add.text(w / 2, y, r.label, {
+                fontFamily: 'Nunito, sans-serif', fontSize: px(17) + 'px',
+                color: r.main ? '#2a1206' : '#ffffff', fontStyle: 'bold',
+            }).setOrigin(0.5).setDepth(DEPTH.HUD + 3);
+            objs.push(b, t);
+            let fired = false;
+            const go = () => { if (fired) return; fired = true; bus.emit(UI.BUTTON_CLICK); r.act(); };
+            b.on('pointerdown', go);
+            b.on('pointerover', () => b.setScale(1.03));
+            b.on('pointerout', () => b.setScale(1));
+            y += btnH + gap;
+        }
 
         const uiCam = this.cameras.add(0, 0, w, h);
         uiCam.ignore(worldObjects);
@@ -715,6 +901,10 @@ export class SneakScene extends Phaser.Scene {
         // Стик/HUD живут на своей персистентной uiCam — без этого она бы
         // рисовала оверлей повторно (её депth 905 у HUD-текста выше панели).
         this.uiCam.ignore(objs);
+        // Стик и кнопка норы после исхода уже ни к чему.
+        for (const o of [this.joyBase, this.joyKnob, this.holeBtn?.ring, this.holeBtn?.label, this.goalText]) {
+            if (o) o.setVisible(false);
+        }
     }
 
     checkPickupsAndExit() {
@@ -738,6 +928,7 @@ export class SneakScene extends Phaser.Scene {
                 this.prize.spr.destroy(); this.prize.glow.destroy();
                 this.showFloatingText(this.prize.x, this.prize.y - 30, 'ДОБЫЧА! Теперь к выходу', '#ffd040');
                 this.exitDisc.setFillStyle(0x80ff80, 0.35);
+                this.updateGoal();
             }
         }
         if (this.prize && !this.prize.taken) return;   // the way out stays shut
@@ -766,14 +957,22 @@ export class SneakScene extends Phaser.Scene {
         this.moveTo(nx, ny);
     }
 
-    // Пошаговое движение с проверкой стен по сетке шаблона.
+    // Проверка стен по всему габариту, а не по одной точке.
+    // Раньше сверялась только клетка под центром: корпус шириной с клетку наполовину
+    // заходил в стену, и это читалось как «хожу по стенам и сквозь стены».
+    _free(x, y, r) {
+        const l = x - r, rt = x + r, t = y - r, b = y + r;
+        return isFloor(this.tpl, Math.floor(l / CELL), Math.floor(t / CELL))
+            && isFloor(this.tpl, Math.floor(rt / CELL), Math.floor(t / CELL))
+            && isFloor(this.tpl, Math.floor(l / CELL), Math.floor(b / CELL))
+            && isFloor(this.tpl, Math.floor(rt / CELL), Math.floor(b / CELL));
+    }
+
+    // Оси проверяются раздельно, поэтому вдоль стены персонаж скользит, а не залипает.
     moveTo(nx, ny) {
-        const cx = Math.floor(nx / CELL);
-        const cyOld = Math.floor(this.player.y / CELL);
-        if (isFloor(this.tpl, cx, cyOld)) this.player.x = nx;
-        const cxNew = Math.floor(this.player.x / CELL);
-        const cy = Math.floor(ny / CELL);
-        if (isFloor(this.tpl, cxNew, cy)) this.player.y = ny;
+        const r = SNEAK.BODY_R;
+        if (this._free(nx, this.player.y, r)) this.player.x = nx;
+        if (this._free(this.player.x, ny, r)) this.player.y = ny;
         this.player.sprite.setPosition(this.player.x, this.player.y);
     }
 }
