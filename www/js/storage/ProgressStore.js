@@ -171,6 +171,7 @@ const DEFAULT_STATE = {
             clears: 0,
             captures: 0,
             ghostNights: 0,
+            bestFloor: 0,
             lastRunDate: null
         }
     },
@@ -374,12 +375,15 @@ export const Progress = {
         if (floor >= 20 && !s.skinsUnlocked.includes('devil')) s.skinsUnlocked.push('devil');
         save();
     },
-    recordSneakRun({ cleared, neverSeen, cheese }) {
+    recordSneakRun({ cleared, neverSeen, cheese, floor }) {
         const s = load();
         s.stats.sneak.runs++;
         if (cleared) s.stats.sneak.clears++;
         else s.stats.sneak.captures++;
         if (neverSeen) s.stats.sneak.ghostNights++;
+        if (typeof floor === 'number' && floor > (s.stats.sneak.bestFloor || 0)) {
+            s.stats.sneak.bestFloor = floor;
+        }
         s.stats.sneak.lastRunDate = Date.now();
         if (cheese > 0) {
             s.cheeseBank += cheese;
@@ -389,7 +393,7 @@ export const Progress = {
     },
     getSneakStats() {
         const s = load();
-        return (s.stats && s.stats.sneak) || { runs: 0, clears: 0, captures: 0, ghostNights: 0, lastRunDate: null };
+        return (s.stats && s.stats.sneak) || { runs: 0, clears: 0, captures: 0, ghostNights: 0, bestFloor: 0, lastRunDate: null };
     },
     getStoryStats() {
         const s = load();

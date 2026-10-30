@@ -149,9 +149,9 @@ function renderModeHints() {
     endlessHintEl.textContent = eStat.bestFloor > 0
         ? `Лучший этаж: ${eStat.bestFloor}`
         : 'Спускайся вечно · растущая сложность';
-    sneakHintEl.textContent = nStat.clears > 0
-        ? `Ночей пройдено: ${nStat.clears}`
-        : 'Прячься · не дерись · унеси добычу';
+    sneakHintEl.textContent = (nStat.bestFloor > 0 || nStat.clears > 0)
+        ? `Рекорд: этаж ${Math.max(nStat.bestFloor || 1, nStat.clears || 1)} · Залов: ${nStat.clears || 0}`
+        : 'Норы-телепорты · Золотой сыр · Бесконечные этажи';
 }
 
 function renderAll() {
