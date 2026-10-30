@@ -187,9 +187,13 @@
       if (!first) return Promise.reject({ code: 'not_found', message: 'no ' + target + ' on this floor' });
       var deadline = Date.now() + ((opts && opts.timeoutMs) || 30000);
       var arrive = ARRIVE[target];
+      // The path is 4-connected over 40 px cells while the player is a 22 px circle, so it is
+      // steered ONE axis at a time (diagonal input into a corner is how the player gets stuck):
+      // move along the dominant axis to the next cell centre, then the other one.
+      var TICK_MS = 25, CAPTURE = 12, TOL = 4;
       return new Promise(function (resolve, reject) {
-        var path = null, plannedAt = 0, planFailures = 0;
-        var lastPos = null, stuckSince = 0, axisOnlyUntil = 0;
+        var path = null, plannedAt = 0, planFailures = 0, clearance = 0;
+        var lastPos = null, stuckSince = 0, nudgeUntil = 0, nudge = 1;
         function done(fn, arg) { releaseAll(); fn(arg); }
         (function tick() {
           if (dungeon() !== d) return done(reject, { code: 'not_found', message: 'left the dungeon during go_to ' + target });
@@ -198,14 +202,17 @@
           if (d.state !== 'play') return done(reject, { code: 'not_found', message: 'game state became ' + d.state + ' during go_to ' + target });
           if (Math.hypot(t.x - p.x, t.y - p.y) <= arrive) return done(resolve);
           if (now > deadline) return done(reject, { code: 'timeout', message: 'did not reach ' + target });
-          // stuck detection: no displacement for 600 ms -> replan and steer along one axis for a while
-          if (lastPos && Math.hypot(p.x - lastPos.x, p.y - lastPos.y) < 4) {
+          // stuck detection: no displacement for 500 ms -> replan and nudge sideways briefly
+          if (lastPos && Math.hypot(p.x - lastPos.x, p.y - lastPos.y) < 3) {
             if (!stuckSince) stuckSince = now;
-            else if (now - stuckSince > 600) { path = null; axisOnlyUntil = now + 400; stuckSince = 0; }
+            else if (now - stuckSince > 500) { path = null; nudgeUntil = now + 250; nudge = -nudge; stuckSince = 0; }
           } else { stuckSince = 0; }
           lastPos = { x: p.x, y: p.y };
-          if (!path || now - plannedAt > 500) {
-            var cells = d.findPath(p.x, p.y, t.x, t.y, 22);
+          if (!path || now - plannedAt > 700) {
+            // 2-cell clearance first (a 1-cell-clearance path hugs walls the 22 px body cannot pass),
+            // 1-cell as the fallback so narrow doorways are still attempted
+            var cells = d.findPath(p.x, p.y, t.x, t.y, 40), clearance = 2;
+            if (!cells) { cells = d.findPath(p.x, p.y, t.x, t.y, 22); clearance = 1; }
             if (!cells) {
               planFailures++;
               if (planFailures >= 3) return done(reject, { code: 'no_path', message: 'no path to ' + target });
@@ -216,11 +223,21 @@
             path.push({ x: t.x, y: t.y });
             plannedAt = now;
           }
-          while (path.length > 1 && Math.hypot(path[0].x - p.x, path[0].y - p.y) < NAV_CELL / 2) path.shift();
+          while (path.length > 1 && Math.hypot(path[0].x - p.x, path[0].y - p.y) < CAPTURE) path.shift();
           var wp = path[0], dx = wp.x - p.x, dy = wp.y - p.y;
-          if (now < axisOnlyUntil) { if (Math.abs(dx) >= Math.abs(dy)) dy = 0; else dx = 0; }
-          key('KeyD', dx > 6); key('KeyA', dx < -6); key('KeyS', dy > 6); key('KeyW', dy < -6);
-          setTimeout(tick, 50);
+          // debug window (not part of the contract): lets a harness author watch the walk
+          window.__mousieDebug = { target: target, p: { x: Math.round(p.x), y: Math.round(p.y) }, t: { x: Math.round(t.x), y: Math.round(t.y) },
+                                   wp: { x: Math.round(wp.x), y: Math.round(wp.y) }, left: path.length, clearance: clearance, stuck: !!stuckSince, nudging: now < nudgeUntil };
+          var horizontal = Math.abs(dx) > Math.abs(dy);
+          if (now < nudgeUntil) {
+            // stuck: re-centre inside the current cell on the perpendicular axis (a body straddling
+            // a wall edge is the usual cause), alternating sides if the centre itself is blocked
+            var cx = (Math.floor(p.x / NAV_CELL) + 0.5) * NAV_CELL, cy = (Math.floor(p.y / NAV_CELL) + 0.5) * NAV_CELL;
+            if (horizontal) { dx = 0; dy = Math.abs(cy - p.y) > 2 ? cy - p.y : nudge * 40; }
+            else { dy = 0; dx = Math.abs(cx - p.x) > 2 ? cx - p.x : nudge * 40; }
+          } else if (horizontal) { dy = 0; if (Math.abs(dx) <= TOL) dx = 0; } else { dx = 0; if (Math.abs(dy) <= TOL) dy = 0; }
+          key('KeyD', dx > 0); key('KeyA', dx < 0); key('KeyS', dy > 0); key('KeyW', dy < 0);
+          setTimeout(tick, TICK_MS);
         })();
       });
     },

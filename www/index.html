@@ -68,14 +68,41 @@
             left: env(safe-area-inset-left, 0px);
             right: env(safe-area-inset-right, 0px);
             bottom: env(safe-area-inset-bottom, 0px);
-            background: rgba(0,0,0,0.92);
+            background:
+                radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.25) 0%, transparent 45%),
+                radial-gradient(circle at 82% 22%, rgba(236, 72, 153, 0.22) 0%, transparent 45%),
+                radial-gradient(circle at 50% 85%, rgba(250, 204, 21, 0.18) 0%, transparent 50%),
+                linear-gradient(160deg, #0d102b 0%, #171b42 52%, #0c1938 100%);
             display: none;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             z-index: 100;
-            padding: 20px;
+            padding: 14px;
             box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Animated arcade stars/sparkles in menu background */
+        .overlay::before {
+            content: '';
+            position: absolute;
+            inset: -50%;
+            background-image:
+                radial-gradient(2px 2px at 40px 60px, rgba(255,255,255,0.85), transparent),
+                radial-gradient(2.5px 2.5px at 160px 120px, rgba(125,211,252,0.9), transparent),
+                radial-gradient(2px 2px at 280px 50px, rgba(253,224,71,0.85), transparent),
+                radial-gradient(3px 3px at 90px 210px, rgba(244,114,182,0.8), transparent),
+                radial-gradient(2px 2px at 340px 180px, rgba(255,255,255,0.75), transparent);
+            background-size: 380px 260px;
+            animation: arcadeStarDrift 28s linear infinite;
+            pointer-events: none;
+            opacity: 0.65;
+        }
+
+        @keyframes arcadeStarDrift {
+            0% { transform: translateY(0) rotate(0deg); }
+            100% { transform: translateY(260px) rotate(3deg); }
         }
 
         /* Portrait orientation warning */
@@ -89,7 +116,7 @@
             justify-content: center;
             z-index: 9999;
             color: white;
-            font-family: 'Comfortaa', sans-serif;
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
             text-align: center;
             padding: 20px;
         }
@@ -122,209 +149,589 @@
         .overlay.visible { display: flex; }
 
         .overlay-content {
+            position: relative;
+            z-index: 2;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
             width: 96vw;
-            max-width: 800px;
-            max-height: 92vh;
+            max-width: 880px;
+            max-height: 94vh;
             height: auto;
             gap: 10px;
             overflow-y: auto;
-            background: rgba(30, 30, 50, 0.95);
-            border-radius: 24px;
-            padding: 3vh 5vw;
-            border: 3px solid rgba(255, 215, 0, 0.4);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+            background: linear-gradient(180deg, rgba(31, 41, 82, 0.95) 0%, rgba(18, 24, 54, 0.97) 100%);
+            border-radius: 28px;
+            padding: 2.2vh 3.5vw;
+            border: 3px solid rgba(96, 165, 250, 0.45);
+            box-shadow:
+                0 20px 55px rgba(0, 0, 0, 0.65),
+                0 0 35px rgba(56, 189, 248, 0.22),
+                inset 0 2px 0 rgba(255, 255, 255, 0.22);
             box-sizing: border-box;
+            backdrop-filter: blur(14px);
+        }
+
+        /* Header bar with logo + sound button */
+        .arcade-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            position: relative;
+            margin: 0.2vh 0 0.6vh !important;
         }
 
         .overlay h2 {
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 900;
             color: #FFD700;
-            font-size: min(7vw, 32px);
-            margin: 1vh 0 2vh !important;
+            font-size: min(6.5vw, 32px);
+            margin: 0 !important;
             text-align: center;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 0.5px;
+            text-shadow:
+                0 3px 0 #9a4e00,
+                0 6px 14px rgba(0,0,0,0.55),
+                0 0 22px rgba(255, 215, 0, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .arcade-badge-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            color: #fff;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            font-size: min(2.4vw, 11px);
+            padding: 3px 9px;
+            border-radius: 999px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            box-shadow: 0 3px 10px rgba(236, 72, 153, 0.45);
+            text-shadow: none;
+            vertical-align: middle;
+        }
+
+        .sound-toggle-btn {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            border: 2px solid rgba(255,255,255,0.25);
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.35);
+            transition: transform 0.12s, background 0.15s;
+        }
+
+        .pwa-header-btn {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 40px;
+            padding: 0 12px;
+            border-radius: 13px;
+            border: 2px solid rgba(125, 211, 252, 0.55);
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.32), rgba(59, 130, 246, 0.28));
+            color: #e0f2fe;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            font-size: min(3vw, 13px);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 0 rgba(2, 6, 23, 0.45), 0 0 14px rgba(56, 189, 248, 0.25);
+            transition: transform 0.12s, filter 0.15s;
+            white-space: nowrap;
+        }
+        .pwa-header-btn:active {
+            transform: translateY(-50%) scale(0.95);
+            filter: brightness(1.15);
+        }
+        @media (max-width: 560px) {
+            .pwa-header-btn .pwa-btn-text { display: none; }
+            .pwa-header-btn { padding: 0 10px; font-size: 18px; }
+        }
+        .sound-toggle-btn:active {
+            transform: translateY(-50%) scale(0.92);
         }
 
         .title-mouse {
-            height: 1.15em;
-            vertical-align: -0.18em;
-            margin-right: 6px;
+            height: 1.25em;
+            vertical-align: -0.2em;
+            filter: drop-shadow(0 3px 6px rgba(0,0,0,0.45));
+            animation: heroBob 2.4s ease-in-out infinite;
+        }
+
+        @keyframes heroBob {
+            0%, 100% { transform: translateY(0) rotate(-3deg); }
+            50% { transform: translateY(-4px) rotate(4deg); }
         }
 
         .overlay p {
-            color: #fff;
-            font-size: min(4vw, 17px);
-            margin: 1vh 0 !important;
+            color: #f0f6ff;
+            font-size: min(3.8vw, 16px);
+            margin: 0.6vh 0 !important;
             text-align: center;
-            line-height: 1.5;
+            line-height: 1.45;
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 700;
         }
 
         .overlay .small {
-            font-size: min(3.5vw, 15px);
-            opacity: 0.8;
-            margin: 0.8vh 0 !important;
+            font-size: min(3.4vw, 14px);
+            opacity: 0.9;
+            margin: 0.4vh 0 !important;
         }
 
+        /* Tactile 3D Arcade Play Button */
         .play-btn {
-            margin-top: 2.5vh !important;
-            padding: 2.5vh 10vw;
-            font-size: min(5vw, 22px);
-            font-family: 'Comfortaa', sans-serif;
-            background: linear-gradient(145deg, #FFD700, #FFA500);
-            border: none;
-            border-radius: 16px;
-            color: #5a3000;
-            font-weight: bold;
+            margin-top: 1.4vh !important;
+            padding: 1.8vh 8vw;
+            font-size: min(4.8vw, 22px);
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 900;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, #ffea56 0%, #ffb302 55%, #f58200 100%);
+            border: 2px solid #fff3a1;
+            border-radius: 20px;
+            color: #3d1d00;
             cursor: pointer;
-            box-shadow: 0 4px 20px rgba(255,200,0,0.4);
-            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow:
+                0 6px 0 #b25000,
+                0 10px 24px rgba(255, 165, 0, 0.45),
+                inset 0 2px 0 rgba(255, 255, 255, 0.65);
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .play-btn:hover {
+            filter: brightness(1.06);
         }
 
         .play-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 10px rgba(255,200,0,0.3);
+            transform: translateY(4px) scale(0.98);
+            box-shadow:
+                0 2px 0 #b25000,
+                0 4px 12px rgba(255, 165, 0, 0.35);
         }
 
         .action-btn {
-            padding: 2vh 6vw;
-            font-size: min(4.5vw, 19px);
-            font-family: 'Comfortaa', sans-serif;
-            border: none;
-            border-radius: 14px;
-            font-weight: bold;
+            padding: 1.6vh 4.5vw;
+            font-size: min(4.2vw, 18px);
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 800;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 18px;
             cursor: pointer;
-            box-shadow: 0 3px 15px rgba(0,0,0,0.3);
-            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.35), 0 8px 18px rgba(0,0,0,0.3);
+            transition: transform 0.1s, box-shadow 0.1s, filter 0.15s;
             color: #fff;
+            text-shadow: 0 2px 3px rgba(0,0,0,0.35);
+        }
+        .action-btn:hover {
+            filter: brightness(1.07);
         }
         .action-btn:active {
-            transform: scale(0.95);
+            transform: translateY(3px) scale(0.97);
+            box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 4px 10px rgba(0,0,0,0.25);
         }
 
         .difficulty-selector {
             display: flex;
-            gap: 3vw;
-            margin: 2vh 0 !important;
+            gap: 2vw;
+            margin: 1vh 0 !important;
             flex-wrap: wrap;
             justify-content: center;
+            width: 100%;
         }
 
         .diff-btn {
-            padding: 1.8vh 6vw;
-            font-size: min(3.8vw, 16px);
-            font-family: 'Comfortaa', sans-serif;
-            border: 2px solid #444;
-            border-radius: 14px;
-            background: rgba(40,40,50,0.9);
-            color: #999;
+            padding: 1.3vh 3.2vw;
+            font-size: min(3.6vw, 15px);
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 800;
+            border: 2px solid rgba(148, 163, 184, 0.35);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(45, 55, 95, 0.9) 0%, rgba(28, 36, 68, 0.95) 100%);
+            color: #cbd5e1;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.15s cubic-bezier(.2,.8,.3,1);
+            box-shadow: 0 4px 0 rgba(10, 15, 35, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            min-width: 120px;
+        }
+
+        .diff-btn .diff-sub {
+            font-size: min(2.6vw, 11px);
+            font-weight: 700;
+            opacity: 0.78;
         }
 
         .diff-btn.selected {
-            border-color: #FFD700;
-            background: rgba(255,215,0,0.2);
-            color: #FFD700;
-            box-shadow: 0 0 10px rgba(255,215,0,0.3);
+            border-color: #fde047;
+            background: linear-gradient(180deg, rgba(250, 204, 21, 0.28) 0%, rgba(234, 179, 8, 0.18) 100%);
+            color: #fef08a;
+            box-shadow: 0 4px 0 #a16207, 0 0 18px rgba(250, 204, 21, 0.38);
+            transform: translateY(-2px);
         }
 
         .diff-btn:active {
-            transform: scale(0.95);
+            transform: translateY(2px) scale(0.97);
         }
 
         .small-btn {
-            padding: 2vh 10vw;
-            font-size: min(4.5vw, 20px);
-            font-family: 'Comfortaa', sans-serif;
-            border: none;
+            padding: 1.4vh 6vw;
+            font-size: min(4vw, 17px);
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 800;
+            border: 2px solid rgba(255,255,255,0.28);
             border-radius: 16px;
-            background: linear-gradient(145deg, #FF7043, #E64A19);
+            background: linear-gradient(180deg, #ff7e55 0%, #e64a19 100%);
             color: #fff;
-            font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 18px rgba(230, 74, 25, 0.4);
+            box-shadow: 0 4px 0 #9a2c09, 0 6px 16px rgba(230, 74, 25, 0.4);
             transition: transform 0.1s, box-shadow 0.1s;
         }
 
         .small-btn:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 8px rgba(230, 74, 25, 0.3);
+            transform: translateY(3px) scale(0.96);
+            box-shadow: 0 1px 0 #9a2c09;
         }
 
+        /* 4 Game Mode Cartridge Cards */
         .mode-selector {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 2vw;
-            margin: 1.5vh 0 !important;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5vw;
+            margin: 0.6vh 0 !important;
+            width: 100%;
         }
 
         .mode-btn {
-            padding: 1.2vh 2.5vw;
-            font-size: min(3.5vw, 15px);
-            font-family: 'Comfortaa', sans-serif;
-            border: 2px solid #444;
-            border-radius: 16px;
-            background: rgba(40,40,50,0.9);
-            color: #999;
+            position: relative;
+            padding: 1.2vh 1.2vw 1.1vh;
+            font-size: min(3.2vw, 14px);
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            font-weight: 800;
+            border: 2.5px solid rgba(148, 163, 184, 0.3);
+            border-radius: 20px;
+            background: linear-gradient(180deg, rgba(42, 54, 98, 0.92) 0%, rgba(25, 33, 66, 0.96) 100%);
+            color: #cbd5e1;
             cursor: pointer;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.6vh;
-            transition: all 0.15s;
+            justify-content: center;
+            gap: 0.4vh;
+            transition: all 0.18s cubic-bezier(.2,.8,.3,1);
             min-width: 0;
-            flex: 1 1 0;
+            box-shadow: 0 5px 0 rgba(10, 14, 34, 0.8), 0 6px 14px rgba(0,0,0,0.3);
         }
 
+        .mode-tag {
+            font-size: min(2.2vw, 10px);
+            font-weight: 900;
+            padding: 1px 7px;
+            border-radius: 999px;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            background: rgba(255,255,255,0.12);
+            color: #e2e8f0;
+        }
+
+        .mode-btn[data-mode="adventure"] .mode-tag { background: rgba(249, 115, 22, 0.28); color: #fdba74; }
+        .mode-btn[data-mode="newyear"] .mode-tag { background: rgba(34, 197, 94, 0.28); color: #86efac; }
+        .mode-btn[data-mode="snowball"] .mode-tag { background: linear-gradient(90deg, #06b6d4, #3b82f6); color: #fff; }
+        .mode-btn[data-mode="transylvania"] .mode-tag { background: rgba(168, 85, 247, 0.32); color: #d8b4fe; }
+
         .mode-btn .mode-icon {
-            font-size: min(6vw, 28px);
+            font-size: min(5.5vw, 26px);
             line-height: 1;
         }
 
         .mode-icon-img {
-            width: min(9vw, 34px);
-            height: min(9vw, 34px);
+            width: min(8vw, 34px);
+            height: min(8vw, 34px);
             object-fit: contain;
             display: block;
-            margin: 0 auto 4px;
+            margin: 0 auto 2px;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.4));
+            transition: transform 0.2s cubic-bezier(.2,.8,.3,1);
+        }
+
+        .mode-btn:hover .mode-icon-img {
+            transform: scale(1.12) rotate(-4deg);
         }
 
         .mode-btn.selected {
-            border-color: #FFD700;
-            background: rgba(255,215,0,0.2);
-            color: #FFD700;
-            box-shadow: 0 0 12px rgba(255,215,0,0.3);
+            transform: translateY(-3px);
+            color: #ffffff;
         }
 
-        .mode-btn:active {
-            transform: scale(0.95);
+        .mode-btn[data-mode="adventure"].selected {
+            border-color: #fb923c;
+            background: linear-gradient(180deg, rgba(234, 88, 12, 0.42) 0%, rgba(154, 52, 18, 0.5) 100%);
+            box-shadow: 0 5px 0 #9a3412, 0 0 22px rgba(251, 146, 60, 0.45);
+        }
+
+        .mode-btn[data-mode="newyear"].selected {
+            border-color: #4ade80;
+            background: linear-gradient(180deg, rgba(22, 163, 74, 0.42) 0%, rgba(20, 83, 45, 0.52) 100%);
+            box-shadow: 0 5px 0 #14532d, 0 0 22px rgba(74, 222, 128, 0.42);
+        }
+
+        .mode-btn[data-mode="snowball"].selected {
+            border-color: #38bdf8;
+            background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(30, 58, 138, 0.58) 100%);
+            box-shadow: 0 5px 0 #0369a1, 0 0 24px rgba(56, 189, 248, 0.5);
+        }
+
+        .mode-btn[data-mode="transylvania"].selected {
+            border-color: #c084fc;
+            background: linear-gradient(180deg, rgba(126, 34, 206, 0.45) 0%, rgba(76, 29, 149, 0.55) 100%);
+            box-shadow: 0 5px 0 #581c87, 0 0 22px rgba(192, 132, 252, 0.45);
         }
 
         .mode-btn, .diff-btn, .play-btn {
-            min-height: 48px;
+            min-height: 46px;
             touch-action: manipulation;
         }
 
         .mode-btn:focus-visible,
         .diff-btn:focus-visible,
         .play-btn:focus-visible {
-            outline: 2px solid #e8b54a;
+            outline: 2px solid #fde047;
             outline-offset: 2px;
         }
 
-        .mode-btn:active,
-        .diff-btn:active,
-        .play-btn:active {
-            transform: scale(.97);
-            transition: transform 150ms cubic-bezier(.2,.8,.3,1);
+        /* World / Mode Showcase Strip inside sub-panels */
+        .mode-showcase-banner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5vw;
+            flex-wrap: wrap;
+            background: rgba(15, 23, 42, 0.55);
+            border: 1.5px solid rgba(148, 163, 184, 0.22);
+            border-radius: 16px;
+            padding: 1vh 2.5vw;
+            width: 100%;
+            max-width: 680px;
+        }
+
+        .world-step {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            font-size: min(3.3vw, 13.5px);
+            color: #f8fafc;
+            background: rgba(255,255,255,0.08);
+            padding: 4px 11px;
+            border-radius: 12px;
+        }
+
+        .world-arrow {
+            color: #fbbf24;
+            font-weight: 900;
+            font-size: 14px;
+        }
+
+        /* Snowball mode cards in #snowballMainChoice */
+        .snowball-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.8vw;
+            width: 100%;
+            margin: 0.5vh 0;
+        }
+
+        .snowball-mode-btn {
+            margin-top: 0 !important;
+            padding: 1.8vh 1.6vw !important;
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.6vh;
+            border-radius: 22px !important;
+            text-transform: none !important;
+            min-height: 110px;
+        }
+
+        .sb-card-icon {
+            font-size: min(6.5vw, 32px);
+            line-height: 1;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.35));
+        }
+
+        .sb-card-title {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: min(3.8vw, 17px);
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        }
+
+        .sb-card-desc {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 700;
+            font-size: min(2.7vw, 11.5px);
+            color: rgba(255,255,255,0.9);
+            line-height: 1.25;
+            text-shadow: none;
+        }
+
+        /* Solo opponent cards */
+        .bot-cards-row {
+            display: flex;
+            justify-content: center;
+            gap: 2.2vw;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .bot-count-btn {
+            flex: 1 1 140px;
+            max-width: 210px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 1.8vh 2vw !important;
+            border-radius: 20px !important;
+        }
+
+        .bot-card-emojis {
+            font-size: min(5.5vw, 26px);
+            line-height: 1.1;
+        }
+
+        .bot-card-title {
+            font-size: min(3.8vw, 16px);
+            font-weight: 900;
+        }
+
+        .bot-card-sub {
+            font-size: min(2.6vw, 11px);
+            opacity: 0.88;
+            font-weight: 700;
+        }
+
+        /* Brawl-style Character Fighter Cards */
+        .char-cards-row {
+            display: flex;
+            justify-content: center;
+            gap: 3.5vw;
+            flex-wrap: wrap;
+            width: 100%;
+        }
+
+        .char-select-btn {
+            position: relative;
+            width: min(38vw, 210px);
+            padding: 1.6vh 2vw !important;
+            border-radius: 22px !important;
+            background: rgba(40, 48, 82, 0.85);
+            border: 3px solid #64748b;
+            cursor: pointer;
+            transition: all 0.18s cubic-bezier(.2,.8,.3,1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 6px 0 rgba(10, 15, 35, 0.75), 0 8px 20px rgba(0,0,0,0.4);
+        }
+
+        .char-select-btn.selected {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 6px 0 #b45309, 0 0 25px rgba(250, 204, 21, 0.45);
+        }
+
+        .char-select-btn img {
+            width: min(13vw, 64px) !important;
+            height: auto;
+            filter: drop-shadow(0 5px 8px rgba(0,0,0,0.45));
+            transition: transform 0.2s;
+        }
+
+        .char-select-btn.selected img {
+            animation: heroBob 2s ease-in-out infinite;
+        }
+
+        .char-role-tag {
+            font-family: 'Nunito', sans-serif;
+            font-size: min(2.5vw, 11px);
+            font-weight: 800;
+            color: #e2e8f0;
+            background: rgba(0,0,0,0.35);
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+
+        .char-stats {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            margin-top: 2px;
+        }
+
+        .char-stat-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: 'Nunito', sans-serif;
+            font-size: min(2.3vw, 10px);
+            font-weight: 800;
+            color: #cbd5e1;
+            gap: 6px;
+        }
+
+        .char-stat-bar {
+            flex: 1;
+            height: 6px;
+            background: rgba(0,0,0,0.45);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .char-stat-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #38bdf8, #818cf8);
+        }
+
+        .char-select-btn[data-char="1"] .char-stat-fill {
+            background: linear-gradient(90deg, #facc15, #fb923c);
         }
 
         .ny-difficulty {
-            margin-top: 10px !important;
+            margin-top: 6px !important;
         }
 
         #adventureOptions, #newyearOptions, #snowballOptions, #transylvaniaOptions {
@@ -332,7 +739,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: space-evenly;
-            margin-top: 5px !important;
+            margin-top: 4px !important;
             width: 100%;
             flex: 1 1 auto;
             min-height: 0;
@@ -353,14 +760,15 @@
         .network-selector {
             display: flex;
             gap: min(2.5vw, 10px);
-            margin: 15px 0 !important;
+            margin: 10px 0 !important;
             justify-content: center;
         }
 
         .pause-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.88);
+            background: rgba(8, 12, 30, 0.88);
+            backdrop-filter: blur(8px);
             display: none;
             flex-direction: column;
             align-items: center;
@@ -376,51 +784,54 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: rgba(30, 30, 50, 0.95);
-            border-radius: 24px;
-            padding: 4vh 8vw;
-            border: 3px solid rgba(255, 215, 0, 0.4);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-            gap: 3vh;
-            width: min(500px, 80vw);
+            background: linear-gradient(180deg, rgba(31, 41, 82, 0.96) 0%, rgba(18, 24, 54, 0.98) 100%);
+            border-radius: 26px;
+            padding: 3.5vh 7vw;
+            border: 3px solid rgba(96, 165, 250, 0.45);
+            box-shadow: 0 16px 45px rgba(0,0,0,0.65);
+            gap: 2.5vh;
+            width: min(480px, 82vw);
         }
 
         .pause-overlay h2 {
             color: #FFD700;
-            font-size: min(5.5vw, 26px);
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: min(5.5vw, 28px);
             margin-bottom: 5px !important;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 0 3px 0 #9a4e00, 0 5px 12px rgba(0,0,0,0.5);
         }
 
         .pause-btn {
-            padding: 2vh 10vw;
+            padding: 1.8vh 8vw;
             font-size: min(4.5vw, 20px);
-            font-family: 'Comfortaa', sans-serif;
-            border: none;
-            border-radius: 20px;
+            font-family: 'Nunito', 'Comfortaa', sans-serif;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 18px;
             cursor: pointer;
-            font-weight: bold;
-            min-width: 50vw;
+            font-weight: 900;
+            min-width: 46vw;
             transition: transform 0.1s, box-shadow 0.1s;
         }
 
         .pause-btn.resume {
-            background: linear-gradient(145deg, #4CAF50, #3d9142);
+            background: linear-gradient(180deg, #4ade80, #16a34a);
             color: #fff;
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+            box-shadow: 0 5px 0 #14532d, 0 6px 18px rgba(34, 197, 94, 0.4);
         }
 
         .pause-btn.menu {
-            background: linear-gradient(145deg, #e05555, #c94545);
+            background: linear-gradient(180deg, #f87171, #dc2626);
             color: #fff;
-            box-shadow: 0 4px 15px rgba(224, 85, 85, 0.4);
+            box-shadow: 0 5px 0 #7f1d1d, 0 6px 18px rgba(239, 68, 68, 0.4);
         }
 
         .pause-btn:active {
-            transform: scale(0.95);
+            transform: translateY(3px) scale(0.97);
         }
 
         /* Hide title + mode tabs when inside snowball sub-menus */
+        .overlay-content.snowball-submenu-active > .arcade-header { display: none; }
         .overlay-content.snowball-submenu-active > h2 { display: none; }
         .overlay-content.snowball-submenu-active > .mode-selector { display: none; }
 
@@ -432,7 +843,7 @@
             justify-content: center;
             flex: 1;
             width: 100%;
-            gap: 2.5vh;
+            gap: 1.8vh;
         }
 
         #snowballMainChoice {
@@ -442,27 +853,31 @@
             align-items: center;
             justify-content: center;
             width: 100%;
-            gap: 3vh;
+            gap: 1.8vh;
         }
 
         #snowballBackContainer {
             margin-top: auto !important;
-            padding-bottom: 3vh;
+            padding-bottom: 1vh;
             width: 100%;
             display: flex;
             justify-content: center;
         }
 
-        /* Landscape phone adjustments — only spacing, NOT sizes */
+        /* Landscape phone adjustments — compact spacing so everything fits without scrolling */
         @media (orientation: landscape) and (max-height: 600px) {
-            #startScreen { padding: 8px; }
-            .overlay-content { padding: 2vh 4vw max(2vh, 12px); max-height: calc(100vh - 16px); height: auto; gap: 6px; }
-            .overlay h2 { margin: 0.5vh 0 1.5vh !important; }
-            .mode-selector { margin: 1vh 0 !important; }
-            .overlay .small { margin: 0.4vh 0 !important; }
-            .difficulty-selector { margin: 1vh 0 !important; }
-            #snowballMainChoice { gap: min(2vh, 10px); }
-            .play-btn { margin-top: 1.5vh !important; }
+            #startScreen { padding: 6px; }
+            .overlay-content { padding: 1.5vh 3vw max(1.5vh, 10px); max-height: calc(100vh - 12px); height: auto; gap: 5px; }
+            .arcade-header { margin: 0 0 0.3vh !important; }
+            .mode-selector { margin: 0.4vh 0 !important; gap: 1.2vw; }
+            .overlay .small { margin: 0.2vh 0 !important; }
+            .difficulty-selector { margin: 0.6vh 0 !important; }
+            #snowballMainChoice { gap: min(1.5vh, 8px); }
+            .snowball-mode-btn { min-height: 82px; padding: 1.2vh 1.2vw !important; }
+            .play-btn { margin-top: 1vh !important; padding: 1.4vh 7vw; }
+        }
+        @media (max-width: 640px) {
+            .snowball-cards-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -494,44 +909,86 @@
 
     <div class="overlay visible" id="startScreen">
         <div class="overlay-content">
-            <h2><img src="assets/characters/transylvania/pi.svg" alt="" aria-hidden="true" class="title-mouse"> Мышонок Пи</h2>
+            <div class="arcade-header">
+                <button class="pwa-header-btn" id="pwaHeaderBtn" type="button" title="Установить на телефон или отправить подруге">
+                    <span>📲</span>
+                    <span class="pwa-btn-text">На телефон / Друзьям</span>
+                </button>
+                <h2>
+                    <img src="assets/characters/transylvania/pi.svg" alt="" aria-hidden="true" class="title-mouse">
+                    <span>Мышонок Пи</span>
+                    <span class="arcade-badge-pill">⚡ АРКАДА</span>
+                </h2>
+                <button class="sound-toggle-btn" id="menuSoundToggle" title="Звук и музыка" aria-label="Звук">🔊</button>
+            </div>
             <div class="mode-selector">
                 <button class="mode-btn selected" data-mode="adventure">
+                    <span class="mode-tag">🌋 3 МИРА</span>
                     <img class="mode-icon-img" src="assets/ui-menu/rocket.svg" alt="" aria-hidden="true">
                     <span>Приключение</span>
                 </button>
                 <button class="mode-btn" data-mode="newyear">
+                    <span class="mode-tag">🎄 ЛАБИРИНТ</span>
                     <img class="mode-icon-img" src="assets/ui-menu/tree.svg" alt="" aria-hidden="true">
                     <span>Новый год</span>
                 </button>
                 <button class="mode-btn" data-mode="snowball">
+                    <span class="mode-tag">🔥 ХИТ! АРЕНА</span>
                     <img class="mode-icon-img" src="assets/ui-menu/snowflake.svg" alt="" aria-hidden="true">
                     <span>Снежки</span>
                 </button>
                 <button class="mode-btn" data-mode="transylvania">
+                    <span class="mode-tag">🦇 5 ЭТАЖЕЙ</span>
                     <img class="mode-icon-img" src="assets/characters/transylvania/bat.svg" alt="" aria-hidden="true">
                     <span>Замок Теней</span>
                 </button>
             </div>
             <div id="adventureOptions">
-                <p class="small">🌋 Огненная долина → 🚀 Космос</p>
-                <div class="difficulty-selector">
-                    <button class="diff-btn" data-diff="easy">Легко</button>
-                    <button class="diff-btn selected" data-diff="medium">Средне</button>
-                    <button class="diff-btn" data-diff="hard">Сложно</button>
+                <div class="mode-showcase-banner">
+                    <span class="world-step">🌋 Огненная долина</span>
+                    <span class="world-arrow">➔</span>
+                    <span class="world-step">🚀 Открытый космос</span>
+                    <span class="world-arrow">➔</span>
+                    <span class="world-step">🌕 Сырная Луна</span>
                 </div>
-                <button class="play-btn" id="startAdventureBtn">Играть!</button>
+                <div class="difficulty-selector">
+                    <button class="diff-btn" data-diff="easy">
+                        <span>😊 Легко</span>
+                        <span class="diff-sub">5 ❤️ · Без лавы</span>
+                    </button>
+                    <button class="diff-btn selected" data-diff="medium">
+                        <span>⚡ Средне</span>
+                        <span class="diff-sub">5 ❤️ · Опасная лава</span>
+                    </button>
+                    <button class="diff-btn" data-diff="hard">
+                        <span>🔥 Сложно</span>
+                        <span class="diff-sub">3 ❤️ · Хардкор</span>
+                    </button>
+                </div>
+                <button class="play-btn" id="startAdventureBtn">🚀 Вперёд в приключение!</button>
             </div>
             <div id="newyearOptions" style="display: none;">
-                <p class="small">🎄 Новогодний лабиринт с подарками!</p>
-                <p class="small" style="opacity: 0.7;">Размер карты:</p>
-                <div class="difficulty-selector ny-difficulty">
-                    <button class="diff-btn ny-diff" data-nydiff="easy">Лёгкий</button>
-                    <button class="diff-btn ny-diff selected" data-nydiff="medium">Средний</button>
-                    <button class="diff-btn ny-diff" data-nydiff="hard">Сложный</button>
+                <div class="mode-showcase-banner">
+                    <span class="world-step">🎁 Собери подарки</span>
+                    <span class="world-step">☃️ Снеговики</span>
+                    <span class="world-step">🐧 Пингвины</span>
+                    <span class="world-step">👹 Снежный Йети</span>
                 </div>
-                <p class="small" style="opacity: 0.6;">☃️ Снеговики • 🐧 Пингвины • 👹 Йети</p>
-                <button class="play-btn" id="startNewyearBtn">Играть!</button>
+                <div class="difficulty-selector ny-difficulty">
+                    <button class="diff-btn ny-diff" data-nydiff="easy">
+                        <span>🌟 Лёгкий</span>
+                        <span class="diff-sub">8 этажей · 12 🎁</span>
+                    </button>
+                    <button class="diff-btn ny-diff selected" data-nydiff="medium">
+                        <span>🎄 Средний</span>
+                        <span class="diff-sub">10 этажей · 18 🎁</span>
+                    </button>
+                    <button class="diff-btn ny-diff" data-nydiff="hard">
+                        <span>❄️ Сложный</span>
+                        <span class="diff-sub">14 этажей · 28 🎁</span>
+                    </button>
+                </div>
+                <button class="play-btn" id="startNewyearBtn" style="background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%); color: #fff; border-color: #bbf7d0; box-shadow: 0 6px 0 #14532d, 0 10px 24px rgba(34, 197, 94, 0.45);">🎄 Спасти Новый год!</button>
             </div>
             <div id="transylvaniaOptions" style="display: none;">
                 <p class="small">🦇 Подземелье графа Ратулы — спаси бабушку!</p>
@@ -539,111 +996,156 @@
                 <button class="play-btn" id="startTransylvaniaBtn" style="background: linear-gradient(135deg, #5a2080, #7a30a0); color: #fff;">🦇 Играть!</button>
             </div>
             <div id="snowballOptions" style="display: none;">
-                <p class="small">❄️ Битва снежками! ❄️</p>
+                <div class="mode-showcase-banner">
+                    <span class="world-step">❄️ Ледяная Арена</span>
+                    <span class="world-step">🪝 Супер-верёвка</span>
+                    <span class="world-step">🔥 Огненные снежки</span>
+                    <span class="world-step">👑 Битва до 5 побед</span>
+                </div>
 
                 <!-- Main choice: solo or multiplayer -->
                 <div id="snowballMainChoice">
-                    <button class="play-btn snowball-mode-btn" data-snowball-mode="solo" style="background: linear-gradient(135deg, #4CAF50, #45a049); color: #fff;">🎮 Играть одному</button>
-                    <button class="play-btn snowball-mode-btn" data-snowball-mode="multi" style="background: linear-gradient(135deg, #2196F3, #1976D2); color: #fff;">👫 Играть с другом</button>
-                    <button class="play-btn snowball-mode-btn" data-snowball-mode="online" style="background: linear-gradient(135deg, #E91E63, #AD1457); color: #fff;">🌍 Играть онлайн</button>
+                    <div class="snowball-cards-grid">
+                        <button class="play-btn snowball-mode-btn" data-snowball-mode="solo" style="background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%); border-color: #86efac; box-shadow: 0 6px 0 #14532d, 0 10px 22px rgba(34,197,94,0.35); color: #fff;">
+                            <span class="sb-card-icon">🎮</span>
+                            <span class="sb-card-title">Играть одному</span>
+                            <span class="sb-card-desc">Против умных ботов на арене!</span>
+                        </button>
+                        <button class="play-btn snowball-mode-btn" data-snowball-mode="multi" style="background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%); border-color: #7dd3fc; box-shadow: 0 6px 0 #075985, 0 10px 22px rgba(56,189,248,0.35); color: #fff;">
+                            <span class="sb-card-icon">👫</span>
+                            <span class="sb-card-title">С другом</span>
+                            <span class="sb-card-desc">Создай комнату или введи код!</span>
+                        </button>
+                        <button class="play-btn snowball-mode-btn" data-snowball-mode="online" style="background: linear-gradient(180deg, #f472b6 0%, #db2777 100%); border-color: #f9a8d4; box-shadow: 0 6px 0 #831843, 0 10px 22px rgba(236,72,153,0.4); color: #fff;">
+                            <span class="sb-card-icon">🌍</span>
+                            <span class="sb-card-title">Онлайн Арена</span>
+                            <span class="sb-card-desc">Быстрый матч по сети до 4 игроков!</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Solo: bot count selection -->
                 <div id="snowballSoloOptions" style="display: none;">
-                    <p style="font-size: min(5vw, 22px); color: #fff;">Сколько противников?</p>
-                    <div style="display: flex; justify-content: center; gap: 5vw; flex-wrap: wrap;">
-                        <button class="action-btn bot-count-btn" data-bots="1" style="background: linear-gradient(135deg, #66BB6A, #4CAF50);">🐭 Один</button>
-                        <button class="action-btn bot-count-btn" data-bots="2" style="background: linear-gradient(135deg, #66BB6A, #4CAF50);">🐭🐭 Два</button>
-                        <button class="action-btn bot-count-btn" data-bots="3" style="background: linear-gradient(135deg, #66BB6A, #4CAF50);">🐭🐭🐭 Три</button>
+                    <p style="font-size: min(4.6vw, 20px); color: #fde047; font-weight: 900; text-shadow: 0 2px 6px rgba(0,0,0,0.5);">⚔️ ВЫБЕРИ РЕЖИМ СХВАТКИ:</p>
+                    <div class="bot-cards-row">
+                        <button class="action-btn bot-count-btn" data-bots="1" style="background: linear-gradient(180deg, #38bdf8, #0284c7); border-color: #7dd3fc;">
+                            <span class="bot-card-emojis">🐭</span>
+                            <span class="bot-card-title">Дуэль 1 на 1</span>
+                            <span class="bot-card-sub">Один соперник</span>
+                        </button>
+                        <button class="action-btn bot-count-btn" data-bots="2" style="background: linear-gradient(180deg, #4ade80, #16a34a); border-color: #86efac;">
+                            <span class="bot-card-emojis">🐭🐭</span>
+                            <span class="bot-card-title">Битва (2 бота)</span>
+                            <span class="bot-card-sub">Классическая арена</span>
+                        </button>
+                        <button class="action-btn bot-count-btn" data-bots="3" style="background: linear-gradient(180deg, #fb923c, #ea580c); border-color: #fdba74;">
+                            <span class="bot-card-emojis">🐭🐭🐭</span>
+                            <span class="bot-card-title">Мега-Хаос!</span>
+                            <span class="bot-card-sub">3 бота · Снежный шторм</span>
+                        </button>
                     </div>
                 </div>
 
                 <!-- Multiplayer: network options -->
                 <div id="snowballMultiOptions" style="display: none;">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 4vw; flex-wrap: wrap;">
-                        <span style="opacity: 0.6; font-size: min(3.5vw, 15px); color: #fff;">Твой код: <span id="myPersistentCode" style="color: #FFD700; letter-spacing: 2px; font-size: min(4vw, 17px);">----</span></span>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 3vw; flex-wrap: wrap; background: rgba(15,23,42,0.55); padding: 1vh 3vw; border-radius: 18px; border: 1.5px solid rgba(148,163,184,0.25);">
+                        <span style="font-size: min(3.5vw, 15px); color: #cbd5e1; font-weight: 800;">🔑 Твой ID: <span id="myPersistentCode" style="color: #FFD700; letter-spacing: 2px; font-size: min(4vw, 17px);">----</span></span>
                         <input type="text" id="playerNickname" maxlength="12" style="
-                            font-size: min(4vw, 18px); width: 35vw; max-width: 200px; text-align: center;
-                            background: rgba(255,255,255,0.1); border: 2px solid #4CAF50;
-                            border-radius: 14px; color: #fff; padding: 1.5vh 2vw;
-                            font-family: 'Comfortaa', sans-serif;
+                            font-size: min(4vw, 17px); width: 35vw; max-width: 200px; text-align: center;
+                            background: rgba(255,255,255,0.12); border: 2px solid #38bdf8;
+                            border-radius: 14px; color: #fff; padding: 1.1vh 2vw;
+                            font-family: 'Nunito', 'Comfortaa', sans-serif; font-weight: 800;
                         " placeholder="Твой ник">
                     </div>
-                    <div style="display: flex; justify-content: center; gap: 4vw; flex-wrap: wrap;">
-                        <button class="action-btn network-btn" data-network="create" style="background: linear-gradient(135deg, #FF9800, #F57C00);">🏠 Создать</button>
-                        <button class="action-btn network-btn" data-network="join" style="background: linear-gradient(135deg, #9C27B0, #7B1FA2);">🔗 Войти</button>
-                        <button class="action-btn network-btn" data-network="favorites" style="background: linear-gradient(135deg, #E91E63, #C2185B);">⭐ Друзья</button>
+                    <div style="display: flex; justify-content: center; gap: 2.5vw; flex-wrap: wrap;">
+                        <button class="action-btn network-btn" data-network="create" style="background: linear-gradient(180deg, #fb923c, #ea580c);">🏠 Создать</button>
+                        <button class="action-btn network-btn" data-network="join" style="background: linear-gradient(180deg, #a855f7, #7e22ce);">🔗 Войти по коду</button>
+                        <button class="action-btn network-btn" data-network="favorites" style="background: linear-gradient(180deg, #f472b6, #db2777);">⭐ Друзья</button>
                     </div>
-                    <div id="createGameOptions" style="display: none; margin-top: 1.5vh;">
-                        <p class="small">Код комнаты:</p>
-                        <p id="roomCode" style="font-size: min(6vw, 26px); color: #FFD700; letter-spacing: 3px; margin: 0.5vh 0 !important;">----</p>
-                        <p id="waitingStatus" class="small" style="opacity: 0.6;"></p>
+                    <div id="createGameOptions" style="display: none; margin-top: 1vh;">
+                        <p class="small">Назови этот код другу:</p>
+                        <p id="roomCode" style="font-size: min(6vw, 28px); color: #FFD700; letter-spacing: 4px; margin: 0.4vh 0 !important; font-weight: 900;">----</p>
+                        <p id="waitingStatus" class="small" style="opacity: 0.8; margin-bottom: 0.8vh !important;"></p>
+                        <button id="enterRoomBtn" class="action-btn" style="
+                            background: linear-gradient(180deg, #4ade80, #16a34a);
+                            padding: 1.4vh 6vw; font-size: min(4.2vw, 18px);
+                        ">🚀 Войти в комнату</button>
                     </div>
-                    <div id="joinGameOptions" style="display: none; margin-top: 1.5vh;">
-                        <p class="small">Введите код:</p>
+                    <div id="joinGameOptions" style="display: none; margin-top: 1vh;">
+                        <p class="small">Введи 4 буквы кода комнаты:</p>
                         <input type="text" id="joinCodeInput" maxlength="4" style="
-                            font-size: min(5.5vw, 24px); width: 30vw; max-width: 140px; text-align: center;
-                            background: rgba(255,255,255,0.1); border: 2px solid #FFD700;
-                            border-radius: 12px; color: #FFD700; padding: 1.5vh 2vw;
-                            font-family: 'Comfortaa', sans-serif;
-                            text-transform: uppercase; letter-spacing: 3px;
+                            font-size: min(5.5vw, 24px); width: 32vw; max-width: 150px; text-align: center;
+                            background: rgba(255,255,255,0.12); border: 2.5px solid #FFD700;
+                            border-radius: 14px; color: #FFD700; padding: 1.2vh 2vw;
+                            font-family: 'Nunito', 'Comfortaa', sans-serif; font-weight: 900;
+                            text-transform: uppercase; letter-spacing: 4px;
                         " placeholder="XXXX">
-                        <p id="joinStatus" class="small" style="opacity: 0.6; margin-top: 0.5vh !important;"></p>
+                        <p id="joinStatus" class="small" style="opacity: 0.75; margin-top: 0.5vh !important;"></p>
                     </div>
-                    <div id="favoritesOptions" style="display: none; margin-top: 2vh; margin-bottom: 2vh;">
-                        <div id="favoritesList" style="max-height: 20vh; overflow-y: auto; margin-bottom: 2vh;"></div>
-                        <p class="small" style="margin-bottom: 1.5vh !important; opacity: 0.7;">Добавить друга:</p>
-                        <div id="addFavoriteForm" style="display: flex; justify-content: center; gap: 3vw; flex-wrap: wrap; align-items: center;">
+                    <div id="favoritesOptions" style="display: none; margin-top: 1.2vh; margin-bottom: 1.2vh;">
+                        <div id="favoritesList" style="max-height: 18vh; overflow-y: auto; margin-bottom: 1.2vh;"></div>
+                        <p class="small" style="margin-bottom: 1vh !important; opacity: 0.8;">Добавить друга по ID:</p>
+                        <div id="addFavoriteForm" style="display: flex; justify-content: center; gap: 2vw; flex-wrap: wrap; align-items: center;">
                             <input type="text" id="favCodeInput" maxlength="4" style="
                                 font-size: 16px; width: 20vw; max-width: 90px; text-align: center;
-                                background: rgba(255,255,255,0.1); border: 2px solid #E91E63;
-                                border-radius: 14px; color: #FFD700; padding: 1.5vh 2vw;
-                                font-family: 'Comfortaa', sans-serif; text-transform: uppercase; letter-spacing: 2px;
+                                background: rgba(255,255,255,0.12); border: 2px solid #f472b6;
+                                border-radius: 14px; color: #FFD700; padding: 1.2vh 2vw;
+                                font-family: 'Nunito', sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;
                             " placeholder="КОД">
                             <input type="text" id="favNickInput" maxlength="12" style="
                                 font-size: 16px; width: 28vw; max-width: 140px; text-align: center;
-                                background: rgba(255,255,255,0.1); border: 2px solid #E91E63;
-                                border-radius: 14px; color: #fff; padding: 1.5vh 2vw;
-                                font-family: 'Comfortaa', sans-serif;
+                                background: rgba(255,255,255,0.12); border: 2px solid #f472b6;
+                                border-radius: 14px; color: #fff; padding: 1.2vh 2vw;
+                                font-family: 'Nunito', sans-serif; font-weight: 800;
                             " placeholder="Имя">
                             <button id="addFavBtn" class="action-btn" style="
-                                background: linear-gradient(135deg, #E91E63, #C2185B);
-                                padding: 1.5vh 5vw; font-size: min(4vw, 16px);
+                                background: linear-gradient(180deg, #f472b6, #db2777);
+                                padding: 1.2vh 4vw; font-size: min(3.8vw, 15px);
                             ">+ Добавить</button>
                         </div>
-                        <p id="favStatus" class="small" style="opacity: 0.6; margin-top: 1vh !important;"></p>
+                        <p id="favStatus" class="small" style="opacity: 0.7; margin-top: 0.8vh !important;"></p>
                     </div>
                 </div>
 
-                <!-- Character selection (shown after bot count) -->
+                <!-- Character selection (shown after bot count or online choice) -->
                 <div id="snowballCharSelection" style="display: none;">
-                    <p style="font-size: min(5vw, 22px); color: #fff; margin-bottom: 2vh !important;">Выбери персонажа:</p>
-                    <div style="display: flex; justify-content: center; gap: 8vw; flex-wrap: wrap;">
+                    <div id="onlineNickContainer" style="display: none; margin-bottom: 1vh;">
+                        <input type="text" id="onlineNicknameInput" maxlength="12" style="
+                            font-size: min(4.2vw, 18px); width: 45vw; max-width: 220px; text-align: center;
+                            background: rgba(255,255,255,0.14); border: 2.5px solid #38bdf8;
+                            border-radius: 14px; color: #fff; padding: 1vh 2vw;
+                            font-family: 'Nunito', 'Comfortaa', sans-serif; font-weight: 800;
+                        " placeholder="Твой ник">
+                    </div>
+                    <p style="font-size: min(4.5vw, 20px); color: #fde047; font-weight: 900; margin-bottom: 0.8vh !important;">🦸 ВЫБЕРИ СВОЕГО БОЙЦА:</p>
+                    <div class="char-cards-row">
                         <button class="char-select-btn selected" data-char="1" style="
-                            padding: 2vh 3vw;
-                            border-radius: 16px;
                             background: rgba(255,215,0,0.2);
                             border: 3px solid #FFD700;
-                            cursor: pointer;
-                            transition: all 0.15s;
                         ">
-                            <img src="assets/characters/bunny1/bunny1_stand.png" style="width: min(15vw, 70px); height: auto;">
-                            <p style="color: #FFD700; font-size: min(4vw, 16px); margin-top: 1vh !important;">Пи</p>
+                            <img src="assets/characters/bunny1/bunny1_stand.png?v=mousiepi3" alt="Мышонок Пи">
+                            <p style="color: #FFD700; font-size: min(4vw, 17px); font-weight: 900; margin: 0.3vh 0 !important;">Мышонок Пи</p>
+                            <span class="char-role-tag">⚡ Мастер верёвки</span>
+                            <div class="char-stats">
+                                <div class="char-stat-row"><span>Скорость</span><div class="char-stat-bar"><div class="char-stat-fill" style="width:92%"></div></div></div>
+                                <div class="char-stat-row"><span>Бросок</span><div class="char-stat-bar"><div class="char-stat-fill" style="width:88%"></div></div></div>
+                            </div>
                         </button>
                         <button class="char-select-btn" data-char="2" style="
-                            padding: 2vh 3vw;
-                            border-radius: 16px;
                             background: rgba(60,60,70,0.8);
                             border: 3px solid #666;
-                            cursor: pointer;
-                            transition: all 0.15s;
                         ">
-                            <img src="assets/characters/bunny2/bunny2_stand.png" style="width: min(15vw, 70px); height: auto;">
-                            <p style="color: #aaa; font-size: min(4vw, 16px); margin-top: 1vh !important;">Пу</p>
+                            <img src="assets/characters/bunny2/bunny2_stand.png?v=mousiepi3" alt="Мышонок Пу">
+                            <p style="color: #aaa; font-size: min(4vw, 17px); font-weight: 900; margin: 0.3vh 0 !important;">Мышонок Пу</p>
+                            <span class="char-role-tag">❄️ Снежный ниндзя</span>
+                            <div class="char-stats">
+                                <div class="char-stat-row"><span>Скорость</span><div class="char-stat-bar"><div class="char-stat-fill" style="width:88%"></div></div></div>
+                                <div class="char-stat-row"><span>Бросок</span><div class="char-stat-bar"><div class="char-stat-fill" style="width:94%"></div></div></div>
+                            </div>
                         </button>
                     </div>
-                    <button class="play-btn" id="startWithCharBtn" style="background: linear-gradient(135deg, #4CAF50, #45a049); color: #fff;">
-                        Играть!
+                    <button class="play-btn" id="startWithCharBtn" style="background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%); border-color: #bbf7d0; box-shadow: 0 6px 0 #14532d, 0 10px 24px rgba(34,197,94,0.45); color: #fff;">
+                        ❄️ В БОЙ! ❄️
                     </button>
                 </div>
 
@@ -718,33 +1220,159 @@
     </div>
 
     <script>
-        // === MENU MUSIC ===
+        // === MENU MUSIC & ARCADE UI SOUND ENGINE ===
         const menuMusic = document.getElementById('menuMusic');
         menuMusic.volume = 0.4;
+        menuMusic.playbackRate = 1.1;
+        let menuSoundMuted = localStorage.getItem('mousie_muted') === '1';
+
+        let _uiAudioCtx = null;
+        function _getUiAudioCtx() {
+            if (menuSoundMuted) return null;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return null;
+            if (!_uiAudioCtx) {
+                try { _uiAudioCtx = new AC(); } catch (_) { return null; }
+            }
+            if (_uiAudioCtx.state === 'suspended') {
+                _uiAudioCtx.resume().catch(() => {});
+            }
+            return _uiAudioCtx;
+        }
+
+        function playUiSound(type = 'tap') {
+            const ac = _getUiAudioCtx();
+            if (!ac) return;
+            const now = ac.currentTime;
+            try {
+                if (type === 'tab') {
+                    // Crisp dual-tone arcade tab switch
+                    [523.25, 659.25].forEach((freq, i) => {
+                        const osc = ac.createOscillator();
+                        const g = ac.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, now + i * 0.045);
+                        g.gain.setValueAtTime(0.14, now + i * 0.045);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.045 + 0.09);
+                        osc.connect(g);
+                        g.connect(ac.destination);
+                        osc.start(now + i * 0.045);
+                        osc.stop(now + i * 0.045 + 0.095);
+                    });
+                } else if (type === 'hero') {
+                    // Rising power-chord chime for selecting a character or bot count
+                    [440, 554.37, 659.25, 880].forEach((freq, i) => {
+                        const osc = ac.createOscillator();
+                        const g = ac.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, now + i * 0.035);
+                        g.gain.setValueAtTime(0.12, now + i * 0.035);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.035 + 0.14);
+                        osc.connect(g);
+                        g.connect(ac.destination);
+                        osc.start(now + i * 0.035);
+                        osc.stop(now + i * 0.035 + 0.15);
+                    });
+                } else if (type === 'start') {
+                    // Exciting arcade launch fanfare!
+                    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+                        const osc = ac.createOscillator();
+                        const g = ac.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, now + i * 0.05);
+                        g.gain.setValueAtTime(0.18, now + i * 0.05);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.18);
+                        osc.connect(g);
+                        g.connect(ac.destination);
+                        osc.start(now + i * 0.05);
+                        osc.stop(now + i * 0.05 + 0.19);
+                    });
+                } else if (type === 'back') {
+                    const osc = ac.createOscillator();
+                    const g = ac.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(480, now);
+                    osc.frequency.exponentialRampToValueAtTime(280, now + 0.09);
+                    g.gain.setValueAtTime(0.13, now);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+                    osc.connect(g);
+                    g.connect(ac.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else {
+                    // Default snappy arcade pop
+                    const osc = ac.createOscillator();
+                    const g = ac.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(420, now);
+                    osc.frequency.exponentialRampToValueAtTime(680, now + 0.065);
+                    g.gain.setValueAtTime(0.14, now);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+                    osc.connect(g);
+                    g.connect(ac.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.075);
+                }
+            } catch (_) {}
+        }
+
+        function updateMenuSoundButton() {
+            const btn = document.getElementById('menuSoundToggle');
+            if (btn) btn.textContent = menuSoundMuted ? '🔇' : '🔊';
+        }
+        updateMenuSoundButton();
+
+        document.getElementById('menuSoundToggle')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menuSoundMuted = !menuSoundMuted;
+            localStorage.setItem('mousie_muted', menuSoundMuted ? '1' : '0');
+            updateMenuSoundButton();
+            if (menuSoundMuted) {
+                menuMusic.pause();
+            } else {
+                playUiSound('tab');
+                playMenuMusic();
+            }
+        });
+
+        // Delegate UI sounds to all menu buttons
+        document.getElementById('startScreen')?.addEventListener('pointerdown', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn || btn.id === 'menuSoundToggle') return;
+            if (btn.classList.contains('mode-btn')) playUiSound('tab');
+            else if (btn.classList.contains('char-select-btn') || btn.classList.contains('bot-count-btn')) playUiSound('hero');
+            else if (btn.classList.contains('snowball-back-btn')) playUiSound('back');
+            else if (btn.classList.contains('play-btn')) playUiSound('start');
+            else playUiSound('tap');
+        });
+
+        let _menuFadeTimer = null;
 
         function playMenuMusic() {
+            if (menuSoundMuted) return;
+            const startScreenEl = document.getElementById('startScreen');
+            if (!startScreenEl || !startScreenEl.classList.contains('visible')) return;
+            const frameEl = document.getElementById('phaserFrame');
+            if (frameEl && frameEl.style.display === 'block') return;
+            if (_menuFadeTimer) {
+                clearInterval(_menuFadeTimer);
+                _menuFadeTimer = null;
+            }
+            menuMusic.volume = 0.4;
+            menuMusic.playbackRate = 1.1;
             menuMusic.play().catch(() => {});
         }
 
         function stopMenuMusic() {
-            if (menuMusic.paused) return;
-            // Smooth fade with small steps to avoid audio pop/click
-            const fadeStep = 0.02;
-            const fadeInterval = 10;
-            const fadeOut = setInterval(() => {
-                if (menuMusic.volume > fadeStep) {
-                    menuMusic.volume -= fadeStep;
-                } else {
-                    clearInterval(fadeOut);
-                    menuMusic.volume = 0;
-                    // Delay before pause to let audio buffer drain (prevents click)
-                    setTimeout(() => {
-                        menuMusic.pause();
-                        menuMusic.currentTime = 0;
-                        menuMusic.volume = 0.4;
-                    }, 50);
-                }
-            }, fadeInterval);
+            if (_menuFadeTimer) {
+                clearInterval(_menuFadeTimer);
+                _menuFadeTimer = null;
+            }
+            try {
+                menuMusic.pause();
+                menuMusic.currentTime = 0;
+                menuMusic.volume = 0.4;
+            } catch (_) {}
         }
 
         // Try to play immediately
@@ -762,8 +1390,8 @@
             if (document.hidden) {
                 wasMusicPlaying = !menuMusic.paused;
                 menuMusic.pause();
-            } else if (wasMusicPlaying) {
-                menuMusic.play().catch(() => {});
+            } else if (wasMusicPlaying && !menuSoundMuted) {
+                playMenuMusic();
             }
         });
 
@@ -1496,39 +2124,34 @@
                 btn.addEventListener('touchend', handler);
             });
 
-            // Snowball mode selection (solo vs multiplayer)
+            let snowballLaunchType = 'solo';
+
+            // Snowball mode selection (solo vs multiplayer vs online)
             document.querySelectorAll('.snowball-mode-btn').forEach(btn => {
                 const handler = (e) => {
                     e.preventDefault();
                     const mode = btn.dataset.snowballMode;
-                    if (mode === 'online') {
-                        // Skip menu, launch directly into Colyseus mode
-                        const nick = (localStorage.getItem('playerNickname') || prompt('Твой ник:', 'Игрок') || 'Игрок').slice(0, 12);
-                        localStorage.setItem('playerNickname', nick);
-                        let serverUrl = localStorage.getItem('colyseusServer');
-                        if (!serverUrl) {
-                            // First time — ask for server URL. Default = browser host (works on web localhost)
-                            // Served from the game server itself (Heroku): same host, standard port.
-                            // Only fall back to asking when the page is opened from a file or a static host.
-                            const sameOrigin = location.protocol === 'https:' || location.protocol === 'http:';
-                            const guess = sameOrigin
-                                ? (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host
-                                : 'ws://localhost:2567';
-                            serverUrl = (location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')
-                                ? guess
-                                : (prompt('Адрес сервера:', guess) || guess);
-                            localStorage.setItem('colyseusServer', serverUrl);
-                        }
-                        startOnlineSnowball(serverUrl, nick);
-                        return;
-                    }
                     document.getElementById('snowballMainChoice').style.display = 'none';
                     document.getElementById('snowballBackContainer').style.display = 'flex';
                     document.querySelector('#startScreen .overlay-content').classList.add('snowball-submenu-active');
+
+                    if (mode === 'online') {
+                        snowballLaunchType = 'online';
+                        document.getElementById('snowballSoloOptions').style.display = 'none';
+                        document.getElementById('snowballMultiOptions').style.display = 'none';
+                        const nickInput = document.getElementById('onlineNicknameInput');
+                        if (nickInput) nickInput.value = localStorage.getItem('playerNickname') || 'Игрок';
+                        document.getElementById('onlineNickContainer').style.display = 'block';
+                        document.getElementById('snowballCharSelection').style.display = 'flex';
+                        return;
+                    }
+
                     if (mode === 'solo') {
+                        snowballLaunchType = 'solo';
                         document.getElementById('snowballSoloOptions').style.display = 'flex';
                         document.getElementById('snowballMultiOptions').style.display = 'none';
                     } else {
+                        snowballLaunchType = 'multi';
                         document.getElementById('snowballSoloOptions').style.display = 'none';
                         document.getElementById('snowballMultiOptions').style.display = 'flex';
                         // Restore saved nickname
@@ -1547,9 +2170,11 @@
             document.querySelectorAll('.bot-count-btn').forEach(btn => {
                 const handler = (e) => {
                     e.preventDefault();
+                    snowballLaunchType = 'solo';
                     selectedBotCount = parseInt(btn.dataset.bots);
                     // Show character selection instead of starting game
                     document.getElementById('snowballSoloOptions').style.display = 'none';
+                    document.getElementById('onlineNickContainer').style.display = 'none';
                     document.getElementById('snowballCharSelection').style.display = 'flex';
                 };
                 btn.addEventListener('click', handler);
@@ -1581,10 +2206,30 @@
             // Start game with selected character
             const startCharHandler = (e) => {
                 e.preventDefault();
-                startSoloSnowball(selectedBotCount, selectedCharacter);
+                if (snowballLaunchType === 'online') {
+                    const nick = (document.getElementById('onlineNicknameInput')?.value?.trim() || localStorage.getItem('playerNickname') || 'Игрок').slice(0, 12);
+                    localStorage.setItem('playerNickname', nick);
+                    startOnlineSnowball(getColyseusServerUrl(), nick, selectedCharacter, { isPrivate: false });
+                } else {
+                    startSoloSnowball(selectedBotCount, selectedCharacter);
+                }
             };
             document.getElementById('startWithCharBtn').addEventListener('click', startCharHandler);
             document.getElementById('startWithCharBtn').addEventListener('touchend', startCharHandler);
+
+            // Enter created private Colyseus room button
+            const enterRoomBtn = document.getElementById('enterRoomBtn');
+            if (enterRoomBtn) {
+                const enterRoomHandler = (e) => {
+                    e.preventDefault();
+                    const nick = (document.getElementById('playerNickname')?.value?.trim() || localStorage.getItem('playerNickname') || 'Игрок').slice(0, 12);
+                    localStorage.setItem('playerNickname', nick);
+                    const code = (roomCode || FavoritesManager.getPlayerId()).toUpperCase();
+                    startOnlineSnowball(getColyseusServerUrl(), nick, selectedCharacter, { roomCode: code, isPrivate: true });
+                };
+                enterRoomBtn.addEventListener('click', enterRoomHandler);
+                enterRoomBtn.addEventListener('touchend', enterRoomHandler);
+            }
 
             // Back buttons in snowball submenu
             document.querySelectorAll('.snowball-back-btn').forEach(btn => {
@@ -1594,6 +2239,7 @@
                     document.getElementById('snowballSoloOptions').style.display = 'none';
                     document.getElementById('snowballMultiOptions').style.display = 'none';
                     document.getElementById('snowballCharSelection').style.display = 'none';
+                    document.getElementById('onlineNickContainer').style.display = 'none';
                     document.getElementById('snowballBackContainer').style.display = 'none';
                     document.getElementById('createGameOptions').style.display = 'none';
                     document.getElementById('joinGameOptions').style.display = 'none';
@@ -5209,168 +5855,208 @@
             ctx.fillText('⏸', w * 0.75, padding + fontSize * 1.05);
         }
 
-        // Draw touch controls
+        // Draw touch controls (Glossy 3D Arcade Virtual Thumbstick + Action Capsule)
         function drawTouchControls() {
             updateControlPositions();
 
-            // === LEFT SIDE: JOYSTICK ===
-            // Joystick outer glow when active
+            ctx.save();
+
+            // === LEFT SIDE: VIRTUAL ARCADE THUMBSTICK ===
+            const bx = joystick.baseX;
+            const by = joystick.baseY;
+            const br = joystick.baseRadius;
+
+            // Active outer neon aura
             if (joystick.active) {
-                const glowGrad = ctx.createRadialGradient(
-                    joystick.baseX, joystick.baseY, joystick.baseRadius * 0.5,
-                    joystick.baseX, joystick.baseY, joystick.baseRadius * 1.3
-                );
-                glowGrad.addColorStop(0, 'rgba(100, 180, 255, 0.2)');
-                glowGrad.addColorStop(1, 'rgba(100, 180, 255, 0)');
+                const glowGrad = ctx.createRadialGradient(bx, by, br * 0.4, bx, by, br * 1.38);
+                glowGrad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+                glowGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
                 ctx.fillStyle = glowGrad;
                 ctx.beginPath();
-                ctx.arc(joystick.baseX, joystick.baseY, joystick.baseRadius * 1.3, 0, Math.PI * 2);
+                ctx.arc(bx, by, br * 1.38, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // Joystick base - semi-transparent circle
-            const baseGrad = ctx.createRadialGradient(
-                joystick.baseX, joystick.baseY, 0,
-                joystick.baseX, joystick.baseY, joystick.baseRadius
-            );
-            baseGrad.addColorStop(0, 'rgba(60, 60, 80, 0.4)');
-            baseGrad.addColorStop(0.7, 'rgba(40, 40, 60, 0.3)');
-            baseGrad.addColorStop(1, 'rgba(30, 30, 50, 0.2)');
+            // Glassmorphic dark-slate base
+            const baseGrad = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+            baseGrad.addColorStop(0, 'rgba(15, 23, 42, 0.46)');
+            baseGrad.addColorStop(0.7, 'rgba(15, 23, 42, 0.72)');
+            baseGrad.addColorStop(1, 'rgba(30, 58, 138, 0.82)');
             ctx.fillStyle = baseGrad;
             ctx.beginPath();
-            ctx.arc(joystick.baseX, joystick.baseY, joystick.baseRadius, 0, Math.PI * 2);
+            ctx.arc(bx, by, br, 0, Math.PI * 2);
             ctx.fill();
 
-            // Joystick base border
-            ctx.strokeStyle = joystick.active ? 'rgba(150, 200, 255, 0.8)' : 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 3;
+            // Neon cyan rim
+            ctx.strokeStyle = joystick.active ? 'rgba(56, 189, 248, 0.95)' : 'rgba(125, 211, 252, 0.48)';
+            ctx.lineWidth = 2.8;
             ctx.stroke();
 
-            // Direction indicators
-            const arrowSize = joystick.baseRadius * 0.25;
-            const arrowDist = joystick.baseRadius * 0.65;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-
-            // Left arrow
+            // Inner dashed track ring
+            ctx.save();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = 'rgba(186, 230, 253, 0.25)';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.moveTo(joystick.baseX - arrowDist, joystick.baseY);
-            ctx.lineTo(joystick.baseX - arrowDist + arrowSize, joystick.baseY - arrowSize * 0.6);
-            ctx.lineTo(joystick.baseX - arrowDist + arrowSize, joystick.baseY + arrowSize * 0.6);
+            ctx.arc(bx, by, br * 0.76, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // Directional chevrons (highlight active direction)
+            const arrowSize = br * 0.22;
+            const arrowDist = br * 0.68;
+
+            // Left chevron
+            ctx.fillStyle = keys.left ? '#38bdf8' : 'rgba(186, 230, 253, 0.42)';
+            ctx.beginPath();
+            ctx.moveTo(bx - arrowDist - (keys.left ? 2 : 0), by);
+            ctx.lineTo(bx - arrowDist + arrowSize, by - arrowSize * 0.65);
+            ctx.lineTo(bx - arrowDist + arrowSize, by + arrowSize * 0.65);
+            ctx.closePath();
             ctx.fill();
 
-            // Right arrow
+            // Right chevron
+            ctx.fillStyle = keys.right ? '#38bdf8' : 'rgba(186, 230, 253, 0.42)';
             ctx.beginPath();
-            ctx.moveTo(joystick.baseX + arrowDist, joystick.baseY);
-            ctx.lineTo(joystick.baseX + arrowDist - arrowSize, joystick.baseY - arrowSize * 0.6);
-            ctx.lineTo(joystick.baseX + arrowDist - arrowSize, joystick.baseY + arrowSize * 0.6);
+            ctx.moveTo(bx + arrowDist + (keys.right ? 2 : 0), by);
+            ctx.lineTo(bx + arrowDist - arrowSize, by - arrowSize * 0.65);
+            ctx.lineTo(bx + arrowDist - arrowSize, by + arrowSize * 0.65);
+            ctx.closePath();
             ctx.fill();
 
-            // Up arrow (for space mode)
-            if (inSpace) {
+            if (inSpace || currentGameMode === 'newyear') {
+                // Up chevron
+                ctx.fillStyle = keys.up ? '#38bdf8' : 'rgba(186, 230, 253, 0.38)';
                 ctx.beginPath();
-                ctx.moveTo(joystick.baseX, joystick.baseY - arrowDist);
-                ctx.lineTo(joystick.baseX - arrowSize * 0.6, joystick.baseY - arrowDist + arrowSize);
-                ctx.lineTo(joystick.baseX + arrowSize * 0.6, joystick.baseY - arrowDist + arrowSize);
+                ctx.moveTo(bx, by - arrowDist);
+                ctx.lineTo(bx - arrowSize * 0.65, by - arrowDist + arrowSize);
+                ctx.lineTo(bx + arrowSize * 0.65, by - arrowDist + arrowSize);
+                ctx.closePath();
                 ctx.fill();
 
-                // Down arrow
+                // Down chevron
+                ctx.fillStyle = keys.down ? '#38bdf8' : 'rgba(186, 230, 253, 0.38)';
                 ctx.beginPath();
-                ctx.moveTo(joystick.baseX, joystick.baseY + arrowDist);
-                ctx.lineTo(joystick.baseX - arrowSize * 0.6, joystick.baseY + arrowDist - arrowSize);
-                ctx.lineTo(joystick.baseX + arrowSize * 0.6, joystick.baseY + arrowDist - arrowSize);
+                ctx.moveTo(bx, by + arrowDist);
+                ctx.lineTo(bx - arrowSize * 0.65, by + arrowDist - arrowSize);
+                ctx.lineTo(bx + arrowSize * 0.65, by + arrowDist - arrowSize);
+                ctx.closePath();
                 ctx.fill();
             }
 
-            // Joystick stick (thumb position)
+            // 3D Glossy Thumb Puck
+            const sx = joystick.stickX;
+            const sy = joystick.stickY;
+            const sr = joystick.stickRadius;
+
             const stickGrad = ctx.createRadialGradient(
-                joystick.stickX - joystick.stickRadius * 0.3, joystick.stickY - joystick.stickRadius * 0.3, 0,
-                joystick.stickX, joystick.stickY, joystick.stickRadius
+                sx - sr * 0.32, sy - sr * 0.32, sr * 0.05,
+                sx, sy, sr
             );
-            if (joystick.active) {
-                stickGrad.addColorStop(0, 'rgba(150, 200, 255, 1)');
-                stickGrad.addColorStop(0.5, 'rgba(100, 160, 220, 0.95)');
-                stickGrad.addColorStop(1, 'rgba(70, 130, 200, 0.9)');
-            } else {
-                stickGrad.addColorStop(0, 'rgba(120, 160, 200, 0.8)');
-                stickGrad.addColorStop(0.5, 'rgba(90, 130, 180, 0.7)');
-                stickGrad.addColorStop(1, 'rgba(70, 110, 160, 0.6)');
-            }
+            stickGrad.addColorStop(0, '#f0f9ff');
+            stickGrad.addColorStop(0.3, '#7dd3fc');
+            stickGrad.addColorStop(0.78, '#0284c7');
+            stickGrad.addColorStop(1, '#0369a1');
+
             ctx.fillStyle = stickGrad;
             ctx.beginPath();
-            ctx.arc(joystick.stickX, joystick.stickY, joystick.stickRadius, 0, Math.PI * 2);
+            ctx.arc(sx, sy, sr, 0, Math.PI * 2);
             ctx.fill();
 
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 2.4;
             ctx.stroke();
 
-            // === RIGHT SIDE: ACTION BUTTON ===
-            // Button glow when pressed
+            // Inner grip ring on thumb puck
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(sx, sy, sr * 0.52, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // === RIGHT SIDE: 3D GLOSSY ACTION BUTTON ===
+            const jx = jumpButton.x;
+            const jy = jumpButton.y + (jumpButton.pressed ? 2 : 0);
+            const jr = jumpButton.radius * (jumpButton.pressed ? 0.91 : 1);
+
             if (jumpButton.pressed) {
-                const btnGlow = ctx.createRadialGradient(
-                    jumpButton.x, jumpButton.y, jumpButton.radius * 0.5,
-                    jumpButton.x, jumpButton.y, jumpButton.radius * 1.4
-                );
-                btnGlow.addColorStop(0, inSpace ? 'rgba(255, 100, 100, 0.3)' : 'rgba(100, 255, 150, 0.3)');
+                const btnGlow = ctx.createRadialGradient(jx, jy, jr * 0.4, jx, jy, jr * 1.45);
+                btnGlow.addColorStop(0, inSpace ? 'rgba(244, 63, 94, 0.45)' : 'rgba(16, 185, 129, 0.45)');
                 btnGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
                 ctx.fillStyle = btnGlow;
                 ctx.beginPath();
-                ctx.arc(jumpButton.x, jumpButton.y, jumpButton.radius * 1.4, 0, Math.PI * 2);
+                ctx.arc(jx, jy, jr * 1.45, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // Button background
             const btnGrad = ctx.createRadialGradient(
-                jumpButton.x - jumpButton.radius * 0.3, jumpButton.y - jumpButton.radius * 0.3, 0,
-                jumpButton.x, jumpButton.y, jumpButton.radius
+                jx - jr * 0.32, jy - jr * 0.32, jr * 0.05,
+                jx, jy, jr
             );
-            if (jumpButton.pressed) {
-                if (inSpace) {
-                    btnGrad.addColorStop(0, 'rgba(255, 120, 120, 1)');
-                    btnGrad.addColorStop(0.6, 'rgba(220, 80, 80, 0.95)');
-                    btnGrad.addColorStop(1, 'rgba(180, 50, 50, 0.9)');
-                } else {
-                    btnGrad.addColorStop(0, 'rgba(120, 255, 150, 1)');
-                    btnGrad.addColorStop(0.6, 'rgba(80, 220, 120, 0.95)');
-                    btnGrad.addColorStop(1, 'rgba(50, 180, 90, 0.9)');
-                }
+            if (inSpace) {
+                btnGrad.addColorStop(0, '#fda4af');
+                btnGrad.addColorStop(0.45, '#f43f5e');
+                btnGrad.addColorStop(0.88, '#be123c');
+                btnGrad.addColorStop(1, '#881337');
             } else {
-                if (inSpace) {
-                    btnGrad.addColorStop(0, 'rgba(200, 100, 100, 0.7)');
-                    btnGrad.addColorStop(0.6, 'rgba(160, 70, 70, 0.6)');
-                    btnGrad.addColorStop(1, 'rgba(130, 50, 50, 0.5)');
-                } else {
-                    btnGrad.addColorStop(0, 'rgba(100, 200, 130, 0.7)');
-                    btnGrad.addColorStop(0.6, 'rgba(70, 160, 100, 0.6)');
-                    btnGrad.addColorStop(1, 'rgba(50, 130, 80, 0.5)');
-                }
+                btnGrad.addColorStop(0, '#6ee7b7');
+                btnGrad.addColorStop(0.45, '#10b981');
+                btnGrad.addColorStop(0.88, '#047857');
+                btnGrad.addColorStop(1, '#064e3b');
             }
+
             ctx.fillStyle = btnGrad;
             ctx.beginPath();
-            ctx.arc(jumpButton.x, jumpButton.y, jumpButton.radius, 0, Math.PI * 2);
+            ctx.arc(jx, jy, jr, 0, Math.PI * 2);
             ctx.fill();
 
-            // Button border
-            ctx.strokeStyle = jumpButton.pressed ? 'rgba(255, 255, 255, 0.9)' : 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = jumpButton.pressed
+                ? '#ffffff'
+                : (inSpace ? 'rgba(254, 205, 211, 0.85)' : 'rgba(209, 250, 229, 0.85)');
+            ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Button icon/text
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-            ctx.font = `bold ${jumpButton.radius * 0.5}px Comfortaa, sans-serif`;
+            // Specular top gloss arc
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+            ctx.beginPath();
+            ctx.ellipse(jx, jy - jr * 0.52, jr * 0.56, jr * 0.22, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Icon + Russian Micro-Label
+            ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
             if (inSpace) {
-                // Fire icon for space
-                ctx.fillText('🔥', jumpButton.x, jumpButton.y);
+                ctx.font = `bold ${jr * 0.52}px sans-serif`;
+                ctx.fillText('🔥', jx, jy - jr * 0.12);
+                ctx.font = `900 ${Math.max(9, jr * 0.21)}px Nunito, Comfortaa, sans-serif`;
+                ctx.fillText('ОГОНЬ', jx, jy + jr * 0.44);
             } else {
-                // Jump arrow for platformer
-                ctx.font = `bold ${jumpButton.radius * 0.6}px sans-serif`;
-                ctx.fillText('⬆', jumpButton.x, jumpButton.y - 5);
-                ctx.font = `bold ${jumpButton.radius * 0.2}px Comfortaa, sans-serif`;
-                ctx.fillText('ПРЫГ', jumpButton.x, jumpButton.y + jumpButton.radius * 0.4);
+                // Crisp double upward chevron
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3.2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.beginPath();
+                ctx.moveTo(jx - jr * 0.28, jy - jr * 0.04);
+                ctx.lineTo(jx, jy - jr * 0.32);
+                ctx.lineTo(jx + jr * 0.28, jy - jr * 0.04);
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(209, 250, 229, 0.9)';
+                ctx.lineWidth = 2.6;
+                ctx.beginPath();
+                ctx.moveTo(jx - jr * 0.2, jy + jr * 0.16);
+                ctx.lineTo(jx, jy - jr * 0.04);
+                ctx.lineTo(jx + jr * 0.2, jy + jr * 0.16);
+                ctx.stroke();
+
+                ctx.font = `900 ${Math.max(9, jr * 0.2)}px Nunito, Comfortaa, sans-serif`;
+                ctx.fillText('ПРЫЖОК', jx, jy + jr * 0.46);
             }
+
+            ctx.restore();
         }
 
         // Draw player
@@ -7708,102 +8394,27 @@
                 return;
             }
             localStorage.setItem('playerNickname', nick);
+            const targetCode = (code || '').toUpperCase().trim();
             const statusEl = document.getElementById('favStatus');
-            statusEl.textContent = 'Создание комнаты...';
+            if (statusEl) statusEl.textContent = 'Подключение к комнате друга...';
 
-            // Destroy auto-registered peer, then create our room as host
-            if (peer) { peer.destroy(); peer = null; }
-
-            const myCode = FavoritesManager.getPlayerId();
-            roomCode = myCode;
-            isHost = true;
-
-            peer = new Peer('MOUSIE-' + myCode, window.peerConfig);
-
-            peer.on('open', () => {
-                statusEl.textContent = 'Отправка приглашения...';
-
-                // Set up host connection handler (same as createSnowballRoom)
-                peer.on('connection', (conn) => {
-                    peerConnection = conn;
-                    conn.on('data', (data) => {
-                        if (data && data.type === 'nickname') {
-                            remoteNickname = data.nickname;
-                        }
-                        handleNetworkMessage(data);
-                    });
-                    conn.on('close', () => {
-                        snowballConnected = false;
-                        if (gameRunning && currentGameMode === 'snowball') showSnowballDisconnect();
-                    });
-
-                    const startGameAsHost = () => {
-                        if (snowballConnected) return;
-                        snowballConnected = true;
-                        statusEl.textContent = '';
-                        let waited = 0;
-                        const tryStart = () => {
-                            if (remoteNickname || waited >= 3000) {
-                                const seed = Math.floor(Math.random() * 1000000);
-                                conn.send({ type: 'start', seed: seed, nickname: nick });
-                                startSnowballGame(seed);
-                            } else {
-                                waited += 50;
-                                setTimeout(tryStart, 50);
-                            }
-                        };
-                        setTimeout(tryStart, 100);
-                    };
-
-                    if (conn.open) startGameAsHost();
-                    else conn.on('open', startGameAsHost);
-                });
-
-                // Now send invite to the friend via outgoing connection
-                const inviteConn = peer.connect('MOUSIE-' + code, connOptions);
-                if (!inviteConn) {
-                    statusEl.textContent = 'Не удалось подключиться';
-                    return;
+            // Best-effort invite over PeerJS if friend is sitting in main menu
+            try {
+                if (peer && peer.open) {
+                    const inviteConn = peer.connect('MOUSIE-' + targetCode, connOptions);
+                    if (inviteConn) {
+                        inviteConn.on('open', () => {
+                            inviteConn.send({ type: 'invite', nickname: nick, code: targetCode });
+                            setTimeout(() => { if (inviteConn.open) inviteConn.close(); }, 400);
+                        });
+                    }
                 }
+            } catch (e) { /* ignore signaling errors */ }
 
-                const inviteTimeout = setTimeout(() => {
-                    statusEl.textContent = 'Игрок не в сети. Ждём подключения...';
-                    if (inviteConn.open) inviteConn.close();
-                    // Keep room open - friend might join manually
-                    document.getElementById('roomCode').textContent = myCode;
-                    document.getElementById('createGameOptions').style.display = 'block';
-                    document.getElementById('favoritesOptions').style.display = 'none';
-                    document.getElementById('waitingStatus').textContent = 'Ожидание игрока...';
-                }, 10000);
-
-                inviteConn.on('open', () => {
-                    inviteConn.send({ type: 'invite', nickname: nick, code: myCode });
-                    statusEl.textContent = 'Приглашение отправлено! Ждём...';
-                    // Invite sent - friend will see overlay, accept, and join our room
-                    // Close invite connection after sending (friend joins via normal flow)
-                    setTimeout(() => {
-                        clearTimeout(inviteTimeout);
-                        if (inviteConn.open) inviteConn.close();
-                    }, 2000);
-                });
-
-                inviteConn.on('error', () => {
-                    clearTimeout(inviteTimeout);
-                    statusEl.textContent = 'Игрок не в сети. Ждём подключения...';
-                    document.getElementById('roomCode').textContent = myCode;
-                    document.getElementById('createGameOptions').style.display = 'block';
-                    document.getElementById('favoritesOptions').style.display = 'none';
-                    document.getElementById('waitingStatus').textContent = 'Ожидание игрока...';
-                });
-            });
-
-            peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') {
-                    statusEl.textContent = 'Код занят. Повтор...';
-                    setTimeout(() => playWithFavorite(code), 3000);
-                } else {
-                    statusEl.textContent = 'Ошибка: ' + err.type;
-                }
+            // Enter the shared Colyseus private room with friend's 4-char code
+            startOnlineSnowball(getColyseusServerUrl(), nick, selectedCharacter, {
+                roomCode: targetCode,
+                isPrivate: true
             });
         }
 
@@ -7970,199 +8581,19 @@
         function createSnowballRoom() {
             roomCode = generateRoomCode();
             document.getElementById('roomCode').textContent = roomCode;
-            document.getElementById('waitingStatus').textContent = 'Создание комнаты...';
+            document.getElementById('waitingStatus').textContent = 'Назови код другу и нажми «Войти в комнату»!';
             isHost = true;
-
-            // Recreate peer with room code as ID
-            if (peer) peer.destroy();
-            peer = new Peer('MOUSIE-' + roomCode, window.peerConfig);
-
-            peer.on('open', (id) => {
-                console.log('Room created with ID:', id);
-                document.getElementById('waitingStatus').textContent = 'Ожидание игрока...';
-            });
-
-            peer.on('connection', (conn) => {
-                console.log('Someone is connecting...', conn.open ? 'already open' : 'not yet open');
-                console.log('Connection object:', conn);
-                peerConnection = conn;
-
-                // Monitor the underlying peer connection
-                if (conn.peerConnection) {
-                    conn.peerConnection.oniceconnectionstatechange = () => {
-                        console.log('ICE state:', conn.peerConnection.iceConnectionState);
-                    };
-                    conn.peerConnection.onconnectionstatechange = () => {
-                        console.log('Connection state:', conn.peerConnection.connectionState);
-                    };
-                    // Host creates unreliable channel
-                    setupUnreliableChannel(conn.peerConnection, true);
-                }
-
-                conn.on('data', (data) => {
-                    console.log('Host received:', data);
-                    // Capture guest's nickname before game starts
-                    if (data && data.type === 'nickname') {
-                        remoteNickname = data.nickname;
-                        console.log('Guest nickname:', remoteNickname);
-                    }
-                    handleNetworkMessage(data);
-                });
-
-                conn.on('close', () => {
-                    console.log('Guest disconnected');
-                    snowballConnected = false;
-                    if (gameRunning && currentGameMode === 'snowball') {
-                        showSnowballDisconnect();
-                    }
-                });
-
-                conn.on('error', (err) => {
-                    console.error('Connection error on host:', err);
-                });
-
-                conn.on('iceStateChanged', (state) => {
-                    console.log('ICE state changed:', state);
-                });
-
-                // Function to start the game (waits for guest's nickname)
-                const startGameAsHost = () => {
-                    if (snowballConnected) return; // Already started
-                    console.log('Connection from guest opened!');
-                    document.getElementById('waitingStatus').textContent = 'Игрок подключился!';
-                    snowballConnected = true;
-
-                    // Wait for guest's nickname before starting (fallback: 3s max)
-                    let waited = 0;
-                    const tryStart = () => {
-                        if (remoteNickname || waited >= 3000) {
-                            const seed = Math.floor(Math.random() * 1000000);
-                            const hostNick = document.getElementById('playerNickname')?.value?.trim() || 'Игрок';
-                            console.log('Sending start with seed:', seed, 'remoteNickname:', remoteNickname);
-                            conn.send({ type: 'start', seed: seed, nickname: hostNick });
-                            startSnowballGame(seed);
-                        } else {
-                            waited += 50;
-                            setTimeout(tryStart, 50);
-                        }
-                    };
-                    setTimeout(tryStart, 100);
-                };
-
-                // Check if already open
-                if (conn.open) {
-                    startGameAsHost();
-                } else {
-                    conn.on('open', startGameAsHost);
-
-                    // Timeout fallback - check connection state after 5 seconds
-                    setTimeout(() => {
-                        console.log('Timeout check - conn.open:', conn.open, 'dataChannel:', conn.dataChannel?.readyState);
-                        if (conn.dataChannel && conn.dataChannel.readyState === 'open' && !snowballConnected) {
-                            console.log('DataChannel is open but event missed, starting manually');
-                            startGameAsHost();
-                        }
-                    }, 5000);
-                }
-            });
-
-            peer.on('error', (err) => {
-                console.error('Host peer error:', err.type, err);
-                if (err.type === 'unavailable-id') {
-                    document.getElementById('waitingStatus').textContent = 'Код занят (другая сессия?). Повтор...';
-                    setTimeout(createSnowballRoom, 3000);
-                } else if (err.type === 'server-error' || err.type === 'network') {
-                    tryNextPeerServer();
-                    window.peerConfig = getPeerConfig();
-                    document.getElementById('waitingStatus').textContent = 'Смена сервера...';
-                    setTimeout(createSnowballRoom, 2000);
-                } else {
-                    document.getElementById('waitingStatus').textContent = 'Ошибка: ' + err.type;
-                }
-            });
         }
 
         function joinSnowballRoom(code) {
-            document.getElementById('joinStatus').textContent = 'Подключение...';
-            isHost = false;
-            code = code.toUpperCase();
-
-            // Clean up old peer if exists
-            if (peer) {
-                peer.destroy();
-                peer = null;
-            }
-
-            console.log('Creating peer to join room:', code);
-
-            // Create new peer for joining (use fresh config in case server switched)
-            peer = new Peer(getPeerConfig());
-
-            peer.on('open', (id) => {
-                console.log('My peer ID:', id);
-                console.log('Connecting to:', 'MOUSIE-' + code);
-                document.getElementById('joinStatus').textContent = 'Соединяюсь...';
-
-                const conn = peer.connect('MOUSIE-' + code, connOptions);
-                peerConnection = conn;
-
-                if (!conn) {
-                    console.error('Failed to create connection');
-                    document.getElementById('joinStatus').textContent = 'Ошибка создания соединения';
-                    return;
-                }
-
-                conn.on('data', (data) => {
-                    // Minimal logging - only non-snapshot messages
-                    if (data.type !== 'snapshot' && data.type !== 'pong') {
-                        console.log(`[Net] ${data.type}`);
-                    }
-                    handleNetworkMessage(data);
-                });
-
-                conn.on('close', () => {
-                    console.log('Connection closed');
-                    snowballConnected = false;
-                    if (gameRunning && currentGameMode === 'snowball') {
-                        showSnowballDisconnect();
-                    }
-                });
-
-                conn.on('error', (err) => {
-                    console.error('Connection error:', err);
-                    document.getElementById('joinStatus').textContent = 'Ошибка подключения';
-                });
-
-                // Function to mark as connected
-                const markConnected = () => {
-                    if (snowballConnected) return;
-                    console.log('Connection opened!');
-                    snowballConnected = true;
-                    document.getElementById('joinStatus').textContent = 'Подключено! Ожидание хоста...';
-                    // Send our nickname to host so they know it before Phaser starts
-                    const nick = document.getElementById('playerNickname')?.value?.trim() || 'Игрок';
-                    conn.send({ type: 'nickname', nickname: nick });
-                    // Guest listens for unreliable channel from host
-                    if (conn.peerConnection) {
-                        setupUnreliableChannel(conn.peerConnection, false);
-                    }
-                };
-
-                // Check if already open
-                if (conn.open) {
-                    markConnected();
-                } else {
-                    conn.on('open', markConnected);
-                }
-            });
-
-            peer.on('error', (err) => {
-                console.error('Peer error:', err.type, err);
-                if (err.type === 'peer-unavailable') {
-                    document.getElementById('joinStatus').textContent = 'Комната ' + code + ' не найдена';
-                } else {
-                    document.getElementById('joinStatus').textContent = 'Ошибка: ' + err.type;
-                }
+            const cleanCode = (code || '').toUpperCase().trim();
+            if (cleanCode.length !== 4) return;
+            document.getElementById('joinStatus').textContent = 'Подключение к комнате ' + cleanCode + '...';
+            const nick = (document.getElementById('playerNickname')?.value?.trim() || localStorage.getItem('playerNickname') || 'Игрок').slice(0, 12);
+            localStorage.setItem('playerNickname', nick);
+            startOnlineSnowball(getColyseusServerUrl(), nick, selectedCharacter, {
+                roomCode: cleanCode,
+                isPrivate: true
             });
         }
 
@@ -10619,13 +11050,32 @@
             }
         }
 
-        // Start solo snowball game with bots and selected character
-        function startOnlineSnowball(serverUrl, nickname, character = 1) {
+        function getColyseusServerUrl() {
+            const urlParam = new URLSearchParams(window.location.search).get('colyseus');
+            if (urlParam) {
+                localStorage.setItem('colyseusServer', urlParam);
+                return urlParam;
+            }
+            const saved = localStorage.getItem('colyseusServer');
+            if (saved) return saved;
+            const isWeb = location.protocol === 'https:' || location.protocol === 'http:';
+            if (isWeb && ((location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') || location.port === '2567')) {
+                return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+            }
+            return 'ws://localhost:2567';
+        }
+
+        // Start online/multiplayer snowball game via Colyseus server
+        function startOnlineSnowball(serverUrl, nickname, character = 1, opts = {}) {
             stopMenuMusic();
             const frame = document.getElementById('phaserFrame');
             if (phaserRunning) frame.src = 'about:blank';
             const cacheBust = Date.now();
-            const url = `game-phaser.html?mode=online&server=${encodeURIComponent(serverUrl)}&nickname=${encodeURIComponent(nickname)}&character=${character}&_v=${cacheBust}`;
+            let url = `game-phaser.html?mode=online&server=${encodeURIComponent(serverUrl)}&nickname=${encodeURIComponent(nickname)}&character=${character}`;
+            if (opts.roomCode) url += `&roomCode=${encodeURIComponent(opts.roomCode)}`;
+            if (opts.isPrivate) url += `&private=1`;
+            if (typeof opts.botCount === 'number') url += `&botCount=${opts.botCount}`;
+            url += `&_v=${cacheBust}`;
             const launchGame = () => {
                 frame.src = url;
                 frame.style.display = 'block';
@@ -10669,7 +11119,7 @@
             const seed = Math.floor(Math.random() * 1000000);
 
             // Build URL for solo mode with bots and character selection
-            let url = `game-phaser.html?mode=solo&botCount=${botCount}&character=${character}&seed=${seed}`;
+            let url = `game-phaser.html?mode=solo&botCount=${botCount}&character=${character}&seed=${seed}&_v=${Date.now()}`;
 
             // Small delay to let the old iframe fully unload before loading new game
             const launchGame = () => {
@@ -10868,7 +11318,169 @@
         #installNo { padding: 0 14px; font-size: 14px; }
         #installNever { margin: 0; flex: none; min-height: 44px; padding: 0 10px; font-size: 12px; }
       }
+
+      /* ===== PWA Install & Share Modal (#pwaShareModal) ===== */
+      #pwaShareModal {
+        position: fixed;
+        inset: 0;
+        z-index: 1500;
+        background: rgba(8, 12, 30, 0.86);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        box-sizing: border-box;
+      }
+      #pwaShareModal.visible {
+        display: flex;
+      }
+      .pwa-modal-card {
+        width: min(94vw, 540px);
+        max-height: 92vh;
+        overflow-y: auto;
+        background: linear-gradient(180deg, #1e2952 0%, #111836 100%);
+        border: 3px solid rgba(56, 189, 248, 0.55);
+        border-radius: 24px;
+        padding: 18px 20px;
+        color: #f8fafc;
+        font-family: 'Nunito', sans-serif;
+        box-shadow: 0 20px 55px rgba(0, 0, 0, 0.75), 0 0 30px rgba(56, 189, 248, 0.25);
+        box-sizing: border-box;
+      }
+      .pwa-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .pwa-modal-head h3 {
+        margin: 0;
+        font-size: min(4.8vw, 20px);
+        font-weight: 900;
+        color: #fde047;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pwa-modal-close {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 2px solid rgba(255,255,255,0.25);
+        background: rgba(255,255,255,0.1);
+        color: #fff;
+        font-size: 18px;
+        font-weight: 900;
+        cursor: pointer;
+      }
+      .pwa-modal-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      @media (max-width: 560px) {
+        .pwa-modal-grid { grid-template-columns: 1fr; }
+      }
+      .pwa-box {
+        background: rgba(15, 23, 42, 0.65);
+        border: 1.5px solid rgba(148, 163, 184, 0.28);
+        border-radius: 16px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .pwa-box-title {
+        font-weight: 900;
+        font-size: 14.5px;
+        color: #7dd3fc;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pwa-box p {
+        margin: 0;
+        font-size: 12.5px;
+        line-height: 1.38;
+        color: #cbd5e1;
+      }
+      .pwa-steps {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 12.5px;
+        line-height: 1.42;
+        color: #e2e8f0;
+      }
+      .pwa-action-btn {
+        margin-top: auto;
+        min-height: 42px;
+        border-radius: 12px;
+        border: none;
+        font-family: 'Nunito', sans-serif;
+        font-weight: 900;
+        font-size: 14px;
+        cursor: pointer;
+        padding: 8px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: transform 0.1s, filter 0.1s;
+      }
+      .pwa-action-btn:active {
+        transform: scale(0.96);
+        filter: brightness(1.15);
+      }
+      .pwa-action-btn.install {
+        background: linear-gradient(135deg, #34d399, #059669);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+      }
+      .pwa-action-btn.share {
+        background: linear-gradient(135deg, #38bdf8, #2563eb);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+      }
+      .pwa-code-badge {
+        display: inline-block;
+        background: rgba(250, 204, 21, 0.18);
+        border: 1.5px solid #facc15;
+        color: #fde047;
+        font-weight: 900;
+        padding: 2px 8px;
+        border-radius: 8px;
+        letter-spacing: 1.5px;
+      }
     </style>
+    <div id="pwaShareModal" role="dialog" aria-modal="true" aria-labelledby="pwaModalTitle">
+      <div class="pwa-modal-card">
+        <div class="pwa-modal-head">
+          <h3 id="pwaModalTitle">📲 Играть как в приложении с подругами</h3>
+          <button class="pwa-modal-close" id="pwaModalClose" type="button" aria-label="Закрыть">✕</button>
+        </div>
+        <div class="pwa-modal-grid">
+          <div class="pwa-box">
+            <div class="pwa-box-title">📱 1. Добавить иконку на телефон</div>
+            <p>Работает <b>без APK и без Google Play</b> — родительский контроль (Family Link) не блокирует!</p>
+            <ol class="pwa-steps" id="pwaInstallSteps">
+              <li><b>Android (Chrome):</b> нажми кнопку ниже или меню <b>⋮ ➔ «Добавить на гл. экран»</b>.</li>
+              <li><b>iPhone / iPad (Safari):</b> нажми <b>«Поделиться ⬆️» ➔ «На экран «Домой» ➕»</b>.</li>
+            </ol>
+            <button class="pwa-action-btn install" id="pwaModalInstallBtn" type="button">📲 Установить на экран</button>
+          </div>
+          <div class="pwa-box">
+            <div class="pwa-box-title">👯‍♀️ 2. Позвать подругу в игру</div>
+            <p>Отправь ссылку подруге в WhatsApp или Telegram. Твой личный код друга: <span class="pwa-code-badge" id="pwaMyFriendCode">----</span></p>
+            <p style="font-size:12px;opacity:0.85;">В режиме <b>«❄️ Снежки ➔ Онлайн / С другом»</b> введите один код комнаты — и будете играть вместе!</p>
+            <button class="pwa-action-btn share" id="pwaModalShareBtn" type="button">📤 Отправить ссылку подруге</button>
+            <div id="pwaShareStatus" style="font-size:12px;color:#4ade80;text-align:center;min-height:16px;font-weight:800;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="installCard" hidden>
       <div class="ic-row">
         <img src="assets/icons/icon-256-v3.png" alt="">
@@ -11069,6 +11681,102 @@
         document.addEventListener('visibilitychange', function () {
             if (!document.hidden) setTimeout(maybeShow, 500);
         });
+
+        // ===== Wire #pwaHeaderBtn & #pwaShareModal =====
+        var headerBtn = document.getElementById('pwaHeaderBtn');
+        var modal = document.getElementById('pwaShareModal');
+        var modalClose = document.getElementById('pwaModalClose');
+        var modalInstallBtn = document.getElementById('pwaModalInstallBtn');
+        var modalShareBtn = document.getElementById('pwaModalShareBtn');
+        var shareStatus = document.getElementById('pwaShareStatus');
+        var friendCodeEl = document.getElementById('pwaMyFriendCode');
+
+        if (inApp() && headerBtn) {
+            headerBtn.style.display = 'none';
+        }
+
+        function openPwaModal() {
+            if (!modal) return;
+            try {
+                if (friendCodeEl && typeof FavoritesManager !== 'undefined') {
+                    friendCodeEl.textContent = FavoritesManager.getPlayerId();
+                }
+            } catch (e) {}
+            if (modalInstallBtn) {
+                if (launchedAsApp()) {
+                    modalInstallBtn.textContent = '✅ Уже установлено на телефон';
+                } else if (deferred) {
+                    modalInstallBtn.textContent = '📲 Установить в 1 клик';
+                } else if (isIOS) {
+                    modalInstallBtn.textContent = '🍏 Поделиться ⬆️ ➔ На экран «Домой»';
+                } else {
+                    modalInstallBtn.textContent = '📲 Меню ⋮ ➔ Добавить на гл. экран';
+                }
+            }
+            if (shareStatus) shareStatus.textContent = '';
+            modal.classList.add('visible');
+        }
+
+        function closePwaModal() {
+            if (modal) modal.classList.remove('visible');
+        }
+
+        if (headerBtn) onTap(headerBtn, openPwaModal);
+        if (modalClose) onTap(modalClose, closePwaModal);
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) closePwaModal();
+            });
+        }
+
+        if (modalInstallBtn) {
+            onTap(modalInstallBtn, function () {
+                if (deferred) {
+                    var d = deferred;
+                    deferred = null;
+                    Promise.resolve(d.prompt()).catch(function () {});
+                    Promise.resolve(d.userChoice).then(function () {
+                        closePwaModal();
+                    }).catch(function () {});
+                } else if (shareStatus) {
+                    shareStatus.style.color = '#fde047';
+                    shareStatus.textContent = isIOS
+                        ? '👆 Нажми кнопку «Поделиться ⬆️» в панели Safari и выбери «На экран «Домой»»!'
+                        : '👆 Открой меню браузера (⋮ в углу) и выбери «Установить приложение» или «Добавить на гл. экран»!';
+                }
+            });
+        }
+
+        if (modalShareBtn) {
+            onTap(modalShareBtn, function () {
+                var myCode = '';
+                try {
+                    if (typeof FavoritesManager !== 'undefined') myCode = FavoritesManager.getPlayerId();
+                } catch (e) {}
+                var shareUrl = window.location.origin + window.location.pathname;
+                var shareText = 'Пошли играть вместе в Мышонка Пи! 🐭❄️🧀 Открывается прямо на телефоне без скачивания APK.' +
+                                (myCode ? (' Мой код друга: ' + myCode) : '');
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'Мышонок Пи — Аркада',
+                        text: shareText,
+                        url: shareUrl
+                    }).then(function () {
+                        if (shareStatus) {
+                            shareStatus.style.color = '#4ade80';
+                            shareStatus.textContent = '✅ Отправлено!';
+                        }
+                    }).catch(function () {});
+                } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(shareText + ' ' + shareUrl).then(function () {
+                        if (shareStatus) {
+                            shareStatus.style.color = '#4ade80';
+                            shareStatus.textContent = '✅ Ссылка и код друга скопированы!';
+                        }
+                    }).catch(function () {});
+                }
+            });
+        }
     })();
     </script>
 </body>

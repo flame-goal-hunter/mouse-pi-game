@@ -5,10 +5,10 @@ const BUILD_VERSION = 'v-multipipeline-2026-06-04';
 console.log('%c[Mousie Pi] BUILD: ' + BUILD_VERSION, 'background:#e8b54a;color:#140820;font-size:14px;padding:4px 8px;border-radius:4px;');
 window.__BUILD_VERSION__ = BUILD_VERSION;
 
-import { GAME, PHYS } from './config.js';
-import { BootScene } from './scenes/BootScene.js';
-import { MenuScene } from './scenes/MenuScene.js';
-import { GameScene } from './scenes/GameScene.js';
+import { GAME, PHYS } from './config.js?v=20261030_5';
+import { BootScene } from './scenes/BootScene.js?v=20261030_5';
+import { MenuScene } from './scenes/MenuScene.js?v=20261030_5';
+import { GameScene } from './scenes/GameScene.js?v=20261030_5';
 import { TransylvaniaScene } from './scenes/TransylvaniaScene.js';
 import { DungeonScene } from './scenes/DungeonScene.js';
 import { SneakScene } from './scenes/SneakScene.js';
@@ -33,8 +33,11 @@ const _cssSize = () => {
     return { w: Math.max(1, Math.floor(w)), h: Math.max(1, Math.floor(h)) };
 };
 const botCount = parseInt(urlParams.get('botCount')) || 2;
+const onlineBots = urlParams.has('botCount') ? parseInt(urlParams.get('botCount')) : undefined;
 const character = parseInt(urlParams.get('character')) || 1;
 const peerId = urlParams.get('peerId') || null;
+const roomCode = (urlParams.get('roomCode') || '').toUpperCase().slice(0, 6);
+const isPrivate = urlParams.get('private') === '1' || roomCode.length > 0;
 const nickname = urlParams.get('nickname') || 'Игрок';
 const remoteNickname = urlParams.get('remoteNickname') || null;
 const serverUrl = urlParams.get('server') || 'ws://localhost:2567';
@@ -44,6 +47,9 @@ const runMode = urlParams.get('runMode') || null;
 window.gameConfig = {
     mode: mode,           // 'solo', 'host', 'join', 'online', or 'menu'
     botCount: botCount,
+    onlineBots: onlineBots,
+    roomCode: roomCode,
+    isPrivate: isPrivate,
     character: character, // 1 = brown bunny (Пи), 2 = gray bunny (Пу)
     isHost: mode === 'host',
     peerId: peerId,
@@ -81,7 +87,7 @@ const config = {
         antialias: true,
         antialiasGL: true,
         pixelArt: false,
-        roundPixels: true,
+        roundPixels: (mode === 'transylvania'),
         powerPreference: 'high-performance',
         autoMobilePipeline: false,  // ← THE FIX. Bypass mobile-tuned shader path.
         batchSize: 1024,

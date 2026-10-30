@@ -4,7 +4,7 @@
 // first time they are used, so the first load stays small.
 // Bump CACHE_VERSION whenever shipping new files.
 // ============================================
-const CACHE_VERSION = 'mousiepi-1be20a8d56';
+const CACHE_VERSION = 'mousiepi-ff67a6be85';
 const SHELL = [
   './',
   './index.html',
@@ -59,24 +59,24 @@ self.addEventListener('fetch', (e) => {
         c.put(req, fresh.clone());
         return fresh;
       } catch (err) {
-        return (await caches.match(req)) || (await caches.match('./index.html'));
+        return (await caches.match(req, { ignoreSearch: true })) || (await caches.match('./index.html'));
       }
     })());
     return;
   }
 
-  // Everything else: cache first, then network — and remember what we fetched.
+  // Network-first for all same-origin assets so updates are picked up immediately,
+  // falling back to cache only when offline.
   e.respondWith((async () => {
-    const hit = await caches.match(req);
-    if (hit) return hit;
     try {
-      const res = await fetch(req);
+      const res = await fetch(req, { cache: 'no-store' });
       if (res && res.ok) {
         const c = await caches.open(CACHE_VERSION);
         c.put(req, res.clone());
       }
       return res;
     } catch (err) {
+      const hit = await caches.match(req, { ignoreSearch: true });
       return hit || Response.error();
     }
   })());

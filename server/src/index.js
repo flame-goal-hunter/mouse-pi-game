@@ -26,15 +26,19 @@ app.use((req, res, next) => {
 // WebSocket, so there is no CORS and no second host to pay for.
 const WWW = fileURLToPath(new URL('../../www', import.meta.url));
 app.use(express.static(WWW, {
-    setHeaders: (res, filePath) => {
-        // The shell must not be cached by the CDN/browser beyond the service worker's control
-        if (filePath.endsWith('sw.js') || filePath.endsWith('.html')) {
-            res.setHeader('Cache-Control', 'no-cache');
-        } else {
-            res.setHeader('Cache-Control', 'public, max-age=604800');
-        }
+    etag: false,
+    lastModified: false,
+    setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
     },
 }));
+
+app.post('/api/client-log', (req, res) => {
+    console.error('[CLIENT-LOG]', req.body);
+    res.json({ ok: true });
+});
 
 app.get('/health', (_req, res) => {
     res.json({ ok: true, rooms: 'snowball' });
@@ -60,7 +64,8 @@ const gameServer = new Server({
     transport: new WebSocketTransport({ server: httpServer })
 });
 
-gameServer.define('snowball', SnowballRoom);
+gameServer.define('snowball', SnowballRoom)
+    .filterBy(['roomCode', 'isPrivate']);
 
 gameServer.listen(PORT).then(() => {
     console.log(`[server] Mousie Pi snowball server listening on port ${PORT}`);

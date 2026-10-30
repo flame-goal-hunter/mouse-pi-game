@@ -51,6 +51,9 @@ export function loadMap(path, world) {
             if (world.slopeHeights.has(localId)) {
                 world.tileGrid[y][x] = localId;
                 slopeCount++;
+            } else if (localId === 6 || localId === 7 || localId === 8) {
+                // Timber bridge slab: only top 26px of the 70px tile is solid!
+                world.tileGrid[y][x] = -2;
             } else if (collidableLocalIds.has(localId) || collidableLocalIds.size === 0) {
                 world.tileGrid[y][x] = -1;
             }
@@ -77,9 +80,31 @@ export function loadMap(path, world) {
         }
     }
 
-    console.log(`[MapLoader] ${width}x${height} tiles, solid=${solidCount}, slopes=${slopeCount}, spawns=${spawns.length}, pickups=${pickups.length}`);
+    // Extract water hazard bounds
+    let waterBounds = null;
+    const waterLayer = json.layers.find(l => l.name === 'water' && l.type === 'tilelayer');
+    if (waterLayer && Array.isArray(waterLayer.data)) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let hasWater = false;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (waterLayer.data[y * width + x] > 0) {
+                    hasWater = true;
+                    minX = Math.min(minX, x * tileSize);
+                    minY = Math.min(minY, y * tileSize);
+                    maxX = Math.max(maxX, (x + 1) * tileSize);
+                    maxY = Math.max(maxY, (y + 1) * tileSize);
+                }
+            }
+        }
+        if (hasWater) {
+            waterBounds = { minX, minY, maxX, maxY };
+        }
+    }
 
-    return { spawns, pickups, width, height, tileSize };
+    console.log(`[MapLoader] ${width}x${height} tiles, solid=${solidCount}, slopes=${slopeCount}, spawns=${spawns.length}, pickups=${pickups.length}, water=${!!waterBounds}`);
+
+    return { spawns, pickups, waterBounds, width, height, tileSize };
 }
 
 function parseSlopeData(world, tileset) {

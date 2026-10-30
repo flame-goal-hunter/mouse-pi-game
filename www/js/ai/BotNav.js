@@ -90,12 +90,64 @@ export class BotNav {
         this.ts = tileSize;
 
         this._buildGrid(platformLayer);
+        this._buildPlatformerLookup();
         this._generateCorners();
         this._generateTriangles();
         this._generateGraph();
         this._floydWarshall();
 
         console.log(`[BotNav] ${this.corners.length} corners, ${this.triangles.length} triangles, ${this.numVerts} vertices, ${this.edges.length} edges, diameter=${this.diameter}`);
+    }
+
+    _buildPlatformerLookup() {
+        const w = this.width, h = this.height;
+        this.floorDist = new Uint8Array(w * h);
+        this.ceilDist = new Uint8Array(w * h);
+        this.nearWall = new Uint8Array(w * h);
+
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                const idx = y * w + x;
+                if (this._isSolid(x, y)) {
+                    this.floorDist[idx] = 255;
+                    this.ceilDist[idx] = 255;
+                    continue;
+                }
+                // Distance to solid floor below (0 = standing right on top of solid tile)
+                let fd = 100;
+                for (let dy = 1; y + dy < h; dy++) {
+                    if (this._isSolid(x, y + dy)) {
+                        fd = dy - 1;
+                        break;
+                    }
+                }
+                this.floorDist[idx] = fd;
+
+                // Distance to solid ceiling above (for hookable corridors, up to 9 tiles = 630px)
+                let cd = 100;
+                for (let dy = 1; dy <= 9 && y - dy >= 0; dy++) {
+                    if (this._isSolid(x, y - dy)) {
+                        cd = dy;
+                        break;
+                    }
+                }
+                this.ceilDist[idx] = cd;
+
+                // Check if within 2 tiles horizontally of a solid wall/ledge (allows jumping up onto ledges)
+                let nw = 0;
+                for (let dy = -1; dy <= 2 && !nw; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        if (dx === 0 && dy === 0) continue;
+                        const nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < w && ny >= 0 && ny < h && this._isSolid(nx, ny)) {
+                            nw = 1;
+                            break;
+                        }
+                    }
+                }
+                this.nearWall[idx] = nw;
+            }
+        }
     }
 
     // ========== Grid ==========
@@ -307,7 +359,7 @@ export class BotNav {
         }
         this.numVerts = numTris;
 
-        // Edges: connect adjacent triangles (2 shared vertices)
+        // Edges: connect adjacent triangles (2 shared vertices) with gravity-aware directed weights
         this.edges = [];
         for (let i = 0; i < numTris - 1; i++) {
             for (let j = i + 1; j < numTris; j++) {
@@ -317,11 +369,30 @@ export class BotNav {
                         if (tris[i].points[a] === tris[j].points[b]) shared++;
                 if (shared === 2) {
                     const d = dist(this.vertices[i], this.vertices[j]);
-                    this.edges.push({ from: i, to: j, size: d });
-                    this.edges.push({ from: j, to: i, size: d });
+                    const costIJ = this._computeDirectedEdgeCost(this.vertices[i], this.vertices[j], d);
+                    const costJI = this._computeDirectedEdgeCost(this.vertices[j], this.vertices[i], d);
+                    this.edges.push({ from: i, to: j, size: costIJ });
+                    this.edges.push({ from: j, to: i, size: costJI });
                 }
             }
         }
+    }
+
+    _computeDirectedEdgeCost(fromV, toV, baseDist) {
+        let cost = baseDist;
+        const climb = fromV.y - toV.y; // positive when going UP
+        if (climb > 75) {
+            // Penalize steep upward air transitions so Floyd-Warshall prefers ramps & stepping-stone ledges
+            const extraClimb = climb - 75;
+            cost *= 1 + (extraClimb / 120) * 1.65;
+            if (climb > 240) cost += 650;
+        }
+        // Penalize vertices over bottom abyss / water hazard
+        const toTile = this.getTileWorld(toV.x, toV.y);
+        if ((toTile & BTILE_HOLE) && toV.y > (this.height - 6) * this.ts) {
+            cost += 3500;
+        }
+        return cost;
     }
 
     // ========== Floyd-Warshall (bMod ComputeClosestPath) ==========
@@ -375,51 +446,231 @@ export class BotNav {
         return best;
     }
 
-    getPath(fromX, fromY, toX, toY) {
-        if (this.numVerts === 0) return null;
-        const startV = this.getClosestVertex(fromX, fromY);
-        const endV = this.getClosestVertex(toX, toY);
-        const n = this.numVerts;
-
-        if (this.closestPath[startV * n + endV] < 0) return null;
-
-        const path = [{ x: fromX, y: fromY }];
-        let cur = startV;
-        while (cur !== endV) {
-            path.push({ x: this.vertices[cur].x, y: this.vertices[cur].y });
-            cur = this.closestPath[cur * n + endV];
+    _findNearestAirTile(tx, ty) {
+        const w = this.width, h = this.height;
+        tx = Math.max(1, Math.min(tx, w - 2));
+        ty = Math.max(1, Math.min(ty, h - 2));
+        if (!this._isSolid(tx, ty)) return { x: tx, y: ty };
+        for (let r = 1; r <= 3; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    const nx = tx + dx, ny = ty + dy;
+                    if (nx >= 1 && nx < w - 1 && ny >= 1 && ny < h - 1 && !this._isSolid(nx, ny)) {
+                        return { x: nx, y: ny };
+                    }
+                }
+            }
         }
-        path.push({ x: this.vertices[cur].x, y: this.vertices[cur].y });
-        path.push({ x: toX, y: toY });
-        return path;
+        return { x: tx, y: ty };
+    }
+
+    getPath(fromX, fromY, toX, toY) {
+        const w = this.width, h = this.height, ts = this.ts;
+        if (!this.floorDist || w === 0 || h === 0) return [{ x: toX, y: toY }];
+
+        const sTile = this._findNearestAirTile(Math.floor(fromX / ts), Math.floor(fromY / ts));
+        const eTile = this._findNearestAirTile(Math.floor(toX / ts), Math.floor(toY / ts));
+        const sx = sTile.x, sy = sTile.y;
+        const ex = eTile.x, ey = eTile.y;
+
+        if (sx === ex && sy === ey) {
+            return [{ x: toX, y: toY }];
+        }
+
+        const total = w * h;
+        const gScore = new Float32Array(total).fill(1e9);
+        const parent = new Int32Array(total).fill(-1);
+        const closed = new Uint8Array(total);
+
+        const startIdx = sy * w + sx;
+        const endIdx = ey * w + ex;
+        gScore[startIdx] = 0;
+
+        // Fast binary min-heap on (fScore, idx)
+        const heapIdx = [startIdx];
+        const heapF = [Math.hypot(ex - sx, ey - sy)];
+
+        const pushHeap = (idx, f) => {
+            let i = heapIdx.length;
+            heapIdx.push(idx);
+            heapF.push(f);
+            while (i > 0) {
+                const p = (i - 1) >> 1;
+                if (heapF[p] <= f) break;
+                heapIdx[i] = heapIdx[p];
+                heapF[i] = heapF[p];
+                i = p;
+            }
+            heapIdx[i] = idx;
+            heapF[i] = f;
+        };
+
+        const popHeap = () => {
+            const top = heapIdx[0];
+            const lastIdx = heapIdx.pop();
+            const lastF = heapF.pop();
+            const n = heapIdx.length;
+            if (n > 0) {
+                let i = 0;
+                while ((i << 1) + 1 < n) {
+                    let c = (i << 1) + 1;
+                    if (c + 1 < n && heapF[c + 1] < heapF[c]) c++;
+                    if (lastF <= heapF[c]) break;
+                    heapIdx[i] = heapIdx[c];
+                    heapF[i] = heapF[c];
+                    i = c;
+                }
+                heapIdx[i] = lastIdx;
+                heapF[i] = lastF;
+            }
+            return top;
+        };
+
+        // 8-directional neighbors for smooth diagonal jump & drop arcs
+        const DIRS = [
+            [1, 0, 1.0], [-1, 0, 1.0], [0, 1, 1.0], [0, -1, 1.0],
+            [1, -1, 1.414], [-1, -1, 1.414], [1, 1, 1.414], [-1, 1, 1.414]
+        ];
+
+        while (heapIdx.length > 0) {
+            const cur = popHeap();
+            if (cur === endIdx) break;
+            if (closed[cur]) continue;
+            closed[cur] = 1;
+
+            const cx = cur % w;
+            const cy = (cur / w) | 0;
+            const curG = gScore[cur];
+
+            for (let d = 0; d < 8; d++) {
+                const dx = DIRS[d][0], dy = DIRS[d][1], baseStep = DIRS[d][2];
+                const nx = cx + dx, ny = cy + dy;
+                if (nx < 1 || nx >= w - 1 || ny < 1 || ny >= h - 1) continue;
+
+                const nIdx = ny * w + nx;
+                if (closed[nIdx] || this._isSolid(nx, ny)) continue;
+
+                // Prevent squeezing diagonally through two touching solid corners
+                if (dx !== 0 && dy !== 0) {
+                    if (this._isSolid(cx + dx, cy) || this._isSolid(cx, cy + dy)) continue;
+                }
+
+                const fd = this.floorDist[nIdx];
+                const cd = this.ceilDist[nIdx];
+                const nw = this.nearWall[nIdx];
+
+                // Avoid bottom water pit / abyss
+                if (fd >= 50 && ny >= h - 5) continue;
+
+                let mult = 1.0;
+                if (fd === 0) {
+                    // Walking directly on floor/ramp/bridge
+                    mult = 1.0;
+                } else if (fd === 1) {
+                    // Low hop / slope transition
+                    mult = 1.18;
+                } else if (fd <= 4) {
+                    // Jump / double-jump arc height
+                    mult = 1.55 + (fd - 1) * 0.42;
+                } else {
+                    // High above ground (fd >= 5)
+                    if (dy < 0) {
+                        // Moving UP in high air: only reasonable near a wall/ledge or under a hookable ceiling
+                        if (nw || cd <= 9) mult = 3.2;
+                        else mult = 24.0;
+                    } else if (dy === 0) {
+                        // Moving HORIZONTALLY across high air / gap
+                        if (cd <= 9) mult = 2.4;
+                        else if (fd >= 50) mult = 10.0;
+                        else mult = 3.0;
+                    } else {
+                        // Dropping DOWN through air onto safe ground
+                        mult = fd >= 50 ? 12.0 : 1.3;
+                    }
+                }
+
+                // Slight extra cost for upward steps so paths prefer gentle slopes over sheer cliffs
+                if (dy < 0) mult *= 1.35;
+
+                const tentativeG = curG + baseStep * mult;
+                if (tentativeG < gScore[nIdx]) {
+                    gScore[nIdx] = tentativeG;
+                    parent[nIdx] = cur;
+                    const hCost = Math.hypot(ex - nx, ey - ny) * 0.95;
+                    pushHeap(nIdx, tentativeG + hCost);
+                }
+            }
+        }
+
+        if (parent[endIdx] < 0) {
+            return [{ x: toX, y: toY }];
+        }
+
+        // Reconstruct tile path from endIdx back to startIdx
+        const rawTiles = [];
+        let curr = endIdx;
+        while (curr >= 0 && curr !== startIdx) {
+            rawTiles.push({ x: curr % w, y: (curr / w) | 0 });
+            curr = parent[curr];
+        }
+        rawTiles.reverse();
+
+        // Simplify path: keep direction changes, jump takeoffs, apexes, and every 3rd tile
+        const path = [];
+        for (let i = 0; i < rawTiles.length; i++) {
+            const t = rawTiles[i];
+            const isLast = (i === rawTiles.length - 1);
+            if (isLast) {
+                path.push({ x: toX, y: toY });
+                break;
+            }
+            const prev = i > 0 ? rawTiles[i - 1] : sTile;
+            const next = rawTiles[i + 1];
+            const dx1 = t.x - prev.x, dy1 = t.y - prev.y;
+            const dx2 = next.x - t.x, dy2 = next.y - t.y;
+            const dirChanged = (dx1 !== dx2 || dy1 !== dy2);
+            const fdCur = this.floorDist[t.y * w + t.x];
+            const fdNext = this.floorDist[next.y * w + next.x];
+            const floorTransition = (fdCur === 0 && fdNext > 0) || (fdCur > 0 && fdNext === 0);
+
+            if (dirChanged || floorTransition || (i % 3 === 0)) {
+                // Skip intermediate waypoints in the starting column unless climbing straight up
+                if (t.x === sx && t.y >= sy - 1) continue;
+                // Place waypoint slightly above floor center so bot bodies clear ledge lips cleanly
+                const wyOffset = fdCur === 0 ? 0.42 : 0.5;
+                path.push({
+                    x: (t.x + 0.5) * ts,
+                    y: (t.y + wyOffset) * ts
+                });
+            }
+        }
+
+        return path.length > 0 ? path : [{ x: toX, y: toY }];
     }
 
     nextPoint(wx, wy, targetX, targetY) {
-        if (this.numVerts === 0) return { x: targetX, y: targetY };
-        const startV = this.getClosestVertex(wx, wy);
-        const endV = this.getClosestVertex(targetX, targetY);
-        const n = this.numVerts;
-        const next = this.closestPath[startV * n + endV];
-        if (next < 0) return { x: targetX, y: targetY };
-        return this.vertices[next];
+        const p = this.getPath(wx, wy, targetX, targetY);
+        return (p && p.length > 0) ? p[0] : { x: targetX, y: targetY };
     }
 
     farestPointOnEdge(path, wx, wy) {
         if (!path || path.length === 0) return null;
-        for (let k = path.length - 1; k >= 0; k--) {
-            const d = dist({ x: wx, y: wy }, path[k]);
-            if (d < 1000) {
-                const dx = path[k].x - wx, dy = path[k].y - wy;
-                const l = Math.sqrt(dx * dx + dy * dy);
-                if (l < 1) continue;
-                // ±14px perpendicular offset (body width, bMod: 14.f)
-                const perpX = (-dy / l) * 14, perpY = (dx / l) * 14;
-                if (this.hasLOS(wx - perpX, wy - perpY, path[k].x - perpX, path[k].y - perpY) &&
-                    this.hasLOS(wx + perpX, wy + perpY, path[k].x + perpX, path[k].y + perpY)) {
-                    return path[k];
-                }
+
+        // Pick the first unreached waypoint, or look 1 waypoint ahead if on the same level with clear LOS
+        let idx = 0;
+        while (idx < path.length - 1 && dist({ x: wx, y: wy }, path[idx]) < 48) {
+            idx++;
+        }
+
+        const wp0 = path[idx];
+        if (idx + 1 < path.length) {
+            const wp1 = path[idx + 1];
+            const d1 = dist({ x: wx, y: wy }, wp1);
+            // Only look ahead 1 node if it's on the same or lower level and close with clear LOS
+            if (d1 < 210 && Math.abs(wp1.y - wp0.y) < 45 && wp1.y >= wy - 50 && this.hasLOS(wx, wy, wp1.x, wp1.y)) {
+                return wp1;
             }
         }
-        return path[0] || null;
+        return wp0;
     }
 }

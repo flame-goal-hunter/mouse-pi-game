@@ -21,6 +21,9 @@ export class Player extends Schema {
         this.hookAnchorX = 0;
         this.hookAnchorY = 0;
         this.powerup = '';        // empty string = none
+        this.lastSeq = 0;         // last processed client input seq (for prediction reconciliation)
+        this.isBot = false;
+        this.colorIndex = 0;
     }
 }
 type('number')(Player.prototype, 'x');
@@ -41,6 +44,9 @@ type('number')(Player.prototype, 'hookY');
 type('number')(Player.prototype, 'hookAnchorX');
 type('number')(Player.prototype, 'hookAnchorY');
 type('string')(Player.prototype, 'powerup');
+type('number')(Player.prototype, 'lastSeq');
+type('boolean')(Player.prototype, 'isBot');
+type('number')(Player.prototype, 'colorIndex');
 
 export class Snowball extends Schema {
     constructor() {
@@ -85,6 +91,12 @@ export class GameState extends Schema {
         this.scoreHost = 0;
         this.scoreGuest = 0;
         this.tick = 0;
+        this.roomCode = '';
+        this.winnerName = '';
+        this.flagState = 'HOME';
+        this.flagX = 2520;
+        this.flagY = 655;
+        this.flagCarrierSid = '';
     }
 }
 type({ map: Player })(GameState.prototype, 'players');
@@ -93,3 +105,9 @@ type([Pickup])(GameState.prototype, 'pickups');
 type('number')(GameState.prototype, 'scoreHost');
 type('number')(GameState.prototype, 'scoreGuest');
 type('number')(GameState.prototype, 'tick');
+type('string')(GameState.prototype, 'roomCode');
+type('string')(GameState.prototype, 'winnerName');
+type('string')(GameState.prototype, 'flagState');
+type('number')(GameState.prototype, 'flagX');
+type('number')(GameState.prototype, 'flagY');
+type('string')(GameState.prototype, 'flagCarrierSid');

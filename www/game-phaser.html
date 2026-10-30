@@ -58,8 +58,8 @@
             z-index: 10;
             pointer-events: none;
             padding: max(10px, env(safe-area-inset-top, 10px))
-                     calc(20px + env(safe-area-inset-right, 0px)) 10px
-                     calc(20px + env(safe-area-inset-left, 0px));
+                     calc(16px + env(safe-area-inset-right, 0px)) 10px
+                     calc(16px + env(safe-area-inset-left, 0px));
             display: none;
             justify-content: space-between;
             align-items: flex-start;
@@ -71,55 +71,113 @@
 
         #hud-player {
             text-align: left;
+            background: rgba(15, 23, 42, 0.58);
+            border: 1.5px solid rgba(56, 189, 248, 0.35);
+            border-radius: 16px;
+            padding: 6px 12px;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
         }
 
         #hud-center {
             text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .hud-center-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.68);
+            border: 2px solid rgba(250, 204, 21, 0.45);
+            border-radius: 999px;
+            padding: 4px 14px;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.45);
         }
 
         #hud-opponents {
             text-align: right;
+            background: rgba(15, 23, 42, 0.58);
+            border: 1.5px solid rgba(244, 114, 182, 0.35);
+            border-radius: 16px;
+            padding: 6px 12px;
+            backdrop-filter: blur(6px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
         }
 
         .hud-name {
             font-family: 'Nunito', sans-serif;
-            font-weight: 700;
-            font-size: min(3.2vw, 13px);
+            font-weight: 800;
+            font-size: min(3.2vw, 13.5px);
             color: #fff;
             text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
         }
 
         .hud-name.enemy {
-            color: #ffcc00;
+            color: #fde047;
             text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
         }
 
         .hud-hearts {
-            font-size: min(4.5vw, 18px);
+            font-size: min(4.2vw, 17px);
             letter-spacing: 1px;
         }
 
         .hud-score {
             font-family: 'Nunito', sans-serif;
             font-weight: 900;
-            font-size: min(4.5vw, 18px);
+            font-size: min(4.8vw, 20px);
             color: #fff;
-            text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.8);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.85);
+            letter-spacing: 1px;
         }
 
-        #hud-pause, #hud-debug {
-            font-size: min(4.5vw, 18px);
+        #hud-pause, #hud-music, #hud-debug {
+            font-size: min(4.2vw, 18px);
             cursor: pointer;
             pointer-events: auto;
+            transition: transform 0.12s;
+        }
+        #hud-pause:active, #hud-music:active {
+            transform: scale(0.88);
         }
 
+        #hud-streak {
+            display: none;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: min(3.2vw, 13px);
+            color: #fff;
+            background: linear-gradient(135deg, #f97316, #ef4444);
+            border: 1.5px solid #fde047;
+            border-radius: 999px;
+            padding: 2px 10px;
+            box-shadow: 0 3px 10px rgba(239, 68, 68, 0.5);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        }
+
+        #hud-powerup {
+            display: none;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            font-size: min(2.8vw, 12px);
+            color: #fef08a;
+            background: rgba(30, 41, 59, 0.85);
+            border: 1.5px solid rgba(250, 204, 21, 0.5);
+            border-radius: 999px;
+            padding: 2px 9px;
+            margin-top: 3px;
+        }
 
         #hud-ping {
             font-family: 'Nunito', monospace;
             font-size: min(2.5vw, 10px);
             color: #88ff88;
             text-shadow: 0 1px 2px #000;
-            margin-top: 2px;
         }
 
         /* ========== Mobile controls (hidden until game-active) ========== */
@@ -131,9 +189,12 @@
             position: fixed;
             left: env(safe-area-inset-left, 0px);
             bottom: env(safe-area-inset-bottom, 0px);
-            width: 45vw;
-            height: 45vh;
-            z-index: 10;
+            width: 46vw;
+            height: 54vh;
+            z-index: 20;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
         @media (max-width: 1024px), (pointer: coarse) {
@@ -144,80 +205,280 @@
                 display: block !important;
             }
         }
-
-        /* ========== Joystick custom style (nipplejs .back/.front) ========== */
-        #joystick-zone .back {
-            background: radial-gradient(circle, rgba(27,94,32,0.75) 0%, rgba(27,94,32,0.85) 100%) !important;
-            border: 2px solid rgba(76,175,80,0.6) !important;
-            box-shadow: 0 4px 20px rgba(27,94,32,0.6), inset 0 0 20px rgba(0,0,0,0.3) !important;
+        body.game-active.touch-enabled .mobile-controls {
+            display: flex !important;
+        }
+        body.game-active.touch-enabled #joystick-zone {
+            display: block !important;
         }
 
-        #joystick-zone .front {
-            background: radial-gradient(circle at 35% 35%, #81c784, #4caf50) !important;
-            border: 2px solid rgba(255,255,255,0.7) !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 1px 3px rgba(255,255,255,0.5) !important;
-        }
-
-        /* ========== Common button style ========== */
-        .game-btn {
-            position: fixed;
-            z-index: 10;
+        /* ========== Virtual Arcade Thumbstick ========== */
+        #joy-base {
+            position: absolute;
+            left: 28px;
+            bottom: 20px;
+            width: 132px;
+            height: 132px;
             border-radius: 50%;
+            background: radial-gradient(circle at 50% 50%,
+                rgba(15, 23, 42, 0.45) 0%,
+                rgba(15, 23, 42, 0.72) 68%,
+                rgba(30, 58, 138, 0.82) 100%);
+            border: 2.5px solid rgba(125, 211, 252, 0.48);
+            box-shadow:
+                0 8px 26px rgba(2, 6, 23, 0.55),
+                inset 0 0 22px rgba(56, 189, 248, 0.18),
+                inset 0 2px 4px rgba(255, 255, 255, 0.22);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
             display: flex;
             align-items: center;
             justify-content: center;
+            pointer-events: none;
+            transition: border-color 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        /* Inner dashed track ring */
+        #joy-base::before {
+            content: '';
+            position: absolute;
+            inset: 14px;
+            border-radius: 50%;
+            border: 1.5px dashed rgba(186, 230, 253, 0.25);
+            pointer-events: none;
+        }
+
+        #joy-base.is-active {
+            border-color: rgba(56, 189, 248, 0.95);
+            box-shadow:
+                0 0 28px rgba(56, 189, 248, 0.45),
+                0 8px 26px rgba(2, 6, 23, 0.6),
+                inset 0 0 26px rgba(56, 189, 248, 0.32);
+        }
+
+        .joy-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(186, 230, 253, 0.42);
+            font-size: 15px;
+            font-weight: 900;
+            transition: color 0.1s ease, transform 0.1s ease, text-shadow 0.1s ease;
+            pointer-events: none;
+        }
+        .joy-arrow.left { left: 8px; }
+        .joy-arrow.right { right: 8px; }
+
+        #joy-base.dir-left .joy-arrow.left {
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.95);
+            transform: translateY(-50%) translateX(-2px) scale(1.2);
+        }
+        #joy-base.dir-right .joy-arrow.right {
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.95);
+            transform: translateY(-50%) translateX(2px) scale(1.2);
+        }
+
+        #joy-stick {
+            position: relative;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 34% 30%,
+                #f0f9ff 0%,
+                #7dd3fc 28%,
+                #0284c7 76%,
+                #0369a1 100%);
+            border: 2.5px solid rgba(255, 255, 255, 0.88);
+            box-shadow:
+                0 6px 16px rgba(2, 6, 23, 0.65),
+                0 0 14px rgba(56, 189, 248, 0.4),
+                inset 0 3px 6px rgba(255, 255, 255, 0.75),
+                inset 0 -4px 6px rgba(12, 74, 110, 0.65);
+            pointer-events: none;
+            will-change: transform;
+        }
+
+        /* Center grip ring on stick */
+        #joy-stick::after {
+            content: '';
+            position: absolute;
+            inset: 13px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, 0.45);
+            background: radial-gradient(circle at 40% 35%, rgba(255,255,255,0.35), transparent 70%);
+        }
+
+        #joy-base.is-active #joy-stick {
+            box-shadow:
+                0 6px 18px rgba(2, 6, 23, 0.7),
+                0 0 22px rgba(56, 189, 248, 0.85),
+                inset 0 3px 6px rgba(255, 255, 255, 0.9),
+                inset 0 -4px 6px rgba(12, 74, 110, 0.65);
+        }
+
+        /* ========== Glossy 3D Arcade Action Buttons ========== */
+        .game-btn {
+            position: fixed;
+            z-index: 20;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
             cursor: pointer;
-            border: 2.5px solid rgba(255,255,255,0.3);
-            transition: transform 0.08s ease;
+            padding: 0;
+            outline: none;
+            transition: transform 0.06s cubic-bezier(0.2, 0.9, 0.3, 1), filter 0.06s ease, box-shadow 0.08s ease;
+            will-change: transform;
         }
 
-        /* Invisible touch padding — extends hit area 12px beyond visual */
+        /* Specular top gloss arc */
+        .game-btn::before {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 16%;
+            right: 16%;
+            height: 34%;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.04) 100%);
+            pointer-events: none;
+        }
+
+        /* Generous invisible touch halo (+15px all around) so thumbs never miss */
         .game-btn::after {
             content: '';
             position: absolute;
-            top: -12px; left: -12px; right: -12px; bottom: -12px;
+            top: -15px; left: -15px; right: -15px; bottom: -15px;
+            border-radius: 50%;
         }
 
-        .game-btn:active {
-            transform: scale(0.9);
-            filter: brightness(1.15);
+        .game-btn svg {
+            width: 34px;
+            height: 34px;
+            filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.45));
+            pointer-events: none;
+            flex-shrink: 0;
         }
 
-        /* ========== Action buttons ========== */
-        /*              [🪝]
-           [❄️]       [🐾]      */
+        .game-btn .btn-label {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 900;
+            font-size: 9.5px;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            text-shadow: 0 1.5px 2px rgba(0, 0, 0, 0.75);
+            line-height: 1;
+            margin-top: 1px;
+            pointer-events: none;
+        }
 
+        .game-btn:active,
+        .game-btn.is-pressed {
+            transform: scale(0.88) translateY(2px);
+            filter: brightness(1.18);
+        }
+
+        /* Ergonomic Arcade Arc Layout:
+                       [🪝 ВЕРЁВКА]
+           [❄️ СНЕЖОК]            [🐾 ПРЫЖОК]
+        */
+
+        /* Primary Button: JUMP (Emerald / Mint 3D Capsule) */
         #btn-jump {
-            bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-            right: calc(8px + env(safe-area-inset-right, 0px));
-            width: 96px;
-            height: 96px;
-            font-size: 36px;
-            background: radial-gradient(circle at 36% 36%, #bcaaa4, #5d4037);
-            box-shadow: 0 5px 22px rgba(93,64,55,0.55), inset 0 2px 5px rgba(255,255,255,0.3), inset 0 -3px 5px rgba(0,0,0,0.15);
+            bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+            right: calc(18px + env(safe-area-inset-right, 0px));
+            width: 90px;
+            height: 90px;
+            border: 3px solid rgba(209, 250, 229, 0.85);
+            background: radial-gradient(circle at 38% 30%,
+                #6ee7b7 0%,
+                #10b981 48%,
+                #047857 88%,
+                #064e3b 100%);
+            box-shadow:
+                0 7px 22px rgba(4, 120, 87, 0.65),
+                0 0 0 3px rgba(16, 185, 129, 0.25),
+                inset 0 3px 6px rgba(255, 255, 255, 0.55),
+                inset 0 -5px 8px rgba(6, 78, 59, 0.75);
+        }
+        #btn-jump svg { width: 38px; height: 38px; }
+        #btn-jump.is-pressed {
+            box-shadow:
+                0 2px 12px rgba(16, 185, 129, 0.9),
+                0 0 24px rgba(52, 211, 153, 0.85),
+                inset 0 2px 5px rgba(255, 255, 255, 0.7);
         }
 
+        /* Secondary Button: FIRE SNOWBALL (Glacial Cyan / Royal Blue 3D Capsule) */
         #btn-fire {
-            bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-            right: calc(118px + env(safe-area-inset-right, 0px));
-            width: 86px;
-            height: 86px;
-            font-size: 32px;
-            background: radial-gradient(circle at 36% 36%, #64b5f6, #0d47a1);
-            box-shadow: 0 5px 20px rgba(13,71,161,0.55), inset 0 2px 5px rgba(255,255,255,0.3), inset 0 -3px 5px rgba(0,0,0,0.15);
+            bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+            right: calc(122px + env(safe-area-inset-right, 0px));
+            width: 82px;
+            height: 82px;
+            border: 3px solid rgba(224, 242, 254, 0.85);
+            background: radial-gradient(circle at 38% 30%,
+                #7dd3fc 0%,
+                #0ea5e9 48%,
+                #0369a1 88%,
+                #0c4a6e 100%);
+            box-shadow:
+                0 7px 20px rgba(3, 105, 161, 0.65),
+                0 0 0 3px rgba(14, 165, 233, 0.25),
+                inset 0 3px 6px rgba(255, 255, 255, 0.55),
+                inset 0 -5px 8px rgba(12, 74, 110, 0.75);
+        }
+        #btn-fire.is-pressed {
+            box-shadow:
+                0 2px 12px rgba(14, 165, 233, 0.9),
+                0 0 24px rgba(56, 189, 248, 0.85),
+                inset 0 2px 5px rgba(255, 255, 255, 0.7);
         }
 
+        /* Grapple Button: HOOK / ROPE (Golden Amber / Sunset Orange 3D Capsule) */
         #btn-hook {
             bottom: calc(118px + env(safe-area-inset-bottom, 0px));
-            right: calc(8px + env(safe-area-inset-right, 0px));
+            right: calc(22px + env(safe-area-inset-right, 0px));
             width: 78px;
             height: 78px;
-            font-size: 30px;
-            background: radial-gradient(circle at 36% 36%, #ffb74d, #e65100);
-            box-shadow: 0 4px 18px rgba(230,81,0,0.55), inset 0 2px 4px rgba(255,255,255,0.3), inset 0 -2px 4px rgba(0,0,0,0.15);
+            border: 3px solid rgba(254, 243, 199, 0.85);
+            background: radial-gradient(circle at 38% 30%,
+                #fde68a 0%,
+                #f59e0b 48%,
+                #b45309 88%,
+                #78350f 100%);
+            box-shadow:
+                0 6px 18px rgba(180, 83, 9, 0.65),
+                0 0 0 3px rgba(245, 158, 11, 0.25),
+                inset 0 3px 6px rgba(255, 255, 255, 0.55),
+                inset 0 -5px 8px rgba(120, 53, 15, 0.75);
+        }
+        #btn-hook.is-pressed {
+            box-shadow:
+                0 2px 12px rgba(245, 158, 11, 0.9),
+                0 0 24px rgba(251, 191, 36, 0.85),
+                inset 0 2px 5px rgba(255, 255, 255, 0.7);
+        }
+
+        /* Compact phone landscape adjustment */
+        @media (max-height: 430px) {
+            #joy-base { width: 118px; height: 118px; left: 20px; bottom: 14px; }
+            #joy-stick { width: 52px; height: 52px; }
+            #btn-jump { width: 82px; height: 82px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); }
+            #btn-fire { width: 74px; height: 74px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: calc(108px + env(safe-area-inset-right, 0px)); }
+            #btn-hook { width: 70px; height: 70px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); right: calc(18px + env(safe-area-inset-right, 0px)); }
         }
     </style>
 </head>
@@ -229,20 +490,53 @@
         <div id="hud-player">
             <div class="hud-name" id="hud-player-name"></div>
             <div class="hud-hearts" id="hud-player-hearts"></div>
+            <div id="hud-powerup"></div>
         </div>
         <div id="hud-center">
-            <div class="hud-score" id="hud-score">0 : 0</div>
-            <div id="hud-pause">⏸️</div>
+            <div class="hud-center-bar">
+                <div id="hud-music" title="Музыка / Звук">🔊</div>
+                <div class="hud-score" id="hud-score">0 : 0</div>
+                <div id="hud-pause" title="Пауза">⏸️</div>
+            </div>
+            <div id="hud-streak"></div>
             <div id="hud-ping"></div>
         </div>
         <div id="hud-opponents"></div>
     </div>
 
-    <!-- Mobile controls (hidden until body.game-active + mobile) -->
-    <div id="joystick-zone" class="mobile-controls"></div>
-    <button id="btn-jump" class="mobile-controls game-btn">🐾</button>
-    <button id="btn-fire" class="mobile-controls game-btn">❄️</button>
-    <button id="btn-hook" class="mobile-controls game-btn">🪝</button>
+    <!-- Mobile controls (hidden until body.game-active + mobile/touch) -->
+    <div id="joystick-zone" class="mobile-controls">
+        <div id="joy-base">
+            <span class="joy-arrow left">◀</span>
+            <span class="joy-arrow right">▶</span>
+            <div id="joy-stick"></div>
+        </div>
+    </div>
+    <button id="btn-jump" class="mobile-controls game-btn" type="button" aria-label="Прыжок">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 17L18 8L27 17" stroke="#FFFFFF" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 25L18 19L24 25" stroke="#D1FAE5" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="18" cy="29.5" r="2.2" fill="#FFFFFF"/>
+        </svg>
+        <span class="btn-label">ПРЫЖОК</span>
+    </button>
+    <button id="btn-fire" class="mobile-controls game-btn" type="button" aria-label="Снежок">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="18" cy="18" r="9.5" fill="#FFFFFF" stroke="#BAE6FD" stroke-width="2"/>
+            <circle cx="14.8" cy="14.5" r="2.8" fill="#E0F2FE"/>
+            <path d="M18 4V9M18 27V32M4 18H9M27 18H32M8.1 8.1L11.6 11.6M24.4 24.4L27.9 27.9M27.9 8.1L24.4 11.6M11.6 24.4L8.1 27.9" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+        </svg>
+        <span class="btn-label">СНЕЖОК</span>
+    </button>
+    <button id="btn-hook" class="mobile-controls game-btn" type="button" aria-label="Верёвка">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6V21" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round"/>
+            <path d="M18 6L11 13M18 6L25 13" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M11 19C11 23.5 14 26 18 26C22 26 25 23.5 25 19" stroke="#FEF3C7" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="18" cy="30" r="2.6" fill="#FFFFFF"/>
+        </svg>
+        <span class="btn-label">ВЕРЁВКА</span>
+    </button>
 
     <!-- Phaser 3 -->
     <script src="lib/phaser-3.70.0.min.js"></script>
@@ -336,11 +630,19 @@
         console.log('v28: Using SimplePhysicsWorld (deterministic)');
         // Show errors on screen so we can debug without dev tools
         const showError = (label, e) => {
+            const msg = `${label}\n${(e && (e.stack || e.message)) || e}`;
             const div = document.createElement('div');
             div.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff3b30;color:#fff;padding:14px;font:14px monospace;z-index:99999;white-space:pre-wrap;max-height:60vh;overflow:auto;';
-            div.textContent = `${label}\n${(e && (e.stack || e.message)) || e}`;
+            div.textContent = msg;
             document.body.appendChild(div);
             console.error(label, e);
+            try {
+                fetch('/api/client-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level: 'error', msg, href: location.href })
+                }).catch(() => {});
+            } catch (_) {}
         };
         window.addEventListener('error', (ev) => showError('JS Error', ev.error || ev.message));
         window.addEventListener('unhandledrejection', (ev) => showError('Unhandled rejection', ev.reason));

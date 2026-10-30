@@ -9,16 +9,16 @@ import { PHYS, TILE_SIZE } from '../config.js';
 
 const HOOK_DIRS = 32;
 const STUCK_THRESHOLD = 1.5;
-const TARGET_STICKY_MS = 30000;
-const DEADZONE = 28;
-const ATTACK_RANGE = 450;
-const HOOK_TIMEOUT_MS = 4000; // bMod: 4 * SERVER_TICK_SPEED
+const TARGET_STICKY_MS = 18000;
+const DEADZONE = 24;
+const ATTACK_RANGE = 680;
+const HOOK_TIMEOUT_MS = 1400;
 const BODY_HALF = 20;
 
 const PERSONALITIES = [
-    { name: 'aggressive', scatter: 0.03, cdMin: 600,  cdMax: 1000, hookChance: 0.25, dodgeSkill: 0.5 },
-    { name: 'defensive',  scatter: 0.07, cdMin: 1000, cdMax: 1800, hookChance: 0.08, dodgeSkill: 0.8 },
-    { name: 'balanced',   scatter: 0.05, cdMin: 800,  cdMax: 1500, hookChance: 0.15, dodgeSkill: 0.65 },
+    { name: 'aggressive', scatter: 0.025, cdMin: 480, cdMax: 820,  hookChance: 0.35, dodgeSkill: 0.65 },
+    { name: 'defensive',  scatter: 0.045, cdMin: 680, cdMax: 1150, hookChance: 0.20, dodgeSkill: 0.85 },
+    { name: 'balanced',   scatter: 0.035, cdMin: 560, cdMax: 960,  hookChance: 0.28, dodgeSkill: 0.75 },
 ];
 
 // ============================================================
@@ -432,29 +432,37 @@ export class BotBrain {
         this.botNav = scene.botNav || null; // bMod navigation engine
         this.personality = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
 
-        // Target tracking (bMod UpdateTarget)
+        // Target tracking
         this.target = null;           // current enemy object
         this.targetPos = null;        // last known position {x,y}
         this.targetStartTime = 0;
         this.targetType = 'empty';    // 'empty' | 'player' | 'pickup' | 'roam'
         this.path = [];
         this.needPathUpdate = true;
+        this._lastPathRefresh = 0;
 
-        // bMod m_LastData tracking
+        // Edge-triggered input tracking for CharacterCore
+        this._clock = 1000;
         this.lastHook = false;
+        this.lastJump = false;
         this.lastFire = false;
-        this.lastFireTime = Date.now();
+        this.lastFireTime = 0;
         this.fireCooldown = this._randRange(this.personality.cdMin, this.personality.cdMax);
 
-        // Movement state (bMod)
+        // Movement & obstacle state
         this.lastPos = null;
         this.stuckFrames = 0;
-        this.triedJump = false; // bMod: static bool tried
-        this.currentWaypoint = null; // current movement target (for hook scoring)
+        this.triedJump = false;
+        this.currentWaypoint = null;
+        this._unstickTicks = 0;
+        this._unstickDir = 0;
+        this._strafeDir = Math.random() > 0.5 ? 1 : -1;
+        this._nextStrafeSwitchAt = 0;
 
         // Hook state
         this.hookStartTime = 0;
         this.hookTime = 0;
+        this._hookCooldownUntil = 0;
 
         // Roaming
         this.roamTarget = null;
@@ -470,8 +478,10 @@ export class BotBrain {
         const vx = bot.simpleBody.vx, vy = bot.simpleBody.vy;
         const grounded = bot.simpleBody.grounded;
         const hookState = bot.core.hookState;
+        this._clock += (delta || 16.67);
+        const now = this._clock;
 
-        // Track hook duration (for BUG 6 hole time limit)
+        // Track hook duration
         if (hookState === 'ATTACHED') this.hookTime += delta;
         else this.hookTime = 0;
 
@@ -488,10 +498,15 @@ export class BotBrain {
         // 1. UpdateTarget
         this._updateTarget(bot, scene);
 
-        // 2. UpdateEdge (path)
-        if (this.needPathUpdate && this.targetPos) {
-            this.path = this._findPath(pos, this.targetPos) || [];
+        // Prune waypoints we've already reached
+        this._advancePath(pos);
+
+        // Refresh path periodically when tracking a moving target or when path is exhausted
+        if (this.targetPos && (this.needPathUpdate || this.path.length === 0 || now - this._lastPathRefresh > 420)) {
+            this.path = this._findPath(pos, this.targetPos) || [this.targetPos];
+            this._advancePath(pos);
             this.needPathUpdate = false;
+            this._lastPathRefresh = now;
         }
 
         // Determine if we can see our target enemy
@@ -500,17 +515,13 @@ export class BotBrain {
             seeTarget = this._canSee(scene.platformLayer, pos, { x: this.target.x, y: this.target.y });
             if (seeTarget) {
                 this.targetPos = { x: this.target.x, y: this.target.y };
-                if (!this._lastPathRefresh || Date.now() - this._lastPathRefresh > 500) {
-                    this.needPathUpdate = true;
-                    this._lastPathRefresh = Date.now();
-                }
             }
         }
         this.seeTarget = seeTarget;
         this.enemyDist = (seeTarget && this.target)
             ? dist(pos, { x: this.target.x, y: this.target.y }) : Infinity;
 
-        // 3. MakeChoice (movement)
+        // 3. MakeChoice (movement + obstacle navigation)
         this._makeChoice(bot, scene, pos, vx, vy, grounded, out);
 
         // 4. HandleWeapon
@@ -519,40 +530,105 @@ export class BotBrain {
         // 5. HandleHook
         this._handleHook(bot, scene, seeTarget, pos, vx, vy, grounded, hookState, out);
 
-        // 6. Dodge (NOT bMod — our addition)
+        // 6. Dodge incoming snowballs
         this._dodge(bot, scene, pos, vx, vy, grounded, out);
+
+        // Enforce clean false->true jump edge for CharacterCore
+        if (out.jump && this.lastJump) {
+            out.jump = false;
+        }
 
         // Update tracking
         this.lastPos = { x: pos.x, y: pos.y };
-        this.lastHook = out.hook;
-        // lastFire is managed inside _handleWeapon (toggle), don't overwrite here
+        this.lastHook = !!out.hook;
+        this.lastJump = !!out.jump;
 
         return out;
     }
 
+    _advancePath(pos) {
+        if (!this.path || this.path.length <= 1) return;
+        while (this.path.length > 1) {
+            const wp = this.path[0];
+            const d = dist(pos, wp);
+            const sameTierClose = Math.abs(pos.y - wp.y) < 75 && Math.abs(pos.x - wp.x) < 55;
+            if (d < 54 || sameTierClose) {
+                this.path.shift();
+            } else {
+                break;
+            }
+        }
+    }
+
     // ========================================================
-    // 1. UpdateTarget (bMod: omniscient, pick random enemy, sticky 30s)
+    // 1. UpdateTarget (Center CTF Golden Cheese + Combat + Pickups)
     // ========================================================
     _updateTarget(bot, scene) {
-        const now = Date.now();
+        const now = this._clock;
+        const ctf = scene.ctf;
+
+        // === HIGHEST PRIORITY: CENTER CTF GOLDEN CHEESE ===
+        if (ctf) {
+            const isCarrying = (ctf.state === 'CARRIED') &&
+                (ctf.carrier === bot || (bot.sessionId && ctf.carrierSid === bot.sessionId));
+
+            // 1. If THIS bot is carrying the Golden Cheese -> rush straight to its Base Igloo!
+            if (isCarrying) {
+                const base = bot.ctfTargetBase || ctf.redBase || { x: 4655, y: 1500 };
+                if (this.targetType !== 'ctf_base' || !this.targetPos || dist(this.targetPos, base) > 40) {
+                    this.targetType = 'ctf_base';
+                    this.targetPos = { x: base.x, y: base.y };
+                    this.targetStartTime = now;
+                    this.needPathUpdate = true;
+                }
+                return;
+            }
+
+            // 2. If an enemy is carrying the Golden Cheese -> intercept & shoot the carrier!
+            if (ctf.state === 'CARRIED' && ctf.carrier && ctf.carrier !== bot && ctf.carrier.active) {
+                if (this.target !== ctf.carrier || this.targetType !== 'player') {
+                    this.target = ctf.carrier;
+                    this.targetPos = { x: ctf.carrier.x, y: ctf.carrier.y };
+                    this.targetType = 'player';
+                    this.targetStartTime = now;
+                    this.needPathUpdate = true;
+                    return;
+                }
+            }
+        }
+
         let findNew = this.targetType === 'empty';
 
-        if (this.targetType === 'player' && (!this.target || !this.target.active || this.target.getData('health') <= 0))
+        if (this.targetType === 'ctf_base') findNew = true; // no longer carrying
+        if (this.targetType === 'ctf_cheese') {
+            if (!ctf || (ctf.state !== 'HOME' && ctf.state !== 'DROPPED') || (now - this.targetStartTime > 7000)) {
+                findNew = true;
+            } else if (this.targetPos && dist(this.targetPos, { x: ctf.x, y: ctf.y }) > 45) {
+                this.targetPos = { x: ctf.x, y: ctf.y };
+                this.needPathUpdate = true;
+            }
+        }
+        if (this.targetType === 'player' && (!this.target || !this.target.active || this._getHealth(this.target) <= 0))
             findNew = true;
         if (now - this.targetStartTime > TARGET_STICKY_MS)
             findNew = true;
-        if (this.targetType === 'roam' && this.targetPos && dist({ x: bot.x, y: bot.y }, this.targetPos) < 60)
+        if (this.targetType === 'roam' && this.targetPos && dist({ x: bot.x, y: bot.y }, this.targetPos) < 75)
             findNew = true;
-        if (this.targetType === 'pickup' && this.targetPos && dist({ x: bot.x, y: bot.y }, this.targetPos) < 28)
-            findNew = true;
+        if (this.targetType === 'pickup') {
+            const pValid = this.target && !this.target.collected && this.target.active !== false && (!this.target.emoji || this.target.emoji.active);
+            const reached = this.targetPos && dist({ x: bot.x, y: bot.y }, this.targetPos) < 46;
+            const timedOut = now - this.targetStartTime > 4500;
+            if (!pValid || reached || timedOut) {
+                this._ignorePickupsUntil = now + 6000;
+                findNew = true;
+            }
+        }
 
         if (!findNew) {
-            // BUG 10 fix: recompute path when bot loses sight of target (bMod FastIntersectLine)
-            if (this.targetType === 'player' && this.target && this.target.active && scene.platformLayer) {
-                const botPos = { x: bot.x, y: bot.y };
-                const newPos = { x: this.target.x, y: this.target.y };
-                if (!this._canSee(scene.platformLayer, botPos, newPos)) {
-                    this.targetPos = newPos;
+            if (this.targetType === 'player' && this.target && this.target.active) {
+                const movedDist = this.targetPos ? dist(this.targetPos, { x: this.target.x, y: this.target.y }) : 999;
+                if (movedDist > 90) {
+                    this.targetPos = { x: this.target.x, y: this.target.y };
                     this.needPathUpdate = true;
                 }
             }
@@ -565,44 +641,87 @@ export class BotBrain {
         // Collect alive enemies
         const enemies = this._getEnemies(bot, scene);
 
-        // Try pickup if health low
-        const health = bot.getData('health');
-        if (health < 50 && scene.pickups) {
-            let bestPick = null, bestDist = Infinity;
+        // Try pickup if health low or nearby powerup available (and not on pickup cooldown)
+        const health = this._getHealth(bot);
+        if (scene.pickups && now >= (this._ignorePickupsUntil || 0)) {
+            let bestPick = null, bestPickPos = null, bestScore = Infinity;
             for (const p of scene.pickups) {
-                if (!p.active || !p.visible) continue;
-                const d = dist({ x: bot.x, y: bot.y }, { x: p.x, y: p.y });
-                if (d < bestDist) { bestDist = d; bestPick = p; }
+                if (p.collected || p.active === false) continue;
+                if (p.emoji && (!p.emoji.active || !p.emoji.visible)) continue;
+                const px = p.emoji ? p.emoji.x : p.x;
+                const py = p.emoji ? p.emoji.y : p.y;
+                if (typeof px !== 'number' || typeof py !== 'number') continue;
+
+                const d = dist({ x: bot.x, y: bot.y }, { x: px, y: py });
+                const isHealth = p.type === 'health';
+                if (health < 55 && isHealth && d < 750 && d < bestScore) {
+                    bestScore = d;
+                    bestPick = p;
+                    bestPickPos = { x: px, y: py };
+                } else if (!isHealth && d < 240 && d < bestScore && Math.random() < 0.45) {
+                    bestScore = d;
+                    bestPick = p;
+                    bestPickPos = { x: px, y: py };
+                }
             }
-            if (bestPick && bestDist < 600) {
+            if (bestPick && bestPickPos) {
                 this.target = bestPick;
-                this.targetPos = { x: bestPick.x, y: bestPick.y };
+                this.targetPos = bestPickPos;
                 this.targetType = 'pickup';
                 return;
             }
         }
 
-        // Pick random enemy (bMod style)
+        // 3. If Golden Cheese is available in Center / Dropped, race to grab it unless an enemy is right in our face!
+        if (ctf && (ctf.state === 'HOME' || ctf.state === 'DROPPED')) {
+            const closestEnemyDist = enemies.length > 0
+                ? Math.min(...enemies.map(e => dist({ x: bot.x, y: bot.y }, e)))
+                : Infinity;
+            if (closestEnemyDist > 250 || Math.random() < 0.72) {
+                this.target = null;
+                this.targetPos = { x: ctf.x, y: ctf.y };
+                this.targetType = 'ctf_cheese';
+                return;
+            }
+        }
+
+        // Pick closest enemy (with slight randomness so multiple bots don't always dogpile 1 target)
         if (enemies.length > 0) {
-            const e = enemies[Math.floor(Math.random() * enemies.length)];
+            enemies.sort((a, b) => dist({ x: bot.x, y: bot.y }, a) - dist({ x: bot.x, y: bot.y }, b));
+            const e = (enemies.length > 1 && Math.random() < 0.25) ? enemies[1] : enemies[0];
             this.target = e;
             this.targetPos = { x: e.x, y: e.y };
             this.targetType = 'player';
             return;
         }
 
-        // Roam: pick a random point on the map
-        const mapW = scene.map ? scene.map.widthInPixels : 2000;
-        const mapH = scene.map ? scene.map.heightInPixels : 1400;
-        this.targetPos = { x: Math.random() * mapW, y: Math.random() * mapH };
+        // Roam: pick a random nav vertex on the map
+        if (this.botNav && this.botNav.vertices && this.botNav.vertices.length > 0) {
+            const v = this.botNav.vertices[Math.floor(Math.random() * this.botNav.vertices.length)];
+            this.targetPos = { x: v.x, y: v.y };
+        } else {
+            const mapW = scene.map ? scene.map.widthInPixels : 5040;
+            const mapH = scene.map ? scene.map.heightInPixels : 2520;
+            this.targetPos = { x: 300 + Math.random() * (mapW - 600), y: 300 + Math.random() * (mapH - 700) };
+        }
         this.targetType = 'roam';
         this.target = null;
+    }
+
+    _getHealth(entity) {
+        if (!entity) return 0;
+        if (typeof entity.getData === 'function') {
+            const h = entity.getData('health');
+            if (typeof h === 'number') return h;
+        }
+        if (typeof entity.health === 'number') return entity.health;
+        return 100;
     }
 
     _getEnemies(bot, scene) {
         const enemies = [];
         const addIfAlive = (c) => {
-            if (c && c !== bot && c.active && c.getData('health') > 0) enemies.push(c);
+            if (c && c !== bot && c.active && !c.isDying && this._getHealth(c) > 0) enemies.push(c);
         };
         if (scene.player) addIfAlive(scene.player);
         if (scene.guestPlayer) addIfAlive(scene.guestPlayer);
@@ -611,10 +730,10 @@ export class BotBrain {
     }
 
     // ========================================================
-    // 3. MakeChoice (bMod exact logic)
+    // 3. MakeChoice (Smart Waypoint Following + Obstacle Clearing)
     // ========================================================
     _makeChoice(bot, scene, pos, vx, vy, grounded, out) {
-        // bMod: ALWAYS follow path for movement, seeTarget only for weapon/hook
+        const now = this._clock;
         let tgt;
         if (this.path && this.path.length > 0) {
             const wp = this._farestPointOnEdge(this.path, pos);
@@ -627,111 +746,216 @@ export class BotBrain {
             tgt = { x: 0, y: 0 };
         }
 
-        // Save current waypoint for hook scoring (BUG 5 fix)
+        // Save current waypoint for hook scoring
         this.currentWaypoint = tgt;
 
-        // Direction (bMod: 28px deadzone, always move toward target)
-        // Only stop if grounded and very close (not on hook — need to swing)
-        const tgtDist = Math.hypot(tgt.x, tgt.y);
-        if (grounded && tgtDist < 80) {
-            out.direction = 0; // hold position on ground, shoot
-        } else if (tgt.x > DEADZONE) out.direction = 1;
-        else if (tgt.x < -DEADZONE) out.direction = -1;
-        else out.direction = 0;
+        // 1. Base horizontal direction toward current waypoint
+        let desiredDir = 0;
+        if (tgt.x > DEADZONE) desiredDir = 1;
+        else if (tgt.x < -DEADZONE) desiredDir = -1;
+        else if (tgt.y < -45) desiredDir = this._committedDir || 1;
 
-        // Combat stance: hold position or retreat when enemy visible
-        if (this.seeTarget && grounded && this.targetType === 'player' && this.enemyDist < ATTACK_RANGE) {
-            if (this.enemyDist < 120) {
-                out.direction = (this.target.x < pos.x) ? 1 : -1;
-            } else {
-                out.direction = 0;
+        // 2. Dynamic Combat Strafe (only when enemy is visible on roughly the same level)
+        if (this.seeTarget && this.targetType === 'player' && this.enemyDist < 340 && Math.abs(this.target.y - pos.y) < 90) {
+            if (this.enemyDist < 130) {
+                this._combatRetreating = true;
+            } else if (this.enemyDist > 210) {
+                this._combatRetreating = false;
+            }
+
+            if (this._combatRetreating) {
+                const retreatDir = (this.target.x < pos.x) ? 1 : -1;
+                const behindTile = this._tileAt(Math.floor((pos.x + retreatDir * TILE_SIZE) / TILE_SIZE), Math.floor(pos.y / TILE_SIZE), scene);
+                desiredDir = (behindTile !== T_HOLE) ? retreatDir : -retreatDir;
+            } else if (this.enemyDist < 290) {
+                if (now >= this._nextStrafeSwitchAt) {
+                    this._strafeDir = (Math.random() < 0.55) ? -this._strafeDir : (this.target.x > pos.x ? 1 : -1);
+                    this._nextStrafeSwitchAt = now + 1150 + Math.random() * 650;
+                }
+                const nextStrafeTile = this._tileAt(Math.floor((pos.x + this._strafeDir * TILE_SIZE) / TILE_SIZE), Math.floor(pos.y / TILE_SIZE), scene);
+                if (nextStrafeTile === T_HOLE && now >= (this._lastHoleFlipAt || 0) + 600) {
+                    this._strafeDir = -this._strafeDir;
+                    this._lastHoleFlipAt = now;
+                }
+                desiredDir = this._strafeDir;
+                if (grounded && Math.random() < 0.018) out.jump = true;
             }
         }
 
-        // Proactive wall detection: raycast 2 tiles ahead
-        this.wallAhead = false;
-        if (out.direction !== 0 && scene.platformLayer) {
-            const lookX = pos.x + out.direction * TILE_SIZE * 2;
-            if (!this._canSee(scene.platformLayer, pos, { x: lookX, y: pos.y })) {
-                this.wallAhead = true;
-                if (grounded) {
-                    const jumpClearY = pos.y - TILE_SIZE * 2;
-                    if (this._canSee(scene.platformLayer,
-                        { x: pos.x, y: jumpClearY },
-                        { x: lookX, y: jumpClearY })) {
-                        out.jump = true;
+        // 3. Direction commitment hysteresis (prevents rapid left-right spinning in place!)
+        if (this._unstickTicks > 0) {
+            this._unstickTicks--;
+            out.direction = this._unstickDir;
+            this._committedDir = this._unstickDir;
+        } else {
+            if (desiredDir !== this._committedDir) {
+                if (!this._dirCommitUntil || now >= this._dirCommitUntil) {
+                    this._committedDir = desiredDir;
+                    if (desiredDir !== 0) {
+                        this._dirCommitUntil = now + 450;
                     }
                 }
             }
+            out.direction = (this._committedDir !== undefined) ? this._committedDir : desiredDir;
         }
 
-        const predX = pos.x + (out.direction || 0) * PHYS.MAX_SPEED_X * 0.016;
-        const predY = pos.y + Math.max(vy, 0) * 0.016;
-        const ptx = Math.floor(predX / TILE_SIZE);
-        const pty = Math.floor(predY / TILE_SIZE);
+        // 4. Multi-Level Forward Obstacle & Step Probe (foot, waist, head)
+        this.wallAhead = false;
+        this.highWallAhead = false;
+        if (out.direction !== 0 && scene.platformLayer) {
+            const dir = out.direction;
+            const nearX = pos.x + dir * (TILE_SIZE * 0.85);
+            const farX = pos.x + dir * (TILE_SIZE * 1.65);
 
+            const footBlocked = this._isPointSolid(scene.platformLayer, nearX, pos.y + 18) ||
+                                this._isPointSolid(scene.platformLayer, farX, pos.y + 18);
+            const waistBlocked = this._isPointSolid(scene.platformLayer, nearX, pos.y - 2) ||
+                                 this._isPointSolid(scene.platformLayer, farX, pos.y - 2);
+            const headBlocked = this._isPointSolid(scene.platformLayer, nearX, pos.y - 24) ||
+                                this._isPointSolid(scene.platformLayer, farX, pos.y - 24);
+
+            if (footBlocked || waistBlocked || headBlocked) {
+                this.wallAhead = true;
+                const upperClear = !this._isPointSolid(scene.platformLayer, nearX, pos.y - TILE_SIZE * 1.4) &&
+                                   !this._isPointSolid(scene.platformLayer, farX, pos.y - TILE_SIZE * 1.4);
+                const highClear = !this._isPointSolid(scene.platformLayer, nearX, pos.y - TILE_SIZE * 2.6) &&
+                                  !this._isPointSolid(scene.platformLayer, farX, pos.y - TILE_SIZE * 2.6);
+                this.highWallAhead = !upperClear && highClear;
+
+                if (grounded && (upperClear || highClear || !this._hasCeilingAbove(scene.platformLayer, pos.x, pos.y, 1.8))) {
+                    out.jump = true;
+                }
+            }
+        }
+
+        // 5. Gap / Pit Crossing Detection (look 1 and 2 tiles ahead)
         const tx = Math.floor(pos.x / TILE_SIZE);
         const ty = Math.floor(pos.y / TILE_SIZE);
         const curTile = this._tileAt(tx, ty, scene);
+        const predX = pos.x + (out.direction || 0) * (TILE_SIZE * 0.95);
+        const ptx = Math.floor(predX / TILE_SIZE);
+        const pty = Math.floor((pos.y + Math.max(vy, 0) * 0.08) / TILE_SIZE);
         const nextTile = this._tileAt(ptx, pty, scene);
 
-        // Stuck detection
-        if (this.lastPos) {
-            const actualMoved = Math.abs(pos.x - this.lastPos.x);
-            if (actualMoved < STUCK_THRESHOLD && out.direction !== 0) this.stuckFrames++;
-            else { this.stuckFrames = 0; this.triedJump = false; this._hookFailCount = 0; }
+        // Also check if there is an immediate drop-off gap in front of feet when target is not below us
+        let gapAhead = (curTile === T_SAFE && nextTile === T_HOLE);
+        if (!gapAhead && grounded && out.direction !== 0 && tgt.y <= 35 && scene.platformLayer) {
+            const frontGround1 = this._isTileSolid(scene.platformLayer, tx + out.direction, ty + 1);
+            const frontGround2 = this._isTileSolid(scene.platformLayer, tx + out.direction, ty + 2);
+            if (!frontGround1 && !frontGround2) {
+                gapAhead = true;
+            }
         }
 
-        // Gap crossing: SAFE→HOLE transition
-        if (curTile === T_SAFE && nextTile === T_HOLE && (grounded || vy > 0))
+        if (gapAhead && (grounded || vy > -20)) {
             out.jump = true;
+        }
 
-        // Stuck logic: jump/double-jump/reverse (bMod phases)
-        if (curTile !== T_HOLE && nextTile !== T_HOLE) {
-            if (this.stuckFrames > 2 && out.direction !== 0) {
-                if (grounded) {
-                    out.jump = true;
-                    this.triedJump = true;
-                } else if (this.triedJump && !bot.core.airJumpUsed && vy > 0) {
-                    out.jump = true;
-                } else if (this.triedJump && bot.core.airJumpUsed && vy > 0) {
-                    out.direction = -out.direction;
-                }
-            } else if (this.stuckFrames === 0) {
+        // 6. Smart Air-Jump (Double Jump) Timing:
+        // Fire the second jump near the apex of the first jump (vy > -210) when climbing, clearing a wall, or crossing a pit!
+        if (!grounded && !bot.core.airJumpUsed && !this.lastJump) {
+            const needClimb = tgt.y < -50 && vy > -210;
+            const needClearWall = this.wallAhead && vy > -240;
+            const needSaveFromHole = (curTile === T_HOLE || nextTile === T_HOLE) && vy > -60;
+            if (needClimb || needClearWall || needSaveFromHole) {
+                out.jump = true;
+            }
+        }
+
+        // 7. Stuck Detection & Escalation
+        if (this.lastPos) {
+            const actualMoved = Math.hypot(pos.x - this.lastPos.x, pos.y - this.lastPos.y);
+            if (actualMoved < STUCK_THRESHOLD && (out.direction !== 0 || Math.abs(tgt.x) > DEADZONE || tgt.y < -40)) {
+                this.stuckFrames++;
+            } else if (actualMoved > STUCK_THRESHOLD * 2.2) {
+                this.stuckFrames = 0;
                 this.triedJump = false;
             }
         }
 
-        // Trajectory prediction: proactive jump when walking into wall
-        if (!bot.core.airJumpUsed) {
-            const velY = Math.min(vy, 0);
-            const fwdEnd = { x: pos.x + vx * 0.16, y: pos.y + velY * 0.16 };
-            const jmpEnd = { x: pos.x + vx * 0.16, y: pos.y + (velY + PHYS.JUMP_FORCE * 0.016) * 10 * 0.016 };
-            const hitsWall = !this._canSee(scene.platformLayer, pos, fwdEnd);
-            const jumpClears = this._canSee(scene.platformLayer, pos, jmpEnd);
-            if (hitsWall && jumpClears) out.jump = true;
+        if (this.stuckFrames > 4) {
+            if (grounded) {
+                out.jump = true;
+                this.triedJump = true;
+            } else if (!bot.core.airJumpUsed && vy > -180) {
+                out.jump = true;
+            }
+            if (this.stuckFrames > 24) {
+                // Reverse direction for ~0.45s to back out from under a lip or corner, and recompute path
+                this._unstickDir = out.direction !== 0 ? -out.direction : (Math.random() > 0.5 ? 1 : -1);
+                this._unstickTicks = 26;
+                this._committedDir = this._unstickDir;
+                this._dirCommitUntil = now + 450;
+                this.stuckFrames = 0;
+                this.needPathUpdate = true;
+            }
         }
 
-        // Directly below target: jump straight up (bMod line 713)
-        if (tgt.y < 0 && Math.abs(tgt.x) < DEADZONE && vy > -1 && !bot.core.airJumpUsed)
+        // 8. Directly below waypoint with open sky above: jump up
+        if (tgt.y < -45 && Math.abs(tgt.x) < DEADZONE * 1.8 && grounded) {
             out.jump = true;
+        }
+    }
+
+    _isPointSolid(platformLayer, wx, wy) {
+        if (!platformLayer) return false;
+        const t = platformLayer.getTileAtWorldXY(wx, wy);
+        return !!(t && t.index > 0);
+    }
+
+    _isTileSolid(platformLayer, tx, ty) {
+        if (!platformLayer) return false;
+        const t = platformLayer.getTileAt(tx, ty);
+        return !!(t && t.index > 0);
+    }
+
+    _hasCeilingAbove(platformLayer, wx, wy, maxTilesUp = 2.5) {
+        const tx = Math.floor(wx / TILE_SIZE);
+        const ty = Math.floor(wy / TILE_SIZE);
+        const steps = Math.ceil(maxTilesUp);
+        for (let dy = 1; dy <= steps; dy++) {
+            if (this._isTileSolid(platformLayer, tx, ty - dy)) return true;
+        }
+        return false;
+    }
+
+    _findOverhangEscapeDir(platformLayer, wx, wy, preferDx) {
+        const tx = Math.floor(wx / TILE_SIZE);
+        const ty = Math.floor(wy / TILE_SIZE);
+        const pref = preferDx >= 0 ? 1 : -1;
+        const dirs = [pref, -pref];
+
+        for (let distTiles = 1; distTiles <= 6; distTiles++) {
+            for (const d of dirs) {
+                const checkTx = tx + d * distTiles;
+                // Check if horizontal path to checkTx is not blocked by a wall
+                if (this._isTileSolid(platformLayer, tx + d, ty)) continue;
+                const ceiling1 = this._isTileSolid(platformLayer, checkTx, ty - 1);
+                const ceiling2 = this._isTileSolid(platformLayer, checkTx, ty - 2);
+                const ceiling3 = this._isTileSolid(platformLayer, checkTx, ty - 3);
+                if (!ceiling1 && !ceiling2 && !ceiling3) {
+                    return d;
+                }
+            }
+        }
+        return pref;
     }
 
     // ========================================================
-    // 4. HandleWeapon (adapted for snowballs)
+    // 4. HandleWeapon (Ballistic Aiming with Line-of-Sight)
     // ========================================================
     _handleWeapon(bot, scene, seeTarget, pos, vx, vy, out) {
-        // BUG 9 fix: check closest visible enemy, not just tracked target
         let fireTarget = null;
-        if (this.target && this.target.active && seeTarget) {
+        if (this.target && this.target.active && this.targetType === 'player' && seeTarget) {
             fireTarget = this.target;
         } else {
-            // Check if any other enemy is visible and close
             const enemies = this._getEnemies(bot, scene);
+            let bestD = ATTACK_RANGE;
             for (const e of enemies) {
                 const d = dist(pos, { x: e.x, y: e.y });
-                if (d < ATTACK_RANGE && this._canSee(scene.platformLayer, pos, { x: e.x, y: e.y })) {
-                    fireTarget = e; break;
+                if (d < bestD && this._canSee(scene.platformLayer, pos, { x: e.x, y: e.y })) {
+                    bestD = d;
+                    fireTarget = e;
                 }
             }
         }
@@ -741,160 +965,137 @@ export class BotBrain {
         const d = dist(pos, tPos);
         if (d > ATTACK_RANGE) return;
 
-        // Fire when cooldown ready (our game: fire is single-shot, not edge-triggered like bMod)
-        const now = Date.now();
+        const now = this._clock;
         if (now - this.lastFireTime < this.fireCooldown) return;
         out.fire = true;
         this.lastFireTime = now;
         this.fireCooldown = this._randRange(this.personality.cdMin, this.personality.cdMax);
 
-        // Aim with prediction (use fireTarget, not this.target)
-        let aimX, aimY;
-        if (d < 120) {
-            const tVx = fireTarget.simpleBody ? fireTarget.simpleBody.vx : 0;
-            const tVy = fireTarget.simpleBody ? fireTarget.simpleBody.vy : 0;
-            const flightTime = d / PHYS.SNOWBALL_SPEED;
-            aimX = tPos.x + tVx * flightTime * 0.5 - pos.x;
-            aimY = tPos.y + tVy * flightTime * 0.5 - pos.y;
-        } else {
-            const tVx = fireTarget.simpleBody ? fireTarget.simpleBody.vx : 0;
-            const tVy = fireTarget.simpleBody ? fireTarget.simpleBody.vy : 0;
-            const flightTime = d / PHYS.SNOWBALL_SPEED;
-            aimX = tPos.x + tVx * flightTime - pos.x;
-            aimY = tPos.y + tVy * flightTime - pos.y;
-            // Compensate gravity on snowball
-            aimY -= 0.5 * PHYS.GRAVITY * PHYS.SNOWBALL_GRAVITY_SCALE * flightTime * flightTime;
-        }
+        // Predict target movement + compensate for snowball gravity parabola
+        const tVx = fireTarget.simpleBody ? fireTarget.simpleBody.vx : (fireTarget.vx || 0);
+        const tVy = fireTarget.simpleBody ? fireTarget.simpleBody.vy : (fireTarget.vy || 0);
+        const flightTime = d / PHYS.SNOWBALL_SPEED;
+        const leadScale = d < 150 ? 0.55 : 0.85;
 
-        // Scatter (bMod: (random(64)-32)*PI/1024 ≈ ±5.6°)
+        const aimX = (tPos.x + tVx * flightTime * leadScale) - pos.x;
+        let aimY = (tPos.y + tVy * flightTime * (leadScale * 0.6)) - pos.y;
+        aimY -= 0.5 * PHYS.GRAVITY * PHYS.SNOWBALL_GRAVITY_SCALE * flightTime * flightTime;
+
         let angle = Math.atan2(aimY, aimX);
-        angle += (Math.random() * 64 - 32) * Math.PI / 1024;
+        angle += (Math.random() - 0.5) * 2 * this.personality.scatter * Math.PI;
 
         out.fireAngle = angle;
     }
 
     // ========================================================
-    // 5. HandleHook (EXACT bMod port)
+    // 5. HandleHook (Matched to CharacterCore's edge-triggered hook)
     // ========================================================
     _handleHook(bot, scene, seeTarget, pos, vx, vy, grounded, hookState, out) {
         const tx = Math.floor(pos.x / TILE_SIZE);
         const ty = Math.floor(pos.y / TILE_SIZE);
         const curTile = this._tileAt(tx, ty, scene);
+        const now = this._clock;
 
-        // FLYING → hold (bMod: HOOK_FLYING → hook=1, return)
+        // While FLYING: keep out.hook = false so CharacterCore._prevHookInput resets cleanly
+        // (CharacterCore keeps flying hook active until it hits terrain or reaches max range)
         if (hookState === 'FLYING') {
-            out.hook = true;
-            out.hookTarget = bot.core.hookPos ? { x: bot.core.hookPos.x, y: bot.core.hookPos.y } : null;
+            out.hook = false;
             return;
         }
 
-        // BUG 5 fix: use current waypoint (from MakeChoice), not final target
-        const wp = this.currentWaypoint || (this.targetPos ? { x: this.targetPos.x - pos.x, y: this.targetPos.y - pos.y } : { x: 0, y: 0 });
-        let tgt = wp;
+        const tgt = this.currentWaypoint || (this.targetPos ? { x: this.targetPos.x - pos.x, y: this.targetPos.y - pos.y } : { x: 0, y: 0 });
 
-        // bMod has player hook toggle here, but our game only hooks terrain.
-        // Skip player hook entirely — go straight to terrain hook logic.
-        {
-            // ATTACHED to terrain (bMod: HOOK_GRABBED && HookedPlayer==-1)
-            if (hookState === 'ATTACHED') {
-                const anchorPos = bot.core.hookAnchorPos;
-                if (!anchorPos) return;
+        // While ATTACHED: CharacterCore keeps the hook attached as long as out.hook does NOT transition false->true!
+        if (hookState === 'ATTACHED') {
+            const anchorPos = bot.core.hookAnchorPos;
+            if (!anchorPos) return;
+            if (!this.hookStartTime) this.hookStartTime = now;
 
-                // Compute HookVel (bMod exact formula)
-                const toAnchor = normalize({ x: anchorPos.x - pos.x, y: anchorPos.y - pos.y });
-                let hvx = toAnchor.x * PHYS.HOOK_DRAG_ACCEL;
-                let hvy = toAnchor.y * PHYS.HOOK_DRAG_ACCEL;
+            const toAnchor = normalize({ x: anchorPos.x - pos.x, y: anchorPos.y - pos.y });
+            let hvx = toAnchor.x * PHYS.HOOK_DRAG_ACCEL;
+            let hvy = toAnchor.y * PHYS.HOOK_DRAG_ACCEL;
+            if (hvy > 0) hvy *= 0.3;
+            if ((hvx < 0 && out.direction < 0) || (hvx > 0 && out.direction > 0)) hvx *= 0.95;
+            else hvx *= 0.75;
 
-                // bMod: if HookVel.y > 0, dampen by 0.3
-                if (hvy > 0) hvy *= 0.3;
-                // bMod: same-dir x boost 0.95, else 0.75
-                if ((hvx < 0 && out.direction < 0) || (hvx > 0 && out.direction > 0))
-                    hvx *= 0.95;
-                else
-                    hvx *= 0.75;
-                // Add gravity
-                hvy += 1.0;
+            const ps = dot(tgt, { x: hvx, y: hvy });
+            const anchorDist = dist(pos, anchorPos);
+            const finalTargetY = this.targetPos ? this.targetPos.y : pos.y;
+            const reachedLedgeHeight = (pos.y <= anchorPos.y + 52 && tgt.y > -45) || (pos.y < finalTargetY - 40);
+            const keepHook = (ps > 0 || (curTile === T_HOLE && pos.y > anchorPos.y + 40)) &&
+                             !reachedLedgeHeight &&
+                             anchorDist > 68 &&
+                             (now - this.hookStartTime < HOOK_TIMEOUT_MS) &&
+                             this.stuckFrames < 10;
 
-                const hookVel = { x: hvx, y: hvy };
-                const ps = dot(tgt, hookVel);
-
-                // Keep hook if pulling toward target, or over hole and need to hold
-                if (ps > 0 || (curTile === T_HOLE && tgt.y < 0 && vy > 0 && this.hookTime < 1500)) {
-                    out.hook = true;
-                    out.hookTarget = { x: anchorPos.x, y: anchorPos.y };
-                }
-
-                // Timeout 4s or anchor too close (< 20px) → release
-                const now = Date.now();
-                if (!this.hookStartTime) this.hookStartTime = now;
-                const anchorDist = dist(pos, anchorPos);
-                if (now - this.hookStartTime > HOOK_TIMEOUT_MS || anchorDist < 20) {
-                    out.hook = false;
-                    out.hookTarget = null;
-                    this.hookStartTime = 0;
-                    this._hookCooldownUntil = now + 2000;
-                }
-                // Toggle-release: create false→true edge to release hook
-                // (bMod uses m_Hook=0 which releases directly; our CharacterCore
-                //  needs a false→true edge, so we build it over 2 frames)
-                if (!out.hook && !this.lastHook) {
-                    out.hook = true;
-                    this.hookStartTime = 0;
-                    this._hookCooldownUntil = Date.now() + 2000;
-                }
+            if (keepHook) {
+                // Keep out.hook = false so CharacterCore does NOT toggle-release the hook!
+                out.hook = false;
             } else {
-                this.hookStartTime = 0;
-            }
-
-            // IDLE → purposeful hook (bMod scan + condition triggers)
-            if (hookState === 'IDLE' && !out.fire && !this.lastHook
-                && (!this._hookCooldownUntil || Date.now() >= this._hookCooldownUntil)) {
-                const overHole = curTile === T_HOLE;
-                const isStuck = this.stuckFrames > 2;
-                const needsUpward = tgt.y < -TILE_SIZE * 2 && !grounded;
-                let blockedAbove = false;
-                if (needsUpward && scene.platformLayer) {
-                    const tile = scene.platformLayer.getTileAtWorldXY(pos.x, pos.y - TILE_SIZE);
-                    if (tile && tile.index > 0) blockedAbove = true;
+                // Release the hook! Prefer releasing via swing-jump only when climbing toward a higher target
+                if (tgt.y < -25 && pos.y > finalTargetY - 20 && !this.lastJump) {
+                    out.jump = true;
+                } else {
+                    out.hook = !this.lastHook;
                 }
-                const shouldHook = overHole || isStuck || (needsUpward && !blockedAbove) || this.wallAhead;
-                if (shouldHook) {
-                    const numDir = HOOK_DIRS;
-                    let bestDir = null;
-                    let maxForce = (curTile === T_HOLE) ? -10000 : 0;
+                this.hookStartTime = 0;
+                this._hookCooldownUntil = now + 550;
+            }
+            return;
+        }
 
-                    for (let i = 0; i < numDir; i++) {
-                        const a = 2 * i * Math.PI / numDir;
-                        const dx = Math.cos(a), dy = Math.sin(a);
-                        const endX = pos.x + dx * PHYS.HOOK_RANGE;
-                        const endY = pos.y + dy * PHYS.HOOK_RANGE;
+        this.hookStartTime = 0;
 
-                        // Check if hook would hit solid terrain
-                        const hitPoint = this._hookRaycast(scene.platformLayer, pos.x, pos.y, endX, endY);
-                        if (!hitPoint) continue;
+        // IDLE → Launch hook ONLY when climbing to a higher target or saving from a hole
+        if (hookState === 'IDLE' && !this.lastHook && now >= (this._hookCooldownUntil || 0)) {
+            const overHole = curTile === T_HOLE && vy > 20;
+            const wantsClimb = tgt.y < -55;
+            const needsUpward = tgt.y < -85 && (!grounded || Math.abs(tgt.x) < 260);
+            const climbWall = wantsClimb && (this.wallAhead || this.stuckFrames > 5);
+            const fastSwing = Math.hypot(tgt.x, tgt.y) > 320 && tgt.y < -45 && !grounded;
+            const shouldHook = overHole || needsUpward || climbWall || fastSwing;
 
-                        // Compute HookVel for this direction
-                        let hvx2 = dx * PHYS.HOOK_DRAG_ACCEL;
-                        let hvy2 = dy * PHYS.HOOK_DRAG_ACCEL;
-                        if (hvy2 > 0) hvy2 *= 0.3;
-                        if ((hvx2 < 0 && out.direction < 0) || (hvx2 > 0 && out.direction > 0))
-                            hvx2 *= 0.95;
-                        else
-                            hvx2 *= 0.75;
-                        hvy2 += 1.0;
+            if (shouldHook && scene.platformLayer) {
+                const mapW = scene.map ? scene.map.widthInPixels : 5040;
+                let bestHit = null;
+                let bestScore = (curTile === T_HOLE) ? -1e6 : 0;
 
-                        const ps = dot(tgt, { x: hvx2, y: hvy2 });
-                        if (ps > maxForce) {
-                            maxForce = ps;
-                            bestDir = hitPoint;
-                        }
+                for (let i = 0; i < HOOK_DIRS; i++) {
+                    const a = (2 * i * Math.PI) / HOOK_DIRS;
+                    const dx = Math.cos(a), dy = Math.sin(a);
+                    // Only hook upward
+                    if (dy > -0.18) continue;
+
+                    const endX = pos.x + dx * PHYS.HOOK_RANGE;
+                    const endY = pos.y + dy * PHYS.HOOK_RANGE;
+                    const hitPoint = this._hookRaycast(scene.platformLayer, pos.x, pos.y, endX, endY);
+                    if (!hitPoint) continue;
+
+                    // Do not hook outer map boundary walls or above the top islands
+                    if (hitPoint.x < 160 || hitPoint.x > mapW - 160 || hitPoint.y < 320) continue;
+
+                    const hitDist = dist(pos, hitPoint);
+                    if (hitDist < 90 || hitDist > PHYS.HOOK_RANGE) continue;
+
+                    let hvx2 = dx * PHYS.HOOK_DRAG_ACCEL;
+                    let hvy2 = dy * PHYS.HOOK_DRAG_ACCEL;
+                    if ((hvx2 < 0 && out.direction < 0) || (hvx2 > 0 && out.direction > 0)) hvx2 *= 0.95;
+                    else hvx2 *= 0.75;
+
+                    let score = dot(tgt, { x: hvx2, y: hvy2 });
+                    if (overHole && dy < -0.35) score += 120000;
+                    if (needsUpward && hitPoint.y < pos.y - 90) score += 80000;
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestHit = hitPoint;
                     }
+                }
 
-                    if (bestDir && dist(pos, bestDir) > 32) {
-                        out.hook = true;
-                        out.hookTarget = bestDir;
-                        this.hookStartTime = Date.now();
-                    }
+                if (bestHit) {
+                    out.hook = true;
+                    out.hookTarget = bestHit;
+                    this.hookStartTime = now;
                 }
             }
         }
@@ -915,34 +1116,34 @@ export class BotBrain {
     }
 
     // ========================================================
-    // 6. Dodge (NOT in bMod — our addition)
+    // 6. Dodge incoming snowballs by jumping over them
     // ========================================================
     _dodge(bot, scene, pos, vx, vy, grounded, out) {
         if (!scene.snowballs || !grounded) return;
-        const skill = this.personality.dodgeSkill;
-        if (Math.random() > skill) return;
+        const now = this._clock;
+        if (now < (this._nextDodgeAt || 0)) return;
 
         for (const sb of scene.snowballs) {
-            if (!sb.active) continue;
+            if (sb.active === false) continue;
             if (sb.getData && sb.getData('shooter') === bot) continue;
+            if (bot.sessionId && sb._owner === bot.sessionId) continue;
 
             const dx = sb.x - pos.x, dy = sb.y - pos.y;
             const d = Math.sqrt(dx * dx + dy * dy);
-            if (d > 300) continue;
+            if (d > 280 || d < 20) continue;
 
-            // Predict if snowball heading toward us
+            // Check if snowball is moving toward us
             const svx = sb.vx || 0, svy = sb.vy || 0;
-            const timeToHit = d / Math.max(1, Math.sqrt(svx * svx + svy * svy));
-            const impactX = sb.x + svx * timeToHit;
-            const impactY = sb.y + svy * timeToHit;
-            const impactDist = dist({ x: impactX, y: impactY }, pos);
+            if (dx * svx >= 0) continue; // moving away horizontally
 
-            if (impactDist < 50) {
-                // Dodge: jump and move perpendicular
-                out.jump = true;
-                if (svx > 0) out.direction = -1;
-                else if (svx < 0) out.direction = 1;
-                else out.direction = Math.random() > 0.5 ? 1 : -1;
+            const timeToHit = Math.abs(dx) / Math.max(60, Math.abs(svx));
+            const impactY = sb.y + svy * timeToHit + 0.5 * PHYS.GRAVITY * PHYS.SNOWBALL_GRAVITY_SCALE * timeToHit * timeToHit;
+
+            if (Math.abs(impactY - pos.y) < 65) {
+                this._nextDodgeAt = now + 550;
+                if (Math.random() <= this.personality.dodgeSkill) {
+                    out.jump = true;
+                }
                 return;
             }
         }

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: mousie-pi-game
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install && cd .. && node tools/stamp_sw.mjs
+    startCommand: node server/src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+

@@ -59,6 +59,9 @@ export class SimplePhysicsWorld {
                     if (this.slopeHeights.has(localId)) {
                         this.tileGrid[y][x] = localId;
                         slopeCount++;
+                    } else if (localId === 6 || localId === 7 || localId === 8) {
+                        // Bridge slab: only top 26px of the 70px tile is solid!
+                        this.tileGrid[y][x] = -2;
                     } else {
                         this.tileGrid[y][x] = -1;
                     }
@@ -192,86 +195,160 @@ export class SimplePhysicsWorld {
         for (const body of this.bodies.values()) {
             body.wasGrounded = body.grounded;
 
-            // 1. Gravity
-            body.vy += this.GRAVITY * body.gravityScale * dt;
+            // 1. Gravity with Teeworlds-style Apex Hang-Time & crisp fall curve
+            let gravMult = body.gravityScale;
+            if (!body.grounded && body.gravityScale >= 0.9) {
+                if (Math.abs(body.vy) < 135) {
+                    gravMult *= 0.80; // Floaty hang-time at jump apex for aiming/hooking
+                } else if (body.vy > 180) {
+                    gravMult *= 1.08; // Crisp descent
+                }
+            }
+            body.vy += this.GRAVITY * gravMult * dt;
 
-            // 2. Sub-pixel remainder
+            // 2. Slope gravity BEFORE movement so gentle downhill ice slide works smoothly
+            if (body.grounded && body.onSlope) {
+                const gradient = this._getSlopeGradient(body.x, body.y + body.halfH);
+                if (gradient !== 0) {
+                    const sinTheta = gradient / Math.sqrt(1 + gradient * gradient);
+                    body.vx += this.GRAVITY * 0.28 * sinTheta * body.gravityScale * dt;
+                }
+            }
+
+            // 3. Sub-pixel remainders
             body.remainderX += body.vx * dt;
             body.remainderY += body.vy * dt;
 
-            // 3. Whole pixel movement
             const moveX = Math.round(body.remainderX);
             const moveY = Math.round(body.remainderY);
             body.remainderX -= moveX;
             body.remainderY -= moveY;
 
-            // 4. Move each axis, one pixel at a time
+            // 4. Move each axis one pixel at a time
             this._pixelMoveX(body, moveX);
-            this._pixelMoveY(body, moveY);
-
-            // 5. Slope gravity: project gravity onto slope surface
-            if (body.grounded && body.onSlope) {
-                const gradient = this._getSlopeGradient(body.x, body.y + body.halfH);
-                if (gradient !== 0) {
-                    const sinTheta = gradient / Math.sqrt(1 + gradient * gradient);
-                    body.vx += this.GRAVITY * this.SLOPE_FACTOR * sinTheta * body.gravityScale * dt;
-                }
+            if (body.grounded && body.vy === 0 && moveY > 0) {
+                // _pixelMoveX already snapped body to ground/slope this tick
+                body.remainderY = 0;
+            } else {
+                this._pixelMoveY(body, moveY);
             }
 
-            // 6. Quantize for determinism
+            // 5. Quantize for determinism
             body.vx = Math.round(body.vx * 100) / 100;
             body.vy = Math.round(body.vy * 100) / 100;
 
-            // 7. HARD DEPENETRATION — last resort, runs AFTER everything
-            // If body is inside solid after all movement, force it out.
-            // This catches hook pull, knockback, spawn, or any other source.
+            // 6. Directional, bounded depenetration safety net
             this._hardDepenetrate(body);
         }
     }
 
     /**
-     * Hard depenetration: if ANY part of body overlaps solid, push out.
-     * Uses spiral search from body center to find nearest free position.
-     * This is the final safety net — nothing can bypass it.
+     * Directional, bounded depenetration:
+     * - Head hitting ceiling/bridge pushes DOWN only (never teleports up through bridges/platforms).
+     * - Foot hitting floor/slope pushes UP only.
+     * - Left/right center wall sensor pushes away from the hit wall only (never pushes the wrong way).
+     * - Bounded to <= 32px so a body can never teleport across tiles.
      */
     _hardDepenetrate(body) {
         if (!this._bodyOverlapsSolid(body)) return;
 
-        // Try pushing up first (most common case: fell into floor)
-        for (let dy = 1; dy <= this.tileSize * 2; dy++) {
-            body.y -= 1;
-            if (!this._bodyOverlapsSolid(body)) { body.vy = 0; return; }
-        }
-        body.y += this.tileSize * 2; // restore
+        let ox = body.x;
+        let oy = body.y;
 
-        // Spiral search: find nearest free position
-        const ox = body.x, oy = body.y;
-        for (let radius = 1; radius <= this.tileSize * 3; radius++) {
-            // Try 8 directions at this radius
-            for (let a = 0; a < 8; a++) {
-                const angle = a * Math.PI / 4;
-                body.x = ox + Math.cos(angle) * radius;
-                body.y = oy + Math.sin(angle) * radius;
+        const headHit = this._testCeiling(body);
+        const footHit = this._testPoint(ox, oy + body.halfH - 2);
+
+        // 1. Head overlapping solid ceiling -> push DOWN at most 8px (never slam down across ledges)
+        if (headHit && !footHit) {
+            for (let dy = 1; dy <= 8; dy++) {
+                body.y = oy + dy;
+                if (!this._testCeiling(body) && !this._testPoint(body.x, body.y)) {
+                    if (body.vy < 0) body.vy = 0;
+                    oy = body.y;
+                    break;
+                }
+            }
+            if (!this._bodyOverlapsSolid(body)) return;
+            body.y = oy;
+        }
+
+        // 2. Foot overlapping floor or slope -> push UP only
+        if (footHit && !headHit) {
+            for (let dy = 1; dy <= 28; dy++) {
+                body.y = oy - dy;
                 if (!this._bodyOverlapsSolid(body)) {
-                    body.vx = 0; body.vy = 0;
+                    if (body.vy > 0) {
+                        body.vy = 0;
+                        body.grounded = true;
+                    }
+                    return;
+                }
+            }
+            body.y = oy;
+        }
+
+        // 3. Side wall sensor overlap -> push away from the specific wall that was hit
+        const upperY = oy - body.halfH + 4;
+        const leftHit = this._testPoint(ox - body.halfW, oy) || this._testWallPoint(ox - body.halfW, upperY);
+        const rightHit = this._testPoint(ox + body.halfW - 0.01, oy) || this._testWallPoint(ox + body.halfW - 0.01, upperY);
+
+        if (leftHit && !rightHit) {
+            for (let dx = 1; dx <= 28; dx++) {
+                body.x = ox + dx;
+                if (!this._collidesWall(body)) {
+                    if (body.vx < 0) body.vx = 0;
+                    if (!this._bodyOverlapsSolid(body)) return;
+                    ox = body.x;
+                    break;
+                }
+            }
+            body.x = ox;
+        } else if (rightHit && !leftHit) {
+            for (let dx = 1; dx <= 28; dx++) {
+                body.x = ox - dx;
+                if (!this._collidesWall(body)) {
+                    if (body.vx > 0) body.vx = 0;
+                    if (!this._bodyOverlapsSolid(body)) return;
+                    ox = body.x;
+                    break;
+                }
+            }
+            body.x = ox;
+        }
+
+        if (!this._bodyOverlapsSolid(body)) return;
+
+        // 4. Fallback short-range search (prefer upward and horizontal before downward; max 16px)
+        const dirs = [
+            [0, -1], [-1, 0], [1, 0],
+            [-0.707, -0.707], [0.707, -0.707],
+            [0, 1], [-0.707, 0.707], [0.707, 0.707]
+        ];
+
+        for (let r = 1; r <= 16; r++) {
+            for (const [dx, dy] of dirs) {
+                body.x = Math.round(ox + dx * r);
+                body.y = Math.round(oy + dy * r);
+                if (!this._bodyOverlapsSolid(body)) {
+                    if (dx !== 0 && dy === 0) body.vx = 0;
+                    if (dy !== 0 && dx === 0) body.vy = 0;
                     return;
                 }
             }
         }
-        // Absolute fallback: restore position (shouldn't happen)
-        body.x = ox; body.y = oy;
+        body.x = ox;
+        body.y = oy;
     }
 
     /**
-     * Check if any of body's 4 corners or center overlap solid geometry.
+     * Check if body's core sensors overlap solid geometry.
+     * Uses center + center foot (inset 2px) + Sonic center-height wall sensors + head ceiling sensors.
      */
     _bodyOverlapsSolid(body) {
-        const hw = body.halfW - 1, hh = body.halfH - 1; // 1px inset to avoid edge touching
-        return this._testPoint(body.x, body.y) ||                  // center
-               this._testPoint(body.x - hw, body.y - hh) ||        // top-left
-               this._testPoint(body.x + hw, body.y - hh) ||        // top-right
-               this._testPoint(body.x - hw, body.y + hh) ||        // bottom-left
-               this._testPoint(body.x + hw, body.y + hh);          // bottom-right
+        return this._testPoint(body.x, body.y) ||                        // center
+               this._testPoint(body.x, body.y + body.halfH - 2) ||       // center foot (inset 2px)
+               this._collidesWall(body) ||                               // left/right center & shoulder wall sensors
+               this._testCeiling(body);                                  // head ceiling sensors
     }
 
     // ==========================================
@@ -281,14 +358,18 @@ export class SimplePhysicsWorld {
     /**
      * Test if a world-space point is inside solid geometry.
      * Solid = full solid tile (-1) OR below a slope surface.
-     * Analog of Teeworlds CheckPoint + Sonic sensor.
+     * Timber bridges (-2) are one-way top surfaces (only solid for raycasts/hooks when includeBridges=true).
      */
-    _testPoint(px, py) {
+    _testPoint(px, py, includeBridges = false) {
         const ts = this.tileSize;
         const tx = Math.floor(px / ts);
         const ty = Math.floor(py / ts);
         const tile = this._getTile(tx, ty);
         if (tile === -1) return true;
+        if (includeBridges && tile === -2) {
+            const localY = py - ty * ts;
+            return localY >= 0 && localY <= 26;
+        }
         if (tile > 0) {
             const heights = this.slopeHeights.get(tile);
             if (heights) {
@@ -304,7 +385,7 @@ export class SimplePhysicsWorld {
      * Sonic-style ground sensor: find the ground surface Y at (sensorX, sensorY).
      * Uses Sonic's regress/extend rules:
      * - Slope tile: read height array directly
-     * - Solid tile (-1): regress — check tile ABOVE for slope (more precise surface)
+     * - Solid tile (-1) or Bridge slab (-2): regress — check tile ABOVE for slope (more precise surface)
      * - Empty tile (0): extend — check tile BELOW for ground
      * Returns surfaceY or null if no ground within maxDist.
      */
@@ -324,23 +405,26 @@ export class SimplePhysicsWorld {
             }
         }
 
-        // Solid tile: regress — check slope in tile ABOVE first (Sonic rule)
-        if (tile === -1) {
-            const above = this._getTile(tx, ty - 1);
-            if (above > 0) {
-                const h = this.slopeHeights.get(above);
-                if (h) {
-                    const surfY = (ty - 1) * ts + this._sampleHeight(h, localX);
-                    if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
-                }
+        // Regress: check slope in tile ABOVE first (within maxDist only!)
+        const above = this._getTile(tx, ty - 1);
+        if (above > 0) {
+            const h = this.slopeHeights.get(above);
+            if (h) {
+                const surfY = (ty - 1) * ts + this._sampleHeight(h, localX);
+                if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
             }
-            // No slope above — surface is solid tile top
-            const surfY = ty * ts;
-            if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
         }
 
-        // Empty tile: extend — check tile BELOW for ground (Sonic rule)
-        if (tile === 0) {
+        // Solid tile (-1) or Bridge slab (-2) top surface (only if tile above is air or bridge)
+        if (tile === -1 || tile === -2) {
+            if (above === 0 || above === -2) {
+                const surfY = ty * ts;
+                if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
+            }
+        }
+
+        // Empty tile (or bottom air of a bridge tile): extend — check tile BELOW for ground (Sonic rule)
+        if (tile === 0 || tile === -2) {
             const below = this._getTile(tx, ty + 1);
             if (below > 0) {
                 const h = this.slopeHeights.get(below);
@@ -349,7 +433,7 @@ export class SimplePhysicsWorld {
                     if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
                 }
             }
-            if (below === -1) {
+            if (below === -1 || below === -2) {
                 const surfY = (ty + 1) * ts;
                 if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
             }
@@ -359,33 +443,134 @@ export class SimplePhysicsWorld {
     }
 
     /**
-     * Wall collision: 2 sensors at body CENTER height (Sonic push sensors).
-     * Center-height sensors naturally avoid structural tiles next to slopes
-     * because at center height, those tiles are slope tiles (not solid).
+     * Dual-foot + center ground sensor for a body:
+     * 1. First checks the center sensor (body.x) which handles both flat tiles and 45° slopes seamlessly.
+     * 2. If the center sensor is over empty air, checks the left foot and right foot
+     *    against flat solid/bridge ledges so the character never drops off platform edges early!
+     */
+    _findBodyGround(body, footY, maxDist) {
+        const centerGround = this._findGroundAt(body.x, footY, maxDist);
+        if (centerGround !== null) return centerGround;
+
+        // Always check full-width bridge ledges (-2) so standing/landing on bridge ends never drops through!
+        const bridgeLeft = this._findBridgeLedgeAt(body.x - body.halfW + 3, footY, maxDist);
+        const bridgeRight = this._findBridgeLedgeAt(body.x + body.halfW - 3, footY, maxDist);
+        if (bridgeLeft !== null && bridgeRight !== null) return Math.min(bridgeLeft, bridgeRight);
+        if (bridgeLeft !== null) return bridgeLeft;
+        if (bridgeRight !== null) return bridgeRight;
+
+        // If body is currently on or overlapping a slope tile at feet, let center sensor govern
+        const ts = this.tileSize;
+        const centerTx = Math.floor(body.x / ts);
+        const footTy = Math.floor(footY / ts);
+        if (this._getTile(centerTx, footTy) > 0 || this._getTile(centerTx, footTy - 1) > 0 || this._getTile(centerTx, footTy + 1) > 0) {
+            return null;
+        }
+
+        const footInset = 4;
+        const leftX = body.x - body.halfW + footInset;
+        const rightX = body.x + body.halfW - footInset;
+
+        const leftLedge = this._findFlatLedgeAt(leftX, footY, maxDist);
+        const rightLedge = this._findFlatLedgeAt(rightX, footY, maxDist);
+
+        if (leftLedge !== null && rightLedge !== null) {
+            return Math.min(leftLedge, rightLedge);
+        }
+        return leftLedge !== null ? leftLedge : rightLedge;
+    }
+
+    /**
+     * Checks if there is a bridge (-2) top surface at (sensorX, sensorY) within maxDist.
+     */
+    _findBridgeLedgeAt(sensorX, sensorY, maxDist) {
+        const ts = this.tileSize;
+        const tx = Math.floor(sensorX / ts);
+        const ty = Math.floor(sensorY / ts);
+        const tile = this._getTile(tx, ty);
+
+        if (tile === -2 && this._getTile(tx, ty - 1) === 0) {
+            const surfY = ty * ts;
+            if (Math.abs(sensorY - surfY) <= maxDist) {
+                return surfY;
+            }
+        }
+        if (tile === 0 && this._getTile(tx, ty + 1) === -2) {
+            const surfY = (ty + 1) * ts;
+            if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
+        }
+        return null;
+    }
+
+    /**
+     * Checks if there is a flat solid (-1) or bridge (-2) top surface at (sensorX, sensorY)
+     * that is NOT a foundation tile underneath a slope or vertical wall.
+     */
+    _findFlatLedgeAt(sensorX, sensorY, maxDist) {
+        const ts = this.tileSize;
+        const tx = Math.floor(sensorX / ts);
+        const ty = Math.floor(sensorY / ts);
+        const tile = this._getTile(tx, ty);
+
+        if (tile === -1 || tile === -2) {
+            // Only treat as a walkable ledge top if the tile above is empty air (0)
+            if (this._getTile(tx, ty - 1) === 0) {
+                const surfY = ty * ts;
+                if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
+            }
+        }
+        if (tile === 0 || tile === -2) {
+            const below = this._getTile(tx, ty + 1);
+            if ((below === -1 || below === -2) && this._getTile(tx, ty) === 0) {
+                const surfY = (ty + 1) * ts;
+                if (Math.abs(sensorY - surfY) <= maxDist) return surfY;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Test if a point hits a solid rock wall/ceiling (-1).
+     * Timber bridges (-2) are pass-through from below/sides so players never get slammed downward on bridges.
+     */
+    _testWallPoint(px, py) {
+        const ts = this.tileSize;
+        const tx = Math.floor(px / ts);
+        const ty = Math.floor(py / ts);
+        return this._getTile(tx, ty) === -1;
+    }
+
+    /**
+     * Wall collision: sensors at body CENTER height AND upper shoulder height (halfH - 4).
+     * Checking upper shoulder against solid rock (-1) prevents walking the head sideways into an
+     * overhang and getting pushed downward by ceiling collision!
      */
     _collidesWall(body) {
         const cy = body.y;
         if (this._testPoint(body.x - body.halfW, cy)) return true;
         if (this._testPoint(body.x + body.halfW - 0.01, cy)) return true;
+
+        const upperY = body.y - body.halfH + 4;
+        if (this._testWallPoint(body.x - body.halfW, upperY)) return true;
+        if (this._testWallPoint(body.x + body.halfW - 0.01, upperY)) return true;
+
         return false;
     }
 
     /**
-     * Ceiling collision: 2 sensors at head, ONLY solid tiles (-1).
-     * Slopes are transparent to upward movement.
+     * Ceiling collision: bevelled sensors at head checking solid rock (-1).
+     * Inset by 6px inside the upper wall sensors so grazing a vertical wall while jumping up
+     * never triggers a false ceiling hit!
      */
     _testCeiling(body) {
-        const ts = this.tileSize;
         const headY = body.y - body.halfH;
-        const sensorL = body.x - body.halfW * 0.8;
-        const sensorR = body.x + body.halfW * 0.8;
+        const inset = Math.max(10, body.halfW - 6);
+        const sensorL = body.x - inset;
+        const sensorR = body.x + inset;
 
-        const tyL = Math.floor(headY / ts);
-        const txL = Math.floor(sensorL / ts);
-        if (this._getTile(txL, tyL) === -1) return true;
-
-        const txR = Math.floor(sensorR / ts);
-        if (this._getTile(txR, tyL) === -1) return true;
+        if (this._testWallPoint(body.x, headY)) return true;
+        if (this._testWallPoint(sensorL, headY)) return true;
+        if (this._testWallPoint(sensorR, headY)) return true;
 
         return false;
     }
@@ -438,8 +623,8 @@ export class SimplePhysicsWorld {
 
     /**
      * Move body horizontally one pixel at a time.
-     * Wall: sensor at body center (Sonic push sensors).
-     * Ground follow: sensor at feet with SNAP_DOWN tolerance.
+     * Wall: Sonic center push sensors.
+     * Ground follow: dual-foot + center ground sensor with SNAP_DOWN tolerance.
      */
     _pixelMoveX(body, amount) {
         if (amount === 0) return;
@@ -461,7 +646,7 @@ export class SimplePhysicsWorld {
             // Ground follow: only when grounded and not jumping (vy >= 0)
             if (wasGrounded && body.vy >= 0) {
                 const footY = body.y + body.halfH;
-                const ground = this._findGroundAt(body.x, footY, this.SNAP_DOWN);
+                const ground = this._findBodyGround(body, footY, this.SNAP_DOWN);
                 if (ground !== null) {
                     body.y = ground - body.halfH;
                     body.grounded = true;
@@ -476,7 +661,36 @@ export class SimplePhysicsWorld {
                         return;
                     }
                 } else {
+                    body.grounded = false;
                     body.onSlope = false;
+                }
+            } else {
+                // Airborne upward slope glide: ONLY if center foot is directly inside a slope tile at (tx, ty)
+                const footY = body.y + body.halfH;
+                const ts = this.tileSize;
+                const tx = Math.floor(body.x / ts);
+                const ty = Math.floor((footY - 1) / ts);
+                const tile = this._getTile(tx, ty);
+                if (tile > 0) {
+                    const h = this.slopeHeights.get(tile);
+                    if (h) {
+                        const localX = Math.max(0, Math.min(ts - 1, body.x - tx * ts));
+                        const slopeY = ty * ts + this._sampleHeight(h, localX);
+                        if (footY > slopeY && footY - slopeY <= 12) {
+                            body.y = slopeY - body.halfH;
+                            if (this._collidesWall(body) || this._testCeiling(body)) {
+                                body.x -= sign;
+                                body.y = oldY;
+                                body.vx = 0;
+                                return;
+                            }
+                            if (body.vy > 0) {
+                                body.grounded = true;
+                                body.onSlope = true;
+                                body.vy = 0;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -484,8 +698,8 @@ export class SimplePhysicsWorld {
 
     /**
      * Move body vertically one pixel at a time.
-     * Falling (sign>0): ground sensor catches slopes AND solids.
-     * Jumping (sign<0): ceiling sensor checks ONLY solid tiles.
+     * Falling (sign>0): ground sensor catches slopes, bridges, AND solid ledges.
+     * Jumping (sign<0): ceiling sensor checks solid tiles and bridge beams.
      */
     _pixelMoveY(body, amount) {
         if (amount === 0) return;
@@ -496,9 +710,8 @@ export class SimplePhysicsWorld {
             body.y += sign;
 
             if (sign > 0) {
-                // Falling: ground sensor
                 const footY = body.y + body.halfH;
-                const ground = this._findGroundAt(body.x, footY, 3);
+                const ground = this._findBodyGround(body, footY, 5);
                 if (ground !== null && footY >= ground) {
                     body.y = ground - body.halfH;
                     body.grounded = true;
@@ -506,15 +719,14 @@ export class SimplePhysicsWorld {
                     body.onSlope = this._isSlopeTileAt(body.x, ground);
                     return;
                 }
-                // Safety net: foot inside solid but _findGroundAt missed
                 if (this._testPoint(body.x, footY)) {
                     body.y -= sign;
                     body.grounded = true;
                     body.vy = 0;
+                    body.onSlope = this._isSlopeTileAt(body.x, body.y + body.halfH);
                     return;
                 }
             } else {
-                // Jumping: ceiling check (ONLY solid tiles at head)
                 if (this._testCeiling(body)) {
                     body.y -= sign;
                     body.vy = 0;
@@ -523,7 +735,10 @@ export class SimplePhysicsWorld {
             }
         }
 
-        if (sign > 0) body.grounded = false;
+        if (sign > 0) {
+            body.grounded = false;
+            body.onSlope = false;
+        }
     }
 
     // ==========================================
@@ -538,11 +753,11 @@ export class SimplePhysicsWorld {
 
     /**
      * Tile-level solid check (backward compat for GameScene spawn logic).
-     * Returns true if tile is solid (-1) or slope (>0).
+     * Returns true if tile is solid (-1), bridge (-2), or slope (>0).
      */
     _isSolid(tx, ty) {
         const tile = this._getTile(tx, ty);
-        return tile === -1 || tile > 0;
+        return tile === -1 || tile === -2 || tile > 0;
     }
 
     _getSlopeHeights(tx, ty) {
@@ -556,94 +771,77 @@ export class SimplePhysicsWorld {
     // ==========================================
 
     isGrounded(body) {
+        if (body.vy < -10) return false;
         const footY = body.y + body.halfH + 1;
-        const ground = this._findGroundAt(body.x, footY, 3);
-        return ground !== null && Math.abs(footY - ground) < 3;
+        const ground = this._findBodyGround(body, footY, 5);
+        return ground !== null && Math.abs(footY - ground) <= 5;
     }
 
     // ==========================================
-    // RAYCAST
+    // RAYCAST (Sub-Tile Exact Surface Raymarch)
     // ==========================================
 
+    /**
+     * Exact sub-tile raycast using _testPoint (respects 45° slope diagonals
+     * and 26px timber bridge slabs so hooks never attach to empty air!).
+     */
     raycast(x1, y1, x2, y2) {
-        const startTX = Math.floor(x1 / this.tileSize);
-        const startTY = Math.floor(y1 / this.tileSize);
-        const endTX = Math.floor(x2 / this.tileSize);
-        const endTY = Math.floor(y2 / this.tileSize);
-
-        let tx = startTX;
-        let ty = startTY;
-        const dx = Math.abs(endTX - startTX);
-        const dy = Math.abs(endTY - startTY);
-        const sx = startTX < endTX ? 1 : -1;
-        const sy = startTY < endTY ? 1 : -1;
-        let err = dx - dy;
-
         const dirX = x2 - x1;
         const dirY = y2 - y1;
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
+        const len = Math.hypot(dirX, dirY);
+        if (len < 0.5) return null;
+
         const normX = dirX / len;
         const normY = dirY / len;
+        const step = 4; // 4px step + 4-step binary refinement = 0.25px accuracy
+        const numSteps = Math.ceil(len / step);
 
-        while (true) {
-            if (this._testPoint(tx * this.tileSize + this.tileSize / 2, ty * this.tileSize + this.tileSize / 2)) {
-                const tileL = tx * this.tileSize;
-                const tileR = (tx + 1) * this.tileSize;
-                const tileT = ty * this.tileSize;
-                const tileB = (ty + 1) * this.tileSize;
+        // If the start point is already touching a slope/surface, wait until ray enters air
+        let enteredAir = !this._testPoint(x1, y1, true);
+        let prevX = x1;
+        let prevY = y1;
 
-                let hitX = tx * this.tileSize + this.tileSize / 2;
-                let hitY = ty * this.tileSize + this.tileSize / 2;
+        for (let i = 1; i <= numSteps; i++) {
+            const d = Math.min(len, i * step);
+            const rx = x1 + normX * d;
+            const ry = y1 + normY * d;
+            const hit = this._testPoint(rx, ry, true);
 
-                if (normX !== 0) {
-                    const tEdge = normX > 0 ? tileL : tileR;
-                    const t = (tEdge - x1) / normX;
-                    if (t > 0) {
-                        const testY = y1 + normY * t;
-                        if (testY >= tileT && testY <= tileB) {
-                            hitX = tEdge;
-                            hitY = testY;
-                        }
+            if (!enteredAir) {
+                if (!hit) {
+                    enteredAir = true;
+                }
+                prevX = rx;
+                prevY = ry;
+                continue;
+            }
+
+            if (hit) {
+                // Binary search between free (prevX, prevY) and solid (rx, ry) for exact surface hit
+                let ax = prevX, ay = prevY;
+                let bx = rx, by = ry;
+                for (let b = 0; b < 4; b++) {
+                    const mx = (ax + bx) * 0.5;
+                    const my = (ay + by) * 0.5;
+                    if (this._testPoint(mx, my, true)) {
+                        bx = mx;
+                        by = my;
+                    } else {
+                        ax = mx;
+                        ay = my;
                     }
                 }
-                if (normY !== 0) {
-                    const tEdge = normY > 0 ? tileT : tileB;
-                    const t = (tEdge - y1) / normY;
-                    if (t > 0) {
-                        const testX = x1 + normX * t;
-                        if (testX >= tileL && testX <= tileR) {
-                            const distX = hitX - x1;
-                            const distY = hitY - y1;
-                            const distNew = Math.abs(t);
-                            const distOld = Math.sqrt(distX * distX + distY * distY);
-                            if (distNew < distOld) {
-                                hitX = testX;
-                                hitY = tEdge;
-                            }
-                        }
-                    }
-                }
-
                 return {
                     hit: true,
-                    x: hitX,
-                    y: hitY,
-                    tileX: tx,
-                    tileY: ty
+                    x: Math.round(bx * 10) / 10,
+                    y: Math.round(by * 10) / 10,
+                    tileX: Math.floor(bx / this.tileSize),
+                    tileY: Math.floor(by / this.tileSize)
                 };
             }
 
-            if (tx === endTX && ty === endTY) break;
-
-            const e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                tx += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                ty += sy;
-            }
+            prevX = rx;
+            prevY = ry;
         }
 
         return null;

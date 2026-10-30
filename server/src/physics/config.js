@@ -1,21 +1,21 @@
 // Server-side physics config (mirror of www/js/config.js)
 export const PHYS = {
     GRAVITY: 1200,
-    GROUND_ACCEL: 0.40,
-    AIR_ACCEL: 0.08,
-    GROUND_FRICTION: 0.80,
-    JUMP_FORCE: -710,
-    MAX_SPEED_X: 420,
-    MAX_SPEED_Y: 900,
-    HOOK_SPEED: 25,
-    HOOK_RANGE: 500,
-    HOOK_DRAG_ACCEL: 7200,
-    HOOK_DRAG_SPEED: 600,
+    GROUND_ACCEL: 0.42,
+    AIR_ACCEL: 0.14,
+    GROUND_FRICTION: 0.82,
+    JUMP_FORCE: -780,
+    MAX_SPEED_X: 480,
+    MAX_SPEED_Y: 920,
+    HOOK_SPEED: 32,
+    HOOK_RANGE: 660,
+    HOOK_DRAG_ACCEL: 7600,
+    HOOK_DRAG_SPEED: 680,
     HOOK_DRAG_MIN_DIST: 46,
-    HOOK_COOLDOWN: 300,
+    HOOK_COOLDOWN: 240,
     SNOWBALL_SPEED: 720,
     SNOWBALL_DAMAGE: 10,
-    KNOCKBACK_FORCE: 1.2,
+    KNOCKBACK_FORCE: 220,
     SNOWBALL_GRAVITY_SCALE: 0.5,
     SNOWBALL_BOUNCE: 0.3,
     SNOWBALL_LIFETIME: 3000,
@@ -37,3 +37,18 @@ export const GAME = {
     HEALTH_PER_HEART: 20,
     WINS_TO_WIN: 3
 };
+
+export const PICKUPS = {
+    health:     { type: 'health', heal: 25, duration: 0 },
+    fire:       { type: 'fire', damageMultiplier: 2, duration: 10000 },
+    speed:      { type: 'speed', speedMultiplier: 1.5, duration: 8000 },
+    shield:     { type: 'shield', damageReduction: 0.5, duration: 8000 },
+    doublejump: { type: 'doublejump', duration: 12000 },
+    RESPAWN_TIME: 15000
+};
+
+export const BOT_NAMES = [
+    'Сырный Барон', 'Пушистик', 'Снежок', 'Хвостик', 'Усатый Нинзя',
+    'Пискун', 'Шустрик', 'Зубастик', 'Малыш Чиз', 'Серый Шкет',
+    'Бублик', 'Крошка', 'Топотун', 'Ушастый', 'Норушка'
+];

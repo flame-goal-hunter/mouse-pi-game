@@ -188,46 +188,78 @@ export class BootScene extends Phaser.Scene {
             console.error('[BootScene] Failed to load:', file.key, file.src);
         });
 
-        // === TILEMAP ===
-        this.load.image('ice-tiles', 'assets/snow/sheet.png');
-        this.load.tilemapTiledJSON('ice-map', 'assets/maps/ice-arena.json');
+        // === TILEMAP (cache-busted so updated sheet.png and ice-arena.json always match) ===
+        const assetVer = Date.now();
+        this.load.image('ice-tiles', `assets/snow/sheet.png?_v=${assetVer}`);
+        this.load.tilemapTiledJSON('ice-map', `assets/maps/ice-arena.json?_v=${assetVer}`);
         this.load.image('bg', 'assets/bg.png');
 
-        // === BUNNY PLAYER SPRITES (individual images) ===
-        // Player 1 - Brown bunny
-        this.load.image('p1-stand', 'assets/characters/bunny1/bunny1_stand.png');
-        this.load.image('p1-walk1', 'assets/characters/bunny1/bunny1_walk1.png');
-        this.load.image('p1-walk2', 'assets/characters/bunny1/bunny1_walk2.png');
-        this.load.image('p1-jump', 'assets/characters/bunny1/bunny1_jump.png');
-        this.load.image('p1-hurt', 'assets/characters/bunny1/bunny1_hurt.png');
+        // === MOUSIE PI PLAYER SPRITES (individual images, cache-busted) ===
+        // Player 1 - Мышонок Пи (Sky-Blue Mouse Pi)
+        this.load.image('p1-stand', `assets/characters/bunny1/bunny1_stand.png?_v=${assetVer}`);
+        this.load.image('p1-walk1', `assets/characters/bunny1/bunny1_walk1.png?_v=${assetVer}`);
+        this.load.image('p1-walk2', `assets/characters/bunny1/bunny1_walk2.png?_v=${assetVer}`);
+        this.load.image('p1-jump', `assets/characters/bunny1/bunny1_jump.png?_v=${assetVer}`);
+        this.load.image('p1-hurt', `assets/characters/bunny1/bunny1_hurt.png?_v=${assetVer}`);
 
-        // Player 2 - Gray bunny
-        this.load.image('p2-stand', 'assets/characters/bunny2/bunny2_stand.png');
-        this.load.image('p2-walk1', 'assets/characters/bunny2/bunny2_walk1.png');
-        this.load.image('p2-walk2', 'assets/characters/bunny2/bunny2_walk2.png');
-        this.load.image('p2-jump', 'assets/characters/bunny2/bunny2_jump.png');
-        this.load.image('p2-hurt', 'assets/characters/bunny2/bunny2_hurt.png');
+        // Player 2 - Мышонок Пу (Warm TF2 RED / Amber-Gold Mouse Pu)
+        this.load.image('p2-stand', `assets/characters/bunny2/bunny2_stand.png?_v=${assetVer}`);
+        this.load.image('p2-walk1', `assets/characters/bunny2/bunny2_walk1.png?_v=${assetVer}`);
+        this.load.image('p2-walk2', `assets/characters/bunny2/bunny2_walk2.png?_v=${assetVer}`);
+        this.load.image('p2-jump', `assets/characters/bunny2/bunny2_jump.png?_v=${assetVer}`);
+        this.load.image('p2-hurt', `assets/characters/bunny2/bunny2_hurt.png?_v=${assetVer}`);
 
-        // Player 3 - Use brown bunny with different tint (will be tinted in game)
-        this.load.image('p3-stand', 'assets/characters/bunny1/bunny1_stand.png');
-        this.load.image('p3-walk1', 'assets/characters/bunny1/bunny1_walk1.png');
-        this.load.image('p3-walk2', 'assets/characters/bunny1/bunny1_walk2.png');
-        this.load.image('p3-jump', 'assets/characters/bunny1/bunny1_jump.png');
-        this.load.image('p3-hurt', 'assets/characters/bunny1/bunny1_hurt.png');
+        // Player 3 - Мышонок Пи with team tint
+        this.load.image('p3-stand', `assets/characters/bunny1/bunny1_stand.png?_v=${assetVer}`);
+        this.load.image('p3-walk1', `assets/characters/bunny1/bunny1_walk1.png?_v=${assetVer}`);
+        this.load.image('p3-walk2', `assets/characters/bunny1/bunny1_walk2.png?_v=${assetVer}`);
+        this.load.image('p3-jump', `assets/characters/bunny1/bunny1_jump.png?_v=${assetVer}`);
+        this.load.image('p3-hurt', `assets/characters/bunny1/bunny1_hurt.png?_v=${assetVer}`);
 
         // === INDIVIDUAL SPRITES ===
         this.load.image('snowball', 'assets/ice/tiles/snowBall.png');
         this.load.image('water-tile', 'assets/ice/tiles/iceWaterDeep.png');
+        this.load.image('water-surface', 'assets/ice/tiles/iceWater.png');
 
-        // === SOUND EFFECTS ===
-        this.load.audio('sfx-snowball-shot', 'assets/sounds/snowball-shot.wav');
-        this.load.audio('sfx-snowball-hit', 'assets/sounds/snowball-hit.ogg');
-        this.load.audio('sfx-hook-fired', 'assets/sounds/hook-fired.wav');
-        this.load.audio('sfx-hook-attached', 'assets/sounds/hook-attached.wav');
-        this.load.audio('sfx-jump', 'assets/sounds/jump.mp3');
+        // === WINTER PARALLAX & SCENIC PROPS ===
+        this.load.image('winter-bg', 'assets/winter/BG/BG.png');
+        this.load.image('prop-snowman', 'assets/winter/Object/SnowMan.png');
+        this.load.image('prop-igloo', 'assets/winter/Object/Igloo.png');
+        this.load.image('prop-tree1', 'assets/winter/Object/Tree_1.png');
+        this.load.image('prop-tree2', 'assets/winter/Object/Tree_2.png');
+        this.load.image('prop-crystal', 'assets/winter/Object/Crystal.png');
+        this.load.image('prop-icebox', 'assets/winter/Object/IceBox.png');
+        this.load.image('prop-crate', 'assets/winter/Object/Crate.png');
+        this.load.image('prop-stone', 'assets/winter/Object/Stone.png');
+        this.load.image('prop-sign1', 'assets/winter/Object/Sign_1.png');
+        this.load.image('prop-sign2', 'assets/winter/Object/Sign_2.png');
 
-        // === MENU MUSIC ===
+        // === SOUND EFFECTS (cache-busted new cartoon SFX) ===
+        this.load.audio('sfx-snowball-shot', `assets/sounds/snowball-shot.wav?_v=${assetVer}`);
+        this.load.audio('sfx-snowball-hit', `assets/sounds/snowball-hit.wav?_v=${assetVer}`);
+        this.load.audio('sfx-hook-fired', `assets/sounds/hook-fired.wav?_v=${assetVer}`);
+        this.load.audio('sfx-hook-attached', `assets/sounds/hook-attached.wav?_v=${assetVer}`);
+        this.load.audio('sfx-jump', `assets/sounds/jump-cartoon.wav?_v=${assetVer}`);
+
+        // === EXTRA ARCADE JUICE SFX (Kenney CC0 pack) ===
+        this.load.audio('sfx-powerup', 'assets/audio/sfx/powerup.ogg');
+        this.load.audio('sfx-heart', 'assets/audio/sfx/heart.ogg');
+        this.load.audio('sfx-throw-a', 'assets/audio/sfx/throw_a.ogg');
+        this.load.audio('sfx-throw-b', 'assets/audio/sfx/throw_b.ogg');
+        this.load.audio('sfx-hit-a', 'assets/audio/sfx/hit_enemy_a.ogg');
+        this.load.audio('sfx-hit-b', 'assets/audio/sfx/hit_enemy_b.ogg');
+        this.load.audio('sfx-hit-c', 'assets/audio/sfx/hit_enemy_c.ogg');
+        this.load.audio('sfx-hit-wall', 'assets/audio/sfx/hit_wall_a.ogg');
+        this.load.audio('sfx-ko', 'assets/audio/sfx/enemy_death_a.ogg');
+        this.load.audio('sfx-sting-win', 'assets/audio/sfx/sting_win.ogg');
+        this.load.audio('sfx-sting-lose', 'assets/audio/sfx/sting_lose.ogg');
+        this.load.audio('sfx-sting-round', 'assets/audio/sfx/sting_floor.ogg');
+        this.load.audio('sfx-dash', 'assets/audio/sfx/dash.ogg');
+        this.load.audio('sfx-coins', 'assets/audio/sfx/coins.ogg');
+
+        // === MENU & ARENA MUSIC ===
         this.load.audio('bgm-menu', 'assets/sounds/KleptoLindaCavernsA_Loopable.ogg');
+        this.load.audio('bgm-snowball', `assets/sounds/snowball-arena-bgm.wav?_v=${assetVer}`);
 
         // Rex plugins removed - using nipplejs for joystick, worldView for UI positioning
     }

@@ -52,14 +52,18 @@ export class Pickup {
         if (this.collected) return;
         this.collected = true;
 
-        // Play sound with spatial audio (using jump sound as pickup sound)
+        // Play distinct pickup sound with spatial audio
         if (this.scene.playSpatialSound) {
-            this.scene.playSpatialSound('sfx-jump', this.emoji.x, this.emoji.y, 0.5);
+            const sfxKey = this.type === 'health' ? 'sfx-heart' : 'sfx-powerup';
+            this.scene.playSpatialSound(sfxKey, this.emoji.x, this.emoji.y, 0.65);
         }
 
         // Apply effect (null character = network-triggered, visual only)
         if (character) {
             this.applyEffect(character);
+            if (this.scene.onPickupCollected) {
+                this.scene.onPickupCollected(character, this.type, this.config, this.emoji.x, this.emoji.y);
+            }
         }
 
         // Collection animation

@@ -4,7 +4,7 @@
 // Teeworlds-style movement with deterministic SimplePhysicsWorld.
 // Hook uses manual distance constraint.
 
-import { PHYS } from '../config.js';
+import { PHYS } from '../config.js?v=20261030_3';
 
 export class CharacterCore {
     constructor() {
@@ -32,6 +32,7 @@ export class CharacterCore {
         this.hookAnchorPos = null;  // { x, y } — anchor coordinates
         this.hookCooldown = 0;
         this._prevHookInput = false;  // Teeworlds-style edge detection (replaces hookJustPressed)
+        this._hookHoldMs = 0;         // Tracks how long hook key/button is held for Teeworlds hold-to-hook
 
         // Sound suppression (true for guest prediction — sounds come from host events)
         this.suppressSounds = false;
@@ -79,6 +80,7 @@ export class CharacterCore {
         if (!this.body || !this.scene) return { grounded: false, onRope: false };
 
         // Update timers
+        this.lastJumpType = null;
         this.hookCooldown = Math.max(0, this.hookCooldown - delta);
         this.jumpBuffer = Math.max(0, this.jumpBuffer - delta);
         this.coyoteTime = Math.max(0, this.coyoteTime - delta);
@@ -93,53 +95,85 @@ export class CharacterCore {
             this.airJumpUsed = false;
         }
 
-        // Buffer jump input
-        if (input.jump && !this.jumpHeld) {
+        // Buffer jump input (supports both continuous edge detection AND explicit jumpJustPressed pulse)
+        if ((input.jump && !this.jumpHeld) || input.jumpJustPressed) {
             this.jumpBuffer = PHYS.JUMP_BUFFER;
+        }
+        // Keep jumpBuffer alive while hook is in flight so pressing jump slightly before hook attaches still jumps!
+        if (this.hookState === 'FLYING' && this.jumpBuffer > 0 && input.jump) {
+            this.jumpBuffer = Math.max(this.jumpBuffer, 60);
         }
         this._prevJumpHeld = this.jumpHeld;
         this.jumpHeld = input.jump;
 
-        // Process hook
+        // Process hook (Teeworlds elastic drag model)
         const onRope = this.processHook(input, delta);
 
-        // Process jump (only if not on rope)
-        if (!onRope) {
-            this.processJump(input);
-        }
+        // Process jump (always works on rope even if airJump was used prior to hooking!)
+        this.processJump(input, onRope);
 
-        // Process movement
-        this.processMovement(input, delta, onRope);
+        // Process movement (Teeworlds runs normal air/ground movement alongside hook drag!)
+        this.processMovement(input, delta, this.hookState === 'ATTACHED');
 
-        // Limit velocity
-        this.limitVelocity();
+        // Limit velocity (preserving air/rope swing momentum)
+        this.limitVelocity(this.hookState === 'ATTACHED');
 
-        return { grounded: this.grounded, onRope };
+        return { grounded: this.grounded, onRope: this.hookState === 'ATTACHED' };
     }
 
     /**
-     * Process jump input
+     * Process jump input (with variable jump height, rope launch jump & Teeworlds double-jump)
      */
-    processJump(input) {
-        // Double jump always available (Teeworlds-style)
-        const canAirJump = !this.grounded &&
-                           !this.airJumpUsed &&
-                           this.jumpBuffer > 0;
+    processJump(input, onRope = false) {
+        // Variable jump cut: releasing jump early while rising fast gives a controlled hop
+        if (!input.jump && this._prevJumpHeld && !this.grounded && !onRope && this.body.vy < -280) {
+            this.body.vy *= 0.72;
+        }
 
-        const canJumpNow = (this.grounded || this.coyoteTime > 0) &&
+        // Rope jump: pressing jump while attached to a rope ALWAYS works (even if airJump was used before hooking!)
+        const canRopeJump = onRope && this.jumpBuffer > 0;
+
+        // First jump: from ground or within coyote time
+        const canJumpNow = !canRopeJump &&
+                           (this.grounded || this.coyoteTime > 0) &&
                            this.jumpBuffer > 0 &&
                            this.canJump;
 
-        if (canJumpNow || canAirJump) {
+        // Double jump in air (Teeworlds-style) — only when NOT doing a rope jump or ground/coyote jump!
+        const canAirJump = !canRopeJump &&
+                           !canJumpNow &&
+                           !this.grounded &&
+                           !onRope &&
+                           !this.airJumpUsed &&
+                           this.jumpBuffer > 0;
+
+        if (canRopeJump || canJumpNow || canAirJump) {
             this.body.vy = PHYS.JUMP_FORCE;
+            if (canRopeJump) {
+                this.body.vx *= 1.06;
+            }
 
             this.jumpBuffer = 0;
             this.coyoteTime = 0;
             this.canJump = false;
             this.grounded = false;
+            this.body.grounded = false;
+            this.body.wasGrounded = false;
+            this.body.onSlope = false;
 
-            if (canAirJump) {
+            if (canRopeJump) {
+                // Always detach rope cleanly on rope-jump and refresh airJump for post-swing control!
+                this.releaseHook();
+                this._hookHoldMs = 0;
+                this.hookCooldown = Math.max(this.hookCooldown, PHYS.HOOK_COOLDOWN * 0.5);
+                this.airJumpUsed = false;
+                this.lastJumpType = 'rope';
+            } else if (canJumpNow) {
+                this.airJumpUsed = false;
+                this.lastJumpType = 'ground';
+            } else if (canAirJump) {
                 this.airJumpUsed = true;
+                this.lastJumpType = 'air';
             }
 
             // Sound (with cooldown to prevent doubles during reconciliation)
@@ -153,7 +187,8 @@ export class CharacterCore {
     }
 
     /**
-     * Process horizontal movement (velocity-based for responsive platformer feel)
+     * Process horizontal movement (Teeworlds momentum-preserving platformer physics)
+     * Runs simultaneously with hook drag when onRope === true, just like Teeworlds gamecore.cpp!
      */
     processMovement(input, delta, onRope) {
         // Get speed multiplier from powerup
@@ -163,40 +198,61 @@ export class CharacterCore {
         const maxSpeed = PHYS.MAX_SPEED_X * speedMult;
 
         if (input.direction !== 0) {
-            // Target velocity based on input
-            const targetVx = onRope
-                ? input.direction * maxSpeed * 0.9
-                : input.direction * maxSpeed;
-
-            // Acceleration rate: faster on ground, slower in air
-            const accelRate = this.grounded ? PHYS.GROUND_ACCEL : PHYS.AIR_ACCEL;
-
-            // Lerp toward target velocity
-            this.body.vx = this.body.vx + (targetVx - this.body.vx) * accelRate;
             this.facingRight = input.direction > 0;
-        } else if (this.grounded) {
-            // No input + grounded → apply friction
-            const newVx = this.body.vx * PHYS.GROUND_FRICTION;
-            if (Math.abs(newVx) < 1) {
-                this.body.vx = 0;
+            const targetVx = input.direction * maxSpeed;
+
+            if (this.grounded && !onRope) {
+                // Grounded: snappy acceleration toward targetVx
+                this.body.vx = this.body.vx + (targetVx - this.body.vx) * PHYS.GROUND_ACCEL;
             } else {
-                this.body.vx = newVx;
+                // Airborne or on rope: Teeworlds momentum rule!
+                // If already flying faster than targetVx in the SAME direction (from hook pull or slope),
+                // DO NOT brake down to targetVx — preserve high swing momentum!
+                const sameDir = Math.sign(this.body.vx) === Math.sign(input.direction);
+                if (sameDir && Math.abs(this.body.vx) > Math.abs(targetVx)) {
+                    this.body.vx *= 0.994;
+                } else {
+                    const airAccel = sameDir ? PHYS.AIR_ACCEL : PHYS.AIR_ACCEL * 1.15;
+                    this.body.vx = this.body.vx + (targetVx - this.body.vx) * airAccel;
+                }
             }
+        } else if (this.grounded && !onRope) {
+            if (this.body.onSlope) {
+                // Standing idle on an icy winter slope → allow a gentle downhill slide (~95 px/s max)
+                this.body.vx *= 0.93;
+                if (Math.abs(this.body.vx) > 105) {
+                    this.body.vx = Math.sign(this.body.vx) * 105;
+                }
+            } else {
+                // Flat snow ground → crisp stop
+                const newVx = this.body.vx * PHYS.GROUND_FRICTION;
+                this.body.vx = Math.abs(newVx) < 2 ? 0 : newVx;
+            }
+        } else {
+            // Airborne / onRope with no input → preserve swing momentum with subtle Teeworlds air decay
+            this.body.vx *= 0.994;
         }
-        // In air with no input → keep momentum (no air friction)
     }
 
     /**
-     * Limit velocity to prevent infinite acceleration
+     * Limit velocity while preserving grapple swing & slope launch momentum in the air
      */
-    limitVelocity() {
+    limitVelocity(onRope = false) {
         const speedMult = this.scene.getSpeedMultiplier ?
             this.scene.getSpeedMultiplier(this.sprite) : 1;
 
         const maxSpeedX = PHYS.MAX_SPEED_X * speedMult;
+        const maxAirSpeedX = Math.max(maxSpeedX * 1.65, PHYS.HOOK_DRAG_SPEED * 1.15) * speedMult;
 
-        if (Math.abs(this.body.vx) > maxSpeedX) {
-            this.body.vx = Math.sign(this.body.vx) * maxSpeedX;
+        if (this.grounded && !onRope) {
+            if (Math.abs(this.body.vx) > maxSpeedX) {
+                // Smoothly slide-decay excess landing speed over a few frames instead of instant clamp
+                this.body.vx = this.body.vx * 0.84 + Math.sign(this.body.vx) * maxSpeedX * 0.16;
+            }
+        } else {
+            if (Math.abs(this.body.vx) > maxAirSpeedX) {
+                this.body.vx = Math.sign(this.body.vx) * maxAirSpeedX;
+            }
         }
         if (this.body.vy > PHYS.MAX_SPEED_Y) {
             this.body.vy = PHYS.MAX_SPEED_Y;
@@ -237,19 +293,52 @@ export class CharacterCore {
     }
 
     /**
-     * Process hook logic each frame
+     * Process hook logic each frame.
+     * Supports BOTH Teeworlds Hold-to-Hook (hold E or Right-Click -> release to let go)
+     * AND Quick-Tap Toggle (<160ms tap -> stays attached until next press/jump).
      */
     processHook(input, delta) {
-        // Teeworlds-style: edge detection inside CharacterCore
-        // Detects false→true transition of input.hook (continuous state)
-        // Idempotent: same input passed multiple times won't re-trigger
-        const hookEdge = !!input.hook && !this._prevHookInput;
-        this._prevHookInput = !!input.hook;
+        if (input.hookRelease) {
+            this._hookHoldMs = 0;
+            this._prevHookInput = false;
+            if (this.hookState !== 'IDLE') {
+                this.releaseHook();
+            }
+            return false;
+        }
 
-        if (hookEdge) {
-            if (this.hookState === 'IDLE' && input.hookTarget) {
-                this.launchHook(input.hookTarget.x, input.hookTarget.y);
-            } else if (this.hookState === 'ATTACHED') {
+        const hookDown = !!input.hook;
+        const hookPressedEdge = hookDown && !this._prevHookInput;
+        const hookReleasedEdge = !hookDown && this._prevHookInput;
+        this._prevHookInput = hookDown;
+
+        if (hookDown) {
+            this._hookHoldMs = (this._hookHoldMs || 0) + (delta || 16.67);
+        }
+
+        if (hookPressedEdge) {
+            this._hookHoldMs = 0;
+            if (this.hookState === 'IDLE') {
+                if (input.hookTarget) {
+                    const launched = this.launchHook(input.hookTarget.x, input.hookTarget.y);
+                    if (!launched) {
+                        // Still on cooldown or out of range — keep edge armed while button remains held
+                        this._prevHookInput = false;
+                    }
+                } else {
+                    this._prevHookInput = false;
+                }
+            } else if (this.hookState === 'ATTACHED' || this.hookState === 'FLYING') {
+                this.releaseHook();
+                return false;
+            }
+        } else if (hookReleasedEdge) {
+            // Teeworlds Hold-to-Hook: if the player held the hook button until attached (or held >=115ms),
+            // releasing the button immediately detaches the hook!
+            const holdMs = this._hookHoldMs || 0;
+            this._hookHoldMs = 0;
+            if ((this.hookState === 'ATTACHED' && holdMs >= 115) ||
+                (this.hookState === 'FLYING' && holdMs >= 180)) {
                 this.releaseHook();
                 return false;
             }
@@ -269,31 +358,28 @@ export class CharacterCore {
     }
 
     /**
-     * Update hook while flying through air
+     * Update hook while flying through air (Teeworlds straight-line tip raycast)
      */
     updateFlyingHook(delta) {
         const frames = delta / 16.67;
+        const prevX = this.hookPos.x;
+        const prevY = this.hookPos.y;
 
         this.hookPos.x += this.hookVel.x * frames;
         this.hookPos.y += this.hookVel.y * frames;
 
-        // Gravity on hook projectile
-        this.hookVel.y += 0.3 * frames;
-
-        // Check collision with tilemap using raycast
+        // Check collision along the flying hook tip segment using exact sub-tile raycast
         if (this.physicsWorld) {
             const result = this.physicsWorld.raycast(
-                this.body.x, this.body.y,
+                prevX, prevY,
                 this.hookPos.x, this.hookPos.y
             );
             if (result && result.hit) {
                 this.attachHook(result.x, result.y);
                 return true;
             }
-        }
-
-        // Fallback: check with Phaser tilemap if physicsWorld raycast not available
-        if (this.scene.platformLayer) {
+        } else if (this.scene.platformLayer) {
+            // Fallback ONLY when physicsWorld is not present
             const tile = this.scene.platformLayer.getTileAtWorldXY(this.hookPos.x, this.hookPos.y);
             if (tile && tile.index > 0) {
                 this.attachHook(tile.getCenterX(), tile.getCenterY());
@@ -315,7 +401,7 @@ export class CharacterCore {
     }
 
     /**
-     * Attach hook — store anchor position and calculate rope length
+     * Attach hook — store anchor position and refresh air-jump
      */
     attachHook(anchorX, anchorY) {
         if (!this.scene) return;
@@ -324,6 +410,7 @@ export class CharacterCore {
         this.hookState = 'ATTACHED';
         this.hookPos.x = anchorX;
         this.hookPos.y = anchorY;
+        this.airJumpUsed = false;
 
         if (!this.suppressSounds && this._canPlaySound('hookAttached') && this.scene.playSpatialSound) {
             this.scene.playSpatialSound('sfx-hook-attached', anchorX, anchorY, 0.3);
@@ -331,8 +418,11 @@ export class CharacterCore {
     }
 
     /**
-     * Update while attached — DDNet drag-velocity model (gamecore.cpp).
-     * No rope length, no auto-reel, no stiffness/damping/spring.
+     * Update while attached — Authentic Teeworlds (src/game/gamecore.cpp) Elastic Hook Drag Model!
+     * - Pulls player toward hookAnchorPos when dist > HOOK_DRAG_MIN_DIST (46px)
+     * - Upward pull is 100%, downward pull (when player swings above anchor) is 30% so vaulting over ledges is effortless
+     * - Horizontal pull gets a 0.95 boost when steering in the pull direction (0.75 otherwise)
+     * - Applies acceleration only when newSpeed < HOOK_DRAG_SPEED or newSpeed < oldSpeed (elastic arc redirection!)
      */
     updateAttachedHook(input, delta) {
         if (!this.hookAnchorPos) {
@@ -340,74 +430,58 @@ export class CharacterCore {
             return false;
         }
 
+        // Vector from player body TOWARD hook anchor (Teeworlds m_HookPos - m_Pos)
         const dx = this.hookAnchorPos.x - this.body.x;
         const dy = this.hookAnchorPos.y - this.body.y;
         const dist = Math.hypot(dx, dy);
+        const dt = Math.min(0.05, delta / 1000);
+        const minDist = PHYS.HOOK_DRAG_MIN_DIST || 46;
 
-        // Jump → release with swing momentum
-        if (this.jumpBuffer > 0) {
-            let swingVx = this.body.vx * 1.1;
-            let swingVy = Math.min(this.body.vy, PHYS.JUMP_FORCE * 0.95);
+        if (dist > minDist) {
+            const dirX = dx / dist;
+            const dirY = dy / dist;
 
-            if (this.scene.platformLayer) {
-                const halfW = 25, halfH = 30;
-                const dt = 1 / 60;
-                const frameVx = swingVx * dt;
-                const frameVy = swingVy * dt;
+            // Smooth arrival ramp within 46..82px so hanging directly below an anchor settles without jitter
+            const ramp = Math.min(1, (dist - minDist) / 36);
+            const dragAccel = (PHYS.HOOK_DRAG_ACCEL || 6800) * dt * ramp;
 
-                const checkX = this.body.x + Math.sign(swingVx) * (halfW + Math.abs(frameVx) * 2);
-                const tileH = this.scene.platformLayer.getTileAtWorldXY(checkX, this.body.y);
-                if (tileH && tileH.index > 0) swingVx = 0;
+            let hookVx = dirX * dragAccel;
+            let hookVy = dirY * dragAccel;
 
-                const checkY = this.body.y + Math.sign(swingVy) * (halfH + Math.abs(frameVy) * 2);
-                const tileV = this.scene.platformLayer.getTileAtWorldXY(this.body.x, checkY);
-                if (tileV && tileV.index > 0) {
-                    const anchorTile = this.scene.platformLayer.getTileAtWorldXY(
-                        this.hookAnchorPos.x, this.hookAnchorPos.y
-                    );
-                    if (!anchorTile || tileV !== anchorTile) {
-                        swingVy = Math.max(swingVy, -180);
-                    }
-                }
+            // Teeworlds gamecore.cpp rule 1:
+            // "the hook as more power to drag you up then down. this makes it easier to get on top of an object"
+            if (hookVy > 0) {
+                hookVy *= 0.3;
             }
 
-            this.body.vx = swingVx;
-            this.body.vy = swingVy;
-            this.jumpBuffer = 0;
-            this.coyoteTime = 0;
-            this.canJump = false;
-            this.releaseHook();
-            this.hookCooldown = PHYS.HOOK_COOLDOWN * 0.5;
-            return false;
+            // Teeworlds gamecore.cpp rule 2:
+            // "the hook has more power if the player goes in the direction of the hook"
+            if ((hookVx < 0 && input.direction < 0) || (hookVx > 0 && input.direction > 0)) {
+                hookVx *= 0.95;
+            } else {
+                hookVx *= 0.75;
+            }
+
+            const newVx = this.body.vx + hookVx;
+            const newVy = this.body.vy + hookVy;
+            const newSpeed = Math.hypot(newVx, newVy);
+            const oldSpeed = Math.hypot(this.body.vx, this.body.vy);
+            const maxDragSpeed = PHYS.HOOK_DRAG_SPEED || 680;
+
+            // Teeworlds gamecore.cpp rule 3:
+            // Only apply if total speed is under HookDragSpeed, OR if the hook force reduces total speed
+            // (which redirects outward/downward velocity into a smooth Teeworlds swing arc!)
+            if (newSpeed < maxDragSpeed || newSpeed < oldSpeed) {
+                this.body.vx = newVx;
+                this.body.vy = newVy;
+            }
         }
 
-        // DDNet drag model: only apply when distance > threshold
-        if (dist > PHYS.HOOK_DRAG_MIN_DIST) {
-            const nx = dx / dist;
-            const ny = dy / dist;
-            const dt = delta / 1000;
-
-            let hdx = nx * PHYS.HOOK_DRAG_ACCEL * dt;
-            let hdy = ny * PHYS.HOOK_DRAG_ACCEL * dt;
-
-            // DDNet: easier to climb up than be pulled down
-            if (hdy > 0) hdy *= 0.3;
-
-            // DDNet: boost if moving same direction as hook pull
-            if ((hdx < 0 && this.body.vx < 0) || (hdx > 0 && this.body.vx > 0))
-                hdx *= 0.95;
-            else
-                hdx *= 0.75;
-
-            const nvx = this.body.vx + hdx;
-            const nvy = this.body.vy + hdy;
-            const newSpd = Math.hypot(nvx, nvy);
-            const oldSpd = Math.hypot(this.body.vx, this.body.vy);
-
-            // DDNet speed cap: only apply if not exceeding drag speed, or decelerating
-            if (newSpd < PHYS.HOOK_DRAG_SPEED || newSpd < oldSpd) {
-                this.body.vx = nvx;
-                this.body.vy = nvy;
+        // Gentle radial damping only when very close to the anchor (<88px) and idle so hanging doesn't yo-yo
+        if (dist < 88 && input.direction === 0) {
+            this.body.vx *= 0.95;
+            if (this.body.vy > 0 && dy < 0) {
+                this.body.vy *= 0.85;
             }
         }
 
@@ -507,7 +581,9 @@ export class CharacterCore {
             hookAnchorPos: this.hookAnchorPos
                 ? { x: this.hookAnchorPos.x, y: this.hookAnchorPos.y }
                 : null,
-            hookCooldown: this.hookCooldown
+            hookCooldown: this.hookCooldown,
+            _prevHookInput: this._prevHookInput,
+            _hookHoldMs: this._hookHoldMs || 0
         };
     }
 
@@ -533,6 +609,8 @@ export class CharacterCore {
             ? { x: state.hookAnchorPos.x, y: state.hookAnchorPos.y }
             : null;
         this.hookCooldown = state.hookCooldown;
+        if (state._prevHookInput !== undefined) this._prevHookInput = state._prevHookInput;
+        if (state._hookHoldMs !== undefined) this._hookHoldMs = state._hookHoldMs;
     }
 
     // === COMPATIBILITY GETTERS (for code expecting Rapier-style API) ===

@@ -8,25 +8,25 @@ export const PHYS = {
     GRAVITY: 1200,          // px/s² (Rapier gravity)
 
     // Movement (velocity-based, lerp rates per frame)
-    GROUND_ACCEL: 0.40,     // Lerp rate toward target speed (grounded) — snappy
-    AIR_ACCEL: 0.08,        // Lerp rate toward target speed (air) — less control
-    GROUND_FRICTION: 0.80,  // Velocity multiplier when no input (grounded) — quick stop
-    JUMP_FORCE: -710,       // px/s (negative = up, h = 710²/2400 ≈ 210 px ≈ 3 тайла)
-    MAX_SPEED_X: 420,       // px/s (max horizontal velocity)
-    MAX_SPEED_Y: 900,       // px/s (max fall velocity)
+    GROUND_ACCEL: 0.42,     // Lerp rate toward target speed (grounded) — snappy
+    AIR_ACCEL: 0.14,        // Lerp rate toward target speed (air) — responsive mid-air control
+    GROUND_FRICTION: 0.82,  // Velocity multiplier when no input (grounded) — quick stop
+    JUMP_FORCE: -780,       // px/s (negative = up, energetic jump height)
+    MAX_SPEED_X: 480,       // px/s (fast Teeworlds-style horizontal run speed)
+    MAX_SPEED_Y: 920,       // px/s (max fall velocity)
 
     // Hook / Grapple - DDNet style drag model (values in px/s, our units)
-    HOOK_SPEED: 25,         // Hook projectile speed (px/frame at 60fps)
-    HOOK_RANGE: 500,        // Max hook distance in pixels
-    HOOK_DRAG_ACCEL: 7200,  // px/s² — DDNet ratio: 6x gravity (drag=3.0, grav=0.5 per tick)
-    HOOK_DRAG_SPEED: 600,   // px/s max speed from hook drag
+    HOOK_SPEED: 32,         // Hook projectile speed (px/frame at 60fps)
+    HOOK_RANGE: 660,        // Max hook distance in pixels (~9.5 tiles for big arena swings)
+    HOOK_DRAG_ACCEL: 7600,  // px/s² — DDNet ratio: strong grapple pull
+    HOOK_DRAG_SPEED: 680,   // px/s max speed from hook drag
     HOOK_DRAG_MIN_DIST: 46, // Min distance before drag applies (px)
-    HOOK_COOLDOWN: 300,     // Cooldown between hooks (ms)
+    HOOK_COOLDOWN: 240,     // Cooldown between hooks (ms)
 
     // Combat
     SNOWBALL_SPEED: 720,    // px/s (Rapier linvel)
     SNOWBALL_DAMAGE: 10,    // Damage per hit (half heart = 10 HP)
-    KNOCKBACK_FORCE: 1.2,   // Rapier impulse strength
+    KNOCKBACK_FORCE: 220,   // Velocity knockback impulse (px/s)
     SNOWBALL_GRAVITY_SCALE: 0.5,  // Gravity multiplier for snowballs (lighter than characters)
     SNOWBALL_BOUNCE: 0.3,         // Bounce off walls/platforms
     SNOWBALL_LIFETIME: 3000,      // ms before auto-destroy
@@ -83,8 +83,8 @@ export const PLAYER_SPRITE = {
     // Approximate average size for physics body
     bodyWidth: 50,
     bodyHeight: 70,
-    // Scale to match game (original ~120x200, scale down)
-    scale: 0.45,
+    // Scale to match game (original ~154x176, scale 0.50 -> ~77x88px)
+    scale: 0.50,
     // Animation keys (per player: p1, p2, p3)
     anims: {
         idle: 'idle',
