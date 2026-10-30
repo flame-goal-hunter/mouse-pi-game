@@ -1,32 +1,79 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
   <defs>
-    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
+    <linearGradient id="crWing" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#b43c18"/>
+      <stop offset="45%" stop-color="#7c230c"/>
+      <stop offset="100%" stop-color="#380c03"/>
+    </linearGradient>
+    <radialGradient id="crShield" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#c4451c"/>
+      <stop offset="65%" stop-color="#6e1e0a"/>
+      <stop offset="100%" stop-color="#2e0902"/>
+    </radialGradient>
+    <radialGradient id="crHead" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#85270f"/>
+      <stop offset="70%" stop-color="#4f1406"/>
+      <stop offset="100%" stop-color="#290802"/>
+    </radialGradient>
   </defs>
-  <!-- Bottom feet -->
-  <ellipse cx="76" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <ellipse cx="124" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <!-- Middle bug legs -->
-  <path d="M 52 174 Q 26 178 22 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="21" cy="191" r="5" fill="#d97706" class="outline"/>
-  <path d="M 148 174 Q 174 178 178 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="179" cy="191" r="5" fill="#d97706" class="outline"/>
-  <!-- Upper arms -->
-  <ellipse cx="46" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(-28 46 148)"/>
-  <ellipse cx="154" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(28 154 148)"/>
-  <!-- Shiny Winged Carapace from behind -->
-  <ellipse cx="100" cy="158" rx="50" ry="42" fill="#7c2d12" class="outline"/>
-  <path d="M 100 116 L 100 200" stroke="#1a1a1a" stroke-width="3"/>
-  <path d="M 62 146 Q 100 154 138 146" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 60 166 Q 100 174 140 166" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round"/>
-  <!-- Long curly antennae -->
-  <path d="M 84 68 Q 54 22 26 36 Q 14 44 24 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="24" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
-  <path d="M 116 68 Q 146 22 174 36 Q 186 44 176 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="176" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
-  <!-- Ears -->
-  <ellipse cx="62" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(-20 62 84)"/>
-  <ellipse cx="138" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(20 138 84)"/>
-  <!-- Back of head -->
-  <ellipse cx="100" cy="102" rx="42" ry="36" fill="#9a4412" class="outline"/>
-  <ellipse cx="88" cy="80" rx="14" ry="5" fill="#d97706" opacity="0.6" transform="rotate(-12 88 80)"/>
+
+  <ellipse cx="100" cy="218" rx="46" ry="8" fill="#000" opacity="0.28"/>
+
+  <!-- === 6 SPINY INSECT LEGS === -->
+  <g stroke="#260701" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M 78 184 L 50 194 L 62 215 L 49 218" stroke-width="5.5"/>
+    <path d="M 78 184 L 50 194 L 62 215" stroke="#7c2811" stroke-width="2.6"/>
+    <path d="M 53 199 L 46 202 M 56 206 L 49 209" stroke-width="2.2"/>
+
+    <path d="M 122 184 L 150 194 L 138 215 L 151 218" stroke-width="5.5"/>
+    <path d="M 122 184 L 150 194 L 138 215" stroke="#7c2811" stroke-width="2.6"/>
+    <path d="M 147 199 L 154 202 M 144 206 L 151 209" stroke-width="2.2"/>
+
+    <path d="M 66 156 L 26 146 L 16 174 L 8 177" stroke-width="5"/>
+    <path d="M 66 156 L 26 146 L 16 174" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 23 153 L 16 151 M 20 161 L 13 159" stroke-width="2"/>
+
+    <path d="M 134 156 L 174 146 L 184 174 L 192 177" stroke-width="5"/>
+    <path d="M 134 156 L 174 146 L 184 174" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 177 153 L 184 151 M 180 161 L 187 159" stroke-width="2"/>
+
+    <path d="M 68 130 L 30 112 L 22 134 L 14 132" stroke-width="5"/>
+    <path d="M 68 130 L 30 112 L 22 134" stroke="#7c2811" stroke-width="2.4"/>
+
+    <path d="M 132 130 L 170 112 L 178 134 L 186 132" stroke-width="5"/>
+    <path d="M 132 130 L 170 112 L 178 134" stroke="#7c2811" stroke-width="2.4"/>
+  </g>
+
+  <!-- Cerci (tail spikes) -->
+  <path d="M 88 202 L 78 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M 112 202 L 122 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- Long sweeping antennae -->
+  <path d="M 86 62 C 68 18, 22 4, 6 34 C 2 42, 8 50, 16 47" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M 114 62 C 134 12, 180 2, 194 30 C 198 38, 191 46, 183 43" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+
+  <!-- Head (back view, with bulging eye silhouettes on top corners) -->
+  <ellipse cx="78" cy="74" rx="18" ry="20" transform="rotate(-8 78 74)" fill="url(#crHead)" stroke="#220601" stroke-width="3.8"/>
+  <ellipse cx="121" cy="75" rx="16" ry="18" transform="rotate(8 121 75)" fill="url(#crHead)" stroke="#220601" stroke-width="3.8"/>
+  <path d="M 66 78 C 62 56, 138 56, 134 78 C 131 98, 116 114, 100 115 C 84 114, 69 98, 66 78 Z" fill="url(#crHead)" stroke="#220601" stroke-width="4"/>
+
+  <!-- === FULL DORSAL COCKROACH WINGS (Надкрылья) & PRONOTUM SHIELD === -->
+  <!-- Overlapping folded cockroach wings on the back -->
+  <ellipse cx="100" cy="158" rx="38" ry="50" fill="url(#crWing)" stroke="#220601" stroke-width="4"/>
+  <!-- Diagonal overlapping wing seam & veins -->
+  <path d="M 100 118 C 98 152, 104 182, 92 206" fill="none" stroke="#220601" stroke-width="3.2"/>
+  <path d="M 100 118 C 103 152, 96 182, 108 206" fill="none" stroke="#220601" stroke-width="2.2" opacity="0.7"/>
+  <!-- Wing veins -->
+  <path d="M 88 132 Q 74 150 72 174 M 92 148 Q 78 166 78 188" fill="none" stroke="#d97706" stroke-width="1.8" opacity="0.45" stroke-linecap="round"/>
+  <path d="M 112 132 Q 126 150 128 174 M 108 148 Q 122 166 122 188" fill="none" stroke="#d97706" stroke-width="1.8" opacity="0.45" stroke-linecap="round"/>
+  <!-- Glossy chitin highlights on dorsal wings -->
+  <ellipse cx="83" cy="154" rx="7" ry="26" transform="rotate(-6 83 154)" fill="#fca5a5" opacity="0.28"/>
+  <ellipse cx="117" cy="154" rx="7" ry="26" transform="rotate(6 117 154)" fill="#fca5a5" opacity="0.24"/>
+
+  <!-- Pronotum thoracic shield hood overlapping top of wings -->
+  <ellipse cx="100" cy="110" rx="45" ry="24" fill="url(#crShield)" stroke="#220601" stroke-width="4"/>
+  <!-- Classic cockroach amber double-spot pronotum pattern -->
+  <path d="M 66 108 C 76 92, 124 92, 134 108" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.65" stroke-linecap="round"/>
+  <ellipse cx="88" cy="110" rx="8" ry="10" fill="#2e0902" opacity="0.6"/>
+  <ellipse cx="112" cy="110" rx="8" ry="10" fill="#2e0902" opacity="0.6"/>
 </svg>

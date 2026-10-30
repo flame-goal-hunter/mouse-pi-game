@@ -111,8 +111,15 @@ export const SKINS = [
               apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.25;
                               s.maxHp = Math.max(3, s.maxHp - 1); } } },
 
+    { id: 'beaver',        name: 'Бобёр',            price: 360, spriteKey: 'skin_beaver',      menuKey: 'm_skin_beaver',
+      body: '#9a4e1c', desc: 'Зубы-долото и хвост-лопатка!',
+      perk: { plus: 'Крепкий строитель: +1 сердце и больше пирогов', minus: 'Чуть медленнее бегает',
+              apply: (s) => { s.maxHp += 1;
+                              s.clipBonus = (s.clipBonus || 0) + 1;
+                              s.speedMul = (s.speedMul || 1) * 0.93; } } },
+
     { id: 'cockroach',     name: 'Забавный таракан', price: 380, spriteKey: 'skin_cockroach',   menuKey: 'm_skin_cockroach',
-      body: '#9a4412', desc: 'Усики дрожат, тапки не догонят!',
+      body: '#7c230c', desc: 'Шестилапый усач — тапки не догонят!',
       perk: { plus: 'Юркий — бегает быстрее и тише крадётся', minus: 'Пироги чуть меньше',
               apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.14;
                               s.stealthMul = (s.stealthMul || 1) * 0.78;

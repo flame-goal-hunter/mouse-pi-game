@@ -50,7 +50,7 @@ const SUSPICION_DECAY_MS = 900;
 const SKIN_KEYS = [
     'brown', 'pink', 'yellow-antler', 'robot', 'green-monster', 'shadow',
     'devil', 'angel', 'yellow-lion', 'bear', 'frog', 'professor',
-    'pirate', 'astronaut', 'kitty', 'cockroach'
+    'pirate', 'astronaut', 'kitty', 'beaver', 'cockroach'
 ];
 
 export class SneakScene extends Phaser.Scene {

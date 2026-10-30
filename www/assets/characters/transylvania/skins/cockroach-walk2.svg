@@ -1,44 +1,109 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
   <defs>
-    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
+    <linearGradient id="crWing" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#9e3214"/>
+      <stop offset="45%" stop-color="#6e1e0a"/>
+      <stop offset="100%" stop-color="#380c03"/>
+    </linearGradient>
+    <radialGradient id="crShield" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#b43c18"/>
+      <stop offset="65%" stop-color="#6e1e0a"/>
+      <stop offset="100%" stop-color="#2e0902"/>
+    </radialGradient>
+    <linearGradient id="crBelly" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <radialGradient id="crHead" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#85270f"/>
+      <stop offset="70%" stop-color="#4f1406"/>
+      <stop offset="100%" stop-color="#290802"/>
+    </radialGradient>
   </defs>
-  <ellipse cx="100" cy="156" rx="54" ry="44" fill="#5c2808" class="outline"/>
-  <path d="M 100 114 L 100 198" stroke="#1a1a1a" stroke-width="2.5"/>
-  <!-- Walk 2: Right foot up, left foot down, side legs wiggling opposite -->
-  <ellipse cx="70" cy="212" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <ellipse cx="130" cy="198" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <path d="M 52 178 Q 24 184 18 196" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="17" cy="197" r="5" fill="#d97706" class="outline"/>
-  <path d="M 148 170 Q 176 166 182 178" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="183" cy="179" r="5" fill="#d97706" class="outline"/>
-  <ellipse cx="44" cy="152" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(-16 44 152)"/>
-  <ellipse cx="156" cy="144" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(38 156 144)"/>
-  <ellipse cx="100" cy="158" rx="46" ry="39" fill="#9a4412" class="outline"/>
-  <ellipse cx="100" cy="164" rx="31" ry="27" fill="#fbbf24" class="outline"/>
-  <path d="M 73 154 Q 100 160 127 154" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 71 166 Q 100 172 129 166" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 75 178 Q 100 183 125 178" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <!-- Bouncing antennae tilted right -->
-  <path d="M 84 68 Q 52 28 24 42 Q 14 50 24 60" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="24" cy="60" r="5.5" fill="#f59e0b" class="outline"/>
-  <path d="M 116 68 Q 152 16 180 30 Q 190 38 180 48" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="180" cy="48" r="5.5" fill="#f59e0b" class="outline"/>
-  <ellipse cx="62" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(-20 62 84)"/>
-  <ellipse cx="138" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(20 138 84)"/>
-  <ellipse cx="100" cy="102" rx="42" ry="36" fill="#9a4412" class="outline"/>
-  <ellipse cx="88" cy="78" rx="14" ry="5" fill="#d97706" opacity="0.65" transform="rotate(-12 88 78)"/>
-  <circle cx="82" cy="96" r="15" fill="#ffffff" class="outline"/>
-  <circle cx="118" cy="96" r="12.5" fill="#ffffff" class="outline"/>
-  <circle cx="84" cy="97" r="5.5" fill="#1a1a1a"/>
-  <circle cx="116" cy="95" r="4.5" fill="#1a1a1a"/>
-  <circle cx="86" cy="94" r="2.2" fill="#ffffff"/>
-  <circle cx="118" cy="93" r="1.8" fill="#ffffff"/>
-  <path d="M 86 112 Q 66 110 58 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M 114 112 Q 134 110 142 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
-  <ellipse cx="100" cy="109" rx="6" ry="4.5" fill="#4a1f05" class="outline"/>
-  <path d="M 76 118 Q 100 134 124 118" fill="none" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
-  <rect x="93" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
-  <rect x="101" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
-  <circle cx="68" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
-  <circle cx="132" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
+
+  <ellipse cx="100" cy="218" rx="44" ry="7" fill="#000" opacity="0.26"/>
+
+  <!-- === 6 SCURRYING INSECT LEGS (Walk frame 2: opposite tripod gait!) === -->
+  <g stroke="#260701" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Left Hind Leg (Extended down) -->
+    <path d="M 78 186 L 46 198 L 58 220 L 45 222" stroke-width="5.5"/>
+    <path d="M 78 186 L 46 198 L 58 220" stroke="#7c2811" stroke-width="2.6"/>
+    <path d="M 50 204 L 43 207 M 54 212 L 47 215" stroke-width="2.2"/>
+
+    <!-- Right Hind Leg (Lifted high) -->
+    <path d="M 122 182 L 154 184 L 144 206 L 157 208" stroke-width="5.5"/>
+    <path d="M 122 182 L 154 184 L 144 206" stroke="#7c2811" stroke-width="2.6"/>
+    <path d="M 151 190 L 158 193 M 147 198 L 154 201" stroke-width="2.2"/>
+
+    <!-- Left Middle Leg (Swept high) -->
+    <path d="M 66 156 L 24 136 L 14 162 L 6 164" stroke-width="5"/>
+    <path d="M 66 156 L 24 136 L 14 162" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 21 144 L 14 142 M 17 154 L 10 152" stroke-width="2"/>
+
+    <!-- Right Middle Leg (Swept down) -->
+    <path d="M 134 156 L 176 156 L 184 184 L 192 186" stroke-width="5"/>
+    <path d="M 134 156 L 176 156 L 184 184" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 179 164 L 186 162 M 182 174 L 189 172" stroke-width="2"/>
+
+    <!-- Left Front Leg (Swept down) -->
+    <path d="M 68 132 L 30 124 L 22 146 L 14 145" stroke-width="5"/>
+    <path d="M 68 132 L 30 124 L 22 146" stroke="#7c2811" stroke-width="2.4"/>
+
+    <!-- Right Front Leg (Reaching up) -->
+    <path d="M 132 128 L 172 102 L 182 124 L 190 122" stroke-width="5"/>
+    <path d="M 132 128 L 172 102 L 182 124" stroke="#7c2811" stroke-width="2.4"/>
+  </g>
+
+  <g transform="translate(0,-3) rotate(4 100 150)">
+    <!-- Cerci -->
+    <path d="M 88 202 L 78 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M 112 202 L 122 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+
+    <!-- Pronotum Shield -->
+    <ellipse cx="100" cy="112" rx="46" ry="26" fill="url(#crShield)" stroke="#220601" stroke-width="3.8"/>
+    <path d="M 62 110 C 72 92, 128 92, 138 110" fill="none" stroke="#f59e0b" stroke-width="2.8" opacity="0.55" stroke-linecap="round"/>
+
+    <!-- Wing Carapace -->
+    <ellipse cx="100" cy="156" rx="37" ry="50" fill="url(#crWing)" stroke="#220601" stroke-width="4"/>
+    <path d="M 68 118 C 58 145, 62 185, 82 202 C 76 178, 76 144, 84 120 Z" fill="#85270f" stroke="#220601" stroke-width="2.5"/>
+    <path d="M 132 118 C 142 145, 138 185, 118 202 C 124 178, 124 144, 116 120 Z" fill="#85270f" stroke="#220601" stroke-width="2.5"/>
+    <path d="M 69 132 C 65 150, 67 172, 74 186" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
+    <path d="M 131 132 C 135 150, 133 172, 126 186" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
+
+    <!-- Ribbed Belly -->
+    <ellipse cx="100" cy="158" rx="22" ry="38" fill="url(#crBelly)" stroke="#380c03" stroke-width="3"/>
+    <path d="M 81 134 Q 100 140 119 134" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+    <path d="M 79 147 Q 100 153 121 147" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+    <path d="M 78 160 Q 100 166 122 160" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+    <path d="M 80 173 Q 100 179 120 173" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+    <path d="M 84 185 Q 100 190 116 185" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+
+    <!-- Whipping Antennae -->
+    <path d="M 86 62 C 60 18, 16 8, 4 36 C 1 44, 8 50, 16 46" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+    <path d="M 86 62 C 60 18, 16 8, 4 36" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/>
+    <path d="M 114 62 C 138 12, 182 10, 196 40 C 200 48, 192 54, 184 50" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+    <path d="M 114 62 C 138 12, 182 10, 196 40" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/>
+
+    <!-- Bug Head -->
+    <path d="M 66 78 C 62 56, 138 56, 134 78 C 131 98, 116 114, 100 115 C 84 114, 69 98, 66 78 Z" fill="url(#crHead)" stroke="#220601" stroke-width="4"/>
+    <path d="M 80 106 Q 66 114 64 122" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 120 106 Q 134 114 136 122" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 74 98 C 65 101, 67 109, 78 107 Z" fill="#b45309" stroke="#220601" stroke-width="2.5"/>
+    <path d="M 126 98 C 135 101, 133 109, 122 107 Z" fill="#b45309" stroke="#220601" stroke-width="2.5"/>
+
+    <!-- Bulging Bug Eyes -->
+    <ellipse cx="78" cy="74" rx="18" ry="20" transform="rotate(-8 78 74)" fill="#fef9c3" stroke="#220601" stroke-width="3.8"/>
+    <ellipse cx="121" cy="75" rx="16" ry="18" transform="rotate(8 121 75)" fill="#fef9c3" stroke="#220601" stroke-width="3.8"/>
+    <circle cx="83" cy="75" r="6.5" fill="#1c0601"/>
+    <circle cx="116" cy="73" r="5" fill="#1c0601"/>
+    <circle cx="80.5" cy="72" r="2.6" fill="#ffffff"/>
+    <circle cx="114" cy="70.5" r="2.2" fill="#ffffff"/>
+    <path d="M 60 56 Q 78 48 92 60" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 108 60 Q 122 46 138 55" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+
+    <!-- Crooked Cockroach Grin -->
+    <path d="M 80 96 Q 100 109 120 94" fill="#2e0702" stroke="#220601" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 103 101 C 105 111, 115 110, 114 99 Z" fill="#fb7185" stroke="#220601" stroke-width="2.2"/>
+  </g>
 </svg>

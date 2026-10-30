@@ -43,6 +43,7 @@ export class TransylvaniaScene extends Phaser.Scene {
         this.load.svg('m_skin_pirate',        skinBase + 'pirate.svg',        { width: 180, height: 207 });
         this.load.svg('m_skin_astronaut',     skinBase + 'astronaut.svg',     { width: 180, height: 207 });
         this.load.svg('m_skin_kitty',         skinBase + 'kitty.svg',         { width: 180, height: 207 });
+        this.load.svg('m_skin_beaver',        skinBase + 'beaver.svg',        { width: 180, height: 207 });
         this.load.svg('m_skin_cockroach',     skinBase + 'cockroach.svg',     { width: 180, height: 207 });
         // Icon kit — same SVGs the dungeon HUD uses, at UI resolution
         const uiPx = Math.round(64 * (window.__GAME_DPR || 1));

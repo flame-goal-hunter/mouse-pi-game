@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <radialGradient id="bvFur" cx="42%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#c87338"/>
+      <stop offset="55%" stop-color="#9a4e1c"/>
+      <stop offset="100%" stop-color="#5e2c0c"/>
+    </radialGradient>
+    <radialGradient id="bvBelly" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fde8c8"/>
+      <stop offset="65%" stop-color="#e5bc8a"/>
+      <stop offset="100%" stop-color="#b88652"/>
+    </radialGradient>
+    <linearGradient id="bvTail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6b3416"/>
+      <stop offset="50%" stop-color="#4e240d"/>
+      <stop offset="100%" stop-color="#331506"/>
+    </linearGradient>
+    <radialGradient id="bvMuzzle" cx="45%" cy="38%" r="60%">
+      <stop offset="0%" stop-color="#ffe7c4"/>
+      <stop offset="75%" stop-color="#deb07c"/>
+      <stop offset="100%" stop-color="#b3804c"/>
+    </radialGradient>
+  </defs>
+
+  <ellipse cx="100" cy="216" rx="50" ry="8" fill="#000" opacity="0.26"/>
+
+  <!-- Swinging waffle paddle tail (down-tilt on walk2) -->
+  <g transform="rotate(-8 148 178)">
+    <ellipse cx="158" cy="178" rx="34" ry="18" fill="url(#bvTail)" stroke="#240d03" stroke-width="4"/>
+    <path d="M 134 170 L 178 188 M 142 163 L 184 181 M 128 178 L 166 193" stroke="#2d1205" stroke-width="2.2" opacity="0.75"/>
+    <path d="M 134 186 L 178 168 M 144 192 L 184 175 M 128 178 L 166 163" stroke="#2d1205" stroke-width="2.2" opacity="0.75"/>
+  </g>
+
+  <!-- Walking feet: left back/down, right forward/up -->
+  <ellipse cx="74" cy="209" rx="19" ry="10" transform="rotate(-10 74 209)" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+  <ellipse cx="126" cy="196" rx="19" ry="10" transform="rotate(12 126 196)" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+
+  <g transform="translate(0,-3) rotate(3 100 150)">
+    <!-- Body -->
+    <ellipse cx="100" cy="158" rx="45" ry="47" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+    <ellipse cx="100" cy="164" rx="30" ry="33" fill="url(#bvBelly)" stroke="#7a421c" stroke-width="2"/>
+    <path d="M 92 132 L 96 138 L 100 131 L 104 138 L 108 132" fill="none" stroke="#fff3de" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Paws swinging -->
+    <ellipse cx="51" cy="160" rx="13" ry="10" transform="rotate(-10 51 160)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+    <ellipse cx="150" cy="146" rx="13" ry="10" transform="rotate(10 150 146)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+    <g transform="rotate(-34 156 140)">
+      <rect x="142" y="134" width="32" height="10" rx="4" fill="#8b5a2b" stroke="#240d03" stroke-width="2.8"/>
+      <ellipse cx="173" cy="139" rx="3.5" ry="5" fill="#f6d7a7" stroke="#240d03" stroke-width="2"/>
+    </g>
+
+    <!-- Ears -->
+    <circle cx="58" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+    <circle cx="58" cy="64" r="7.5" fill="#e59872"/>
+    <circle cx="142" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+    <circle cx="142" cy="64" r="7.5" fill="#e59872"/>
+
+    <!-- Head -->
+    <ellipse cx="100" cy="86" rx="46" ry="40" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+    <path d="M 92 47 C 94 38, 100 39, 100 45 C 103 37, 110 39, 108 48" fill="#b46028" stroke="#240d03" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Eyes -->
+    <ellipse cx="82" cy="78" rx="12" ry="13.5" fill="#ffffff" stroke="#240d03" stroke-width="3.2"/>
+    <ellipse cx="118" cy="78" rx="12" ry="13.5" fill="#ffffff" stroke="#240d03" stroke-width="3.2"/>
+    <circle cx="84" cy="79" r="6.8" fill="#23120b"/>
+    <circle cx="116" cy="79" r="6.8" fill="#23120b"/>
+    <circle cx="81.5" cy="75.5" r="3" fill="#ffffff"/>
+    <circle cx="113.5" cy="75.5" r="3" fill="#ffffff"/>
+    <path d="M 70 63 Q 82 58 91 64" fill="none" stroke="#240d03" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M 109 64 Q 118 58 130 63" fill="none" stroke="#240d03" stroke-width="3.2" stroke-linecap="round"/>
+
+    <!-- Buck teeth -->
+    <rect x="89" y="109" width="11" height="16" rx="2.5" fill="#ffffff" stroke="#240d03" stroke-width="3"/>
+    <rect x="100" y="109" width="11" height="16" rx="2.5" fill="#ffffff" stroke="#240d03" stroke-width="3"/>
+
+    <!-- Cheeks & Nose -->
+    <ellipse cx="86" cy="100" rx="20" ry="14" fill="url(#bvMuzzle)" stroke="#240d03" stroke-width="3"/>
+    <ellipse cx="114" cy="100" rx="20" ry="14" fill="url(#bvMuzzle)" stroke="#240d03" stroke-width="3"/>
+    <ellipse cx="66" cy="96" rx="7" ry="4.5" fill="#f472b6" opacity="0.45"/>
+    <ellipse cx="134" cy="96" rx="7" ry="4.5" fill="#f472b6" opacity="0.45"/>
+    <ellipse cx="100" cy="93" rx="11" ry="7.5" fill="#2b1208" stroke="#140702" stroke-width="2.5"/>
+    <ellipse cx="96.5" cy="90.5" rx="4" ry="2.2" fill="#ffffff" opacity="0.65"/>
+  </g>
+</svg>

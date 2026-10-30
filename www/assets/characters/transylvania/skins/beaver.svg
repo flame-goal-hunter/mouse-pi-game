@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <!-- Warm chestnut beaver fur -->
+    <radialGradient id="bvFur" cx="42%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#c87338"/>
+      <stop offset="55%" stop-color="#9a4e1c"/>
+      <stop offset="100%" stop-color="#5e2c0c"/>
+    </radialGradient>
+    <!-- Soft cream belly -->
+    <radialGradient id="bvBelly" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#fde8c8"/>
+      <stop offset="65%" stop-color="#e5bc8a"/>
+      <stop offset="100%" stop-color="#b88652"/>
+    </radialGradient>
+    <!-- Leathery paddle tail gradient -->
+    <linearGradient id="bvTail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6b3416"/>
+      <stop offset="50%" stop-color="#4e240d"/>
+      <stop offset="100%" stop-color="#331506"/>
+    </linearGradient>
+    <!-- Chubby muzzle cheeks -->
+    <radialGradient id="bvMuzzle" cx="45%" cy="38%" r="60%">
+      <stop offset="0%" stop-color="#ffe7c4"/>
+      <stop offset="75%" stop-color="#deb07c"/>
+      <stop offset="100%" stop-color="#b3804c"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Ground shadow -->
+  <ellipse cx="100" cy="216" rx="52" ry="9" fill="#000" opacity="0.28"/>
+
+  <!-- === WIDE FLAT WAFFLE-GRID BEAVER PADDLE TAIL (sticking out on the right) === -->
+  <g transform="rotate(-18 148 175)">
+    <ellipse cx="158" cy="176" rx="34" ry="18" fill="url(#bvTail)" stroke="#240d03" stroke-width="4"/>
+    <!-- Criss-cross beaver tail scales -->
+    <path d="M 134 168 L 178 186 M 142 161 L 184 179 M 128 176 L 166 191" stroke="#2d1205" stroke-width="2.2" opacity="0.75"/>
+    <path d="M 134 184 L 178 166 M 144 190 L 184 173 M 128 176 L 166 161" stroke="#2d1205" stroke-width="2.2" opacity="0.75"/>
+    <ellipse cx="152" cy="168" rx="14" ry="4" fill="#8f4c24" opacity="0.35"/>
+  </g>
+
+  <!-- === STURDY BEAVER FEET === -->
+  <ellipse cx="78" cy="204" rx="19" ry="10" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+  <path d="M 67 205 L 69 211 M 76 206 L 77 212 M 85 205 L 86 211" stroke="#240d03" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="122" cy="204" rx="19" ry="10" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+  <path d="M 114 205 L 113 211 M 123 206 L 122 212 M 132 205 L 130 211" stroke="#240d03" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- === CHUBBY BEAVER BODY === -->
+  <ellipse cx="100" cy="158" rx="45" ry="47" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+  <!-- Soft cream belly patch -->
+  <ellipse cx="100" cy="164" rx="30" ry="33" fill="url(#bvBelly)" stroke="#7a421c" stroke-width="2"/>
+  <!-- Fluffy chest tuft -->
+  <path d="M 92 132 L 96 138 L 100 131 L 104 138 L 108 132" fill="none" stroke="#fff3de" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- === PAWS (left paw waving, right paw holding a chewed birch twig) === -->
+  <ellipse cx="52" cy="154" rx="13" ry="10" transform="rotate(-18 52 154)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+  <ellipse cx="148" cy="154" rx="13" ry="10" transform="rotate(18 148 154)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+  <!-- Cute chewed wooden branch in right paw -->
+  <g transform="rotate(-28 156 146)">
+    <rect x="142" y="140" width="32" height="10" rx="4" fill="#8b5a2b" stroke="#240d03" stroke-width="2.8"/>
+    <ellipse cx="173" cy="145" rx="3.5" ry="5" fill="#f6d7a7" stroke="#240d03" stroke-width="2"/>
+    <path d="M 149 143 L 164 143" stroke="#5c3816" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
+
+  <!-- === SMALL ROUND BEAVER EARS === -->
+  <circle cx="58" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+  <circle cx="58" cy="64" r="7.5" fill="#e59872"/>
+  <circle cx="142" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+  <circle cx="142" cy="64" r="7.5" fill="#e59872"/>
+
+  <!-- === BEAVER HEAD === -->
+  <ellipse cx="100" cy="86" rx="46" ry="40" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+  <!-- Fluffy head hair tuft -->
+  <path d="M 92 47 C 94 38, 100 39, 100 45 C 103 37, 110 39, 108 48" fill="#b46028" stroke="#240d03" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- === BIG EXPRESSIVE EYES === -->
+  <ellipse cx="82" cy="78" rx="12" ry="13.5" fill="#ffffff" stroke="#240d03" stroke-width="3.2"/>
+  <ellipse cx="118" cy="78" rx="12" ry="13.5" fill="#ffffff" stroke="#240d03" stroke-width="3.2"/>
+  <circle cx="84" cy="79" r="6.8" fill="#23120b"/>
+  <circle cx="116" cy="79" r="6.8" fill="#23120b"/>
+  <circle cx="81.5" cy="75.5" r="3" fill="#ffffff"/>
+  <circle cx="113.5" cy="75.5" r="3" fill="#ffffff"/>
+  <!-- Friendly eyebrows -->
+  <path d="M 70 63 Q 82 58 91 64" fill="none" stroke="#240d03" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M 109 64 Q 118 58 130 63" fill="none" stroke="#240d03" stroke-width="3.2" stroke-linecap="round"/>
+
+  <!-- === TWO BIG PROMINENT WHITE BEAVER BUCK-TEETH === -->
+  <rect x="89" y="109" width="11" height="16" rx="2.5" fill="#ffffff" stroke="#240d03" stroke-width="3"/>
+  <rect x="100" y="109" width="11" height="16" rx="2.5" fill="#ffffff" stroke="#240d03" stroke-width="3"/>
+  <line x1="92" y1="121" x2="98" y2="121" stroke="#fde68a" stroke-width="1.5"/>
+  <line x1="102" y1="121" x2="108" y2="121" stroke="#fde68a" stroke-width="1.5"/>
+
+  <!-- === CHUBBY PUFFY BEAVER MUZZLE CHEEKS === -->
+  <ellipse cx="86" cy="100" rx="20" ry="14" fill="url(#bvMuzzle)" stroke="#240d03" stroke-width="3"/>
+  <ellipse cx="114" cy="100" rx="20" ry="14" fill="url(#bvMuzzle)" stroke="#240d03" stroke-width="3"/>
+  <!-- Rosy blush -->
+  <ellipse cx="66" cy="96" rx="7" ry="4.5" fill="#f472b6" opacity="0.45"/>
+  <ellipse cx="134" cy="96" rx="7" ry="4.5" fill="#f472b6" opacity="0.45"/>
+  <!-- Whisker dots -->
+  <circle cx="76" cy="100" r="1.6" fill="#5e2c0c"/>
+  <circle cx="81" cy="104" r="1.6" fill="#5e2c0c"/>
+  <circle cx="124" cy="100" r="1.6" fill="#5e2c0c"/>
+  <circle cx="119" cy="104" r="1.6" fill="#5e2c0c"/>
+
+  <!-- === BIG SHINY DARK BEAVER NOSE === -->
+  <ellipse cx="100" cy="93" rx="11" ry="7.5" fill="#2b1208" stroke="#140702" stroke-width="2.5"/>
+  <ellipse cx="96.5" cy="90.5" rx="4" ry="2.2" fill="#ffffff" opacity="0.65"/>
+</svg>

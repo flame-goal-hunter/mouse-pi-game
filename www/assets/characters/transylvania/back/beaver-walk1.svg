@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <radialGradient id="bvFur" cx="42%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#c87338"/>
+      <stop offset="55%" stop-color="#9a4e1c"/>
+      <stop offset="100%" stop-color="#5e2c0c"/>
+    </radialGradient>
+    <linearGradient id="bvTail" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6b3416"/>
+      <stop offset="50%" stop-color="#4e240d"/>
+      <stop offset="100%" stop-color="#331506"/>
+    </linearGradient>
+  </defs>
+
+  <ellipse cx="100" cy="216" rx="50" ry="8" fill="#000" opacity="0.26"/>
+  <ellipse cx="74" cy="196" rx="19" ry="10" transform="rotate(-12 74 196)" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+  <ellipse cx="126" cy="209" rx="19" ry="10" transform="rotate(10 126 209)" fill="url(#bvTail)" stroke="#240d03" stroke-width="3.5"/>
+
+  <g transform="translate(0,-3) rotate(-3 100 150)">
+    <ellipse cx="50" cy="146" rx="13" ry="10" transform="rotate(-28 50 146)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+    <ellipse cx="149" cy="160" rx="13" ry="10" transform="rotate(26 149 160)" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.5"/>
+    <ellipse cx="100" cy="158" rx="45" ry="47" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+    <circle cx="58" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+    <circle cx="142" cy="64" r="14" fill="url(#bvFur)" stroke="#240d03" stroke-width="3.8"/>
+    <ellipse cx="100" cy="86" rx="46" ry="40" fill="url(#bvFur)" stroke="#240d03" stroke-width="4"/>
+    <path d="M 92 47 C 94 38, 100 39, 100 45 C 103 37, 110 39, 108 48" fill="#b46028" stroke="#240d03" stroke-width="3" stroke-linecap="round"/>
+    <g transform="rotate(-8 100 188)">
+      <ellipse cx="100" cy="190" rx="25" ry="32" fill="url(#bvTail)" stroke="#240d03" stroke-width="4"/>
+      <path d="M 80 176 L 120 196 M 82 165 L 118 183 M 82 189 L 118 207" stroke="#2d1205" stroke-width="2.3" opacity="0.8"/>
+      <path d="M 120 176 L 80 196 M 118 165 L 82 183 M 118 189 L 82 207" stroke="#2d1205" stroke-width="2.3" opacity="0.8"/>
+    </g>
+  </g>
+</svg>

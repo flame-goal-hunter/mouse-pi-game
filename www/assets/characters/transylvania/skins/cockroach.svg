@@ -1,57 +1,142 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
   <defs>
-    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
+    <!-- Glossy reddish-mahogany cockroach chitin shell -->
+    <linearGradient id="crWing" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#9e3214"/>
+      <stop offset="45%" stop-color="#6e1e0a"/>
+      <stop offset="100%" stop-color="#380c03"/>
+    </linearGradient>
+    <!-- Pronotum thoracic shield hood behind head -->
+    <radialGradient id="crShield" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#b43c18"/>
+      <stop offset="65%" stop-color="#6e1e0a"/>
+      <stop offset="100%" stop-color="#2e0902"/>
+    </radialGradient>
+    <!-- Ribbed amber-orange cockroach underbelly segments -->
+    <linearGradient id="crBelly" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#92400e"/>
+    </linearGradient>
+    <!-- Insect head gradient -->
+    <radialGradient id="crHead" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#85270f"/>
+      <stop offset="70%" stop-color="#4f1406"/>
+      <stop offset="100%" stop-color="#290802"/>
+    </radialGradient>
   </defs>
-  <!-- Glossy wing-case cape behind body -->
-  <ellipse cx="100" cy="156" rx="54" ry="44" fill="#5c2808" class="outline"/>
-  <path d="M 100 114 L 100 198" stroke="#1a1a1a" stroke-width="2.5"/>
-  <!-- 6 Funny Cockroach Legs! (Bottom pair = feet, Middle & Upper pairs = waving side legs) -->
-  <!-- Bottom feet -->
-  <ellipse cx="76" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <ellipse cx="124" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
-  <!-- Middle pair of extra bug legs sticking out with little shoes -->
-  <path d="M 52 174 Q 26 178 22 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="21" cy="191" r="5" fill="#d97706" class="outline"/>
-  <path d="M 148 174 Q 174 178 178 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="179" cy="191" r="5" fill="#d97706" class="outline"/>
-  <!-- Upper pair of arms -->
-  <ellipse cx="46" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(-28 46 148)"/>
-  <ellipse cx="154" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(28 154 148)"/>
-  <!-- Chubby cockroach body -->
-  <ellipse cx="100" cy="158" rx="46" ry="39" fill="#9a4412" class="outline"/>
-  <!-- Striped golden-amber belly -->
-  <ellipse cx="100" cy="164" rx="31" ry="27" fill="#fbbf24" class="outline"/>
-  <path d="M 73 154 Q 100 160 127 154" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 71 166 Q 100 172 129 166" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 75 178 Q 100 183 125 178" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
-  <!-- Long curly bouncy antennae on top! -->
-  <path d="M 84 68 Q 54 22 26 36 Q 14 44 24 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="24" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
-  <path d="M 116 68 Q 146 22 174 36 Q 186 44 176 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="176" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
-  <!-- Cute little mouse-bug ears peeking on the sides -->
-  <ellipse cx="62" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(-20 62 84)"/>
-  <ellipse cx="138" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(20 138 84)"/>
-  <!-- Head -->
-  <ellipse cx="100" cy="102" rx="42" ry="36" fill="#9a4412" class="outline"/>
-  <!-- Shiny forehead highlight -->
-  <ellipse cx="88" cy="78" rx="14" ry="5" fill="#d97706" opacity="0.65" transform="rotate(-12 88 78)"/>
-  <!-- Goofy hilarious asymmetric cartoon eyes! -->
-  <circle cx="82" cy="96" r="15" fill="#ffffff" class="outline"/>
-  <circle cx="118" cy="96" r="12.5" fill="#ffffff" class="outline"/>
-  <circle cx="84" cy="97" r="5.5" fill="#1a1a1a"/>
-  <circle cx="116" cy="95" r="4.5" fill="#1a1a1a"/>
-  <circle cx="86" cy="94" r="2.2" fill="#ffffff"/>
-  <circle cx="118" cy="93" r="1.8" fill="#ffffff"/>
-  <!-- Funny twitchy mustache / feelers by the nose -->
-  <path d="M 86 112 Q 66 110 58 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M 114 112 Q 134 110 142 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
-  <ellipse cx="100" cy="109" rx="6" ry="4.5" fill="#4a1f05" class="outline"/>
-  <!-- Cheeky wide grin with two goofy buck-teeth -->
-  <path d="M 76 118 Q 100 134 124 118" fill="none" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
-  <rect x="93" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
-  <rect x="101" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
-  <!-- Rosy cheeks -->
-  <circle cx="68" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
-  <circle cx="132" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
+
+  <!-- Ground shadow -->
+  <ellipse cx="100" cy="218" rx="46" ry="8" fill="#000" opacity="0.28"/>
+
+  <!-- === 6 JOINTED SPINY INSECT LEGS (3 left, 3 right — unmistakable cockroach silhouette!) === -->
+  <g stroke="#260701" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Left Hind Leg (Bottom Left) -->
+    <path d="M 78 184 L 50 194 L 62 215 L 49 218" stroke-width="5.5"/>
+    <path d="M 78 184 L 50 194 L 62 215" stroke="#7c2811" stroke-width="2.6"/>
+    <!-- Tibia spines -->
+    <path d="M 53 199 L 46 202 M 56 206 L 49 209 M 59 211 L 52 214" stroke-width="2.2"/>
+
+    <!-- Right Hind Leg (Bottom Right) -->
+    <path d="M 122 184 L 150 194 L 138 215 L 151 218" stroke-width="5.5"/>
+    <path d="M 122 184 L 150 194 L 138 215" stroke="#7c2811" stroke-width="2.6"/>
+    <!-- Tibia spines -->
+    <path d="M 147 199 L 154 202 M 144 206 L 151 209 M 141 211 L 148 214" stroke-width="2.2"/>
+
+    <!-- Left Middle Leg -->
+    <path d="M 66 156 L 26 146 L 16 174 L 8 177" stroke-width="5"/>
+    <path d="M 66 156 L 26 146 L 16 174" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 23 153 L 16 151 M 20 161 L 13 159 M 18 168 L 11 167" stroke-width="2"/>
+
+    <!-- Right Middle Leg -->
+    <path d="M 134 156 L 174 146 L 184 174 L 192 177" stroke-width="5"/>
+    <path d="M 134 156 L 174 146 L 184 174" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 177 153 L 184 151 M 180 161 L 187 159 M 182 168 L 189 167" stroke-width="2"/>
+
+    <!-- Left Front Leg (raised in a sneaky bug pose!) -->
+    <path d="M 68 130 L 30 112 L 22 134 L 14 132" stroke-width="5"/>
+    <path d="M 68 130 L 30 112 L 22 134" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 28 118 L 21 116 M 25 126 L 18 124" stroke-width="2"/>
+
+    <!-- Right Front Leg (rubbing/waving) -->
+    <path d="M 132 130 L 170 112 L 178 134 L 186 132" stroke-width="5"/>
+    <path d="M 132 130 L 170 112 L 178 134" stroke="#7c2811" stroke-width="2.4"/>
+    <path d="M 172 118 L 179 116 M 175 126 L 182 124" stroke-width="2"/>
+  </g>
+
+  <!-- === CERCI (Two spiky cockroach tail feelers at the bottom tip of abdomen) === -->
+  <path d="M 88 202 L 78 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M 112 202 L 122 216" stroke="#260701" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- === PRONOTUM SHIELD (Classic cockroach thoracic hood flaring behind head & shoulders) === -->
+  <ellipse cx="100" cy="112" rx="46" ry="26" fill="url(#crShield)" stroke="#220601" stroke-width="3.8"/>
+  <!-- Characteristic pale amber cockroach pronotum rim marking -->
+  <path d="M 62 110 C 72 92, 128 92, 138 110" fill="none" stroke="#f59e0b" stroke-width="2.8" opacity="0.55" stroke-linecap="round"/>
+
+  <!-- === ELONGATED OVAL COCKROACH CARAPACE & FOLDED WINGS (Elytra) === -->
+  <ellipse cx="100" cy="156" rx="37" ry="50" fill="url(#crWing)" stroke="#220601" stroke-width="4"/>
+  <!-- Outer glossy wing-cases (elytra) framing the ribbed belly -->
+  <path d="M 68 118 C 58 145, 62 185, 82 202 C 76 178, 76 144, 84 120 Z" fill="#85270f" stroke="#220601" stroke-width="2.5"/>
+  <path d="M 132 118 C 142 145, 138 185, 118 202 C 124 178, 124 144, 116 120 Z" fill="#85270f" stroke="#220601" stroke-width="2.5"/>
+  <!-- Glossy chitin specular highlights on wing cases -->
+  <path d="M 69 132 C 65 150, 67 172, 74 186" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
+  <path d="M 131 132 C 135 150, 133 172, 126 186" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round" opacity="0.38"/>
+
+  <!-- === SEGMENTED RIBBED COCKROACH UNDERBELLY (Sternites) === -->
+  <ellipse cx="100" cy="158" rx="22" ry="38" fill="url(#crBelly)" stroke="#380c03" stroke-width="3"/>
+  <!-- Horizontal chitin segment ribs -->
+  <path d="M 81 134 Q 100 140 119 134" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+  <path d="M 79 147 Q 100 153 121 147" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+  <path d="M 78 160 Q 100 166 122 160" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+  <path d="M 80 173 Q 100 179 120 173" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+  <path d="M 84 185 Q 100 190 116 185" fill="none" stroke="#5c1d09" stroke-width="2.6"/>
+  <!-- Glossy belly shine -->
+  <ellipse cx="93" cy="154" rx="5" ry="22" fill="#fef08a" opacity="0.28"/>
+
+  <!-- === LONG WHIP-LIKE SWEEPING COCKROACH ANTENNAE (Усищи!) === -->
+  <!-- Left sweeping whip antenna -->
+  <path d="M 86 62 C 68 18, 22 4, 6 34 C 2 42, 8 50, 16 47" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M 86 62 C 68 18, 22 4, 6 34" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <!-- Right sweeping whip antenna (twitching higher!) -->
+  <path d="M 114 62 C 134 12, 180 2, 194 30 C 198 38, 191 46, 183 43" fill="none" stroke="#220601" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M 114 62 C 134 12, 180 2, 194 30" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="4 3" stroke-linecap="round"/>
+  <!-- Twitch motion lines near antennae tips -->
+  <path d="M 4 22 Q 10 14 20 16" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 196 18 Q 190 10 180 12" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- === TRIANGULAR INSECT HEAD (NO ears! Pure bug head!) === -->
+  <path d="M 66 78 C 62 56, 138 56, 134 78 C 131 98, 116 114, 100 115 C 84 114, 69 98, 66 78 Z" fill="url(#crHead)" stroke="#220601" stroke-width="4"/>
+  <!-- Forehead chitin shine -->
+  <ellipse cx="100" cy="68" rx="16" ry="5" fill="#dc6832" opacity="0.4"/>
+
+  <!-- === LITTLE SIDE MANDIBLES & MAXILLARY PALPS (Щупики и жвалы) === -->
+  <!-- Short feeler palps under the mouth -->
+  <path d="M 80 106 Q 66 114 64 122" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M 120 106 Q 134 114 136 122" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Side pinchers/mandibles -->
+  <path d="M 74 98 C 65 101, 67 109, 78 107 Z" fill="#b45309" stroke="#220601" stroke-width="2.5"/>
+  <path d="M 126 98 C 135 101, 133 109, 122 107 Z" fill="#b45309" stroke="#220601" stroke-width="2.5"/>
+
+  <!-- === HUGE BULGING WACKY CARTOON BUG EYES (Perched high on top corners of head!) === -->
+  <!-- Left giant bulging eye -->
+  <ellipse cx="78" cy="74" rx="18" ry="20" transform="rotate(-8 78 74)" fill="#fef9c3" stroke="#220601" stroke-width="3.8"/>
+  <!-- Right slightly crazier bulging eye -->
+  <ellipse cx="121" cy="75" rx="16" ry="18" transform="rotate(8 121 75)" fill="#fef9c3" stroke="#220601" stroke-width="3.8"/>
+  <!-- Faint compound-eye facet grid shimmer on edges -->
+  <path d="M 64 68 L 70 64 M 63 74 L 69 70" stroke="#fde047" stroke-width="1.5" opacity="0.6"/>
+  <path d="M 130 68 L 135 64 M 131 74 L 136 70" stroke="#fde047" stroke-width="1.5" opacity="0.6"/>
+  <!-- Zany asymmetrical pupils (giving maximum Oggy-cockroach personality!) -->
+  <circle cx="83" cy="75" r="6.5" fill="#1c0601"/>
+  <circle cx="116" cy="73" r="5" fill="#1c0601"/>
+  <circle cx="80.5" cy="72" r="2.6" fill="#ffffff"/>
+  <circle cx="114" cy="70.5" r="2.2" fill="#ffffff"/>
+  <!-- Expressive bug brow ridges -->
+  <path d="M 60 56 Q 78 48 92 60" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M 108 60 Q 122 46 138 55" fill="none" stroke="#220601" stroke-width="3.5" stroke-linecap="round"/>
+
+  <!-- === MISCHIEVOUS CROOKED COCKROACH GRIN (No beaver teeth!) === -->
+  <path d="M 80 96 Q 100 109 120 94" fill="#2e0702" stroke="#220601" stroke-width="3" stroke-linecap="round"/>
+  <!-- Cheeky little pink tongue sticking out to the side -->
+  <path d="M 103 101 C 105 111, 115 110, 114 99 Z" fill="#fb7185" stroke="#220601" stroke-width="2.2"/>
+  <line x1="109" y1="100" x2="109" y2="107" stroke="#be123c" stroke-width="1.5" stroke-linecap="round"/>
 </svg>
