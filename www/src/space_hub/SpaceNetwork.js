@@ -128,8 +128,13 @@ class SpaceNetworkManager {
         if (!pkt?.playerId || pkt.playerId === PlayerProfile.playerId) return;
         const peer = this.peers.get(pkt.playerId) || {
             playerId: pkt.playerId, rx: pkt.x || 0, ry: pkt.y || 0,
-            rAngle: pkt.angle || 0, rHomeAngle: pkt.homeAngle || 0
+            rAngle: pkt.angle || 0, rHomeAngle: pkt.homeAngle || 0, lastPktTs: 0
         };
+        if (peer.lastPktTs && pkt.ts && pkt.ts < peer.lastPktTs) return;
+        peer.lastPktTs = pkt.ts || peer.lastPktTs;
+        if (Math.hypot((pkt.x || 0) - peer.rx, (pkt.y || 0) - peer.ry) > 600) {
+            peer.rx = pkt.x || 0; peer.ry = pkt.y || 0;
+        }
         Object.assign(peer, pkt, { lastSeen: Date.now() });
         this.peers.set(pkt.playerId, peer);
         this._saveCachedHome(pkt);
@@ -138,25 +143,26 @@ class SpaceNetworkManager {
     step(dt, motionPatch) {
         if (motionPatch) Object.assign(this.localMotion, motionPatch);
         const now = performance.now();
-        if (now - this.lastSendAt > 125) {
+        if (now - this.lastSendAt > 50) {
             this.lastSendAt = now;
             this.broadcastNow();
         }
-        const syncInterval = this.connected ? 2500 : 800;
-        if (now - this.lastHttpSyncAt > syncInterval) {
+        if (!this.connected && now - this.lastHttpSyncAt > 250) {
             this.lastHttpSyncAt = now;
             this._syncHttpFallback();
         }
         const nowWall = Date.now();
         for (const [id, p] of this.peers) {
             if (nowWall - p.lastSeen > 16000) { this.peers.delete(id); continue; }
-            p.x += (p.vx || 0) * dt * 0.5; p.y += (p.vy || 0) * dt * 0.5;
-            const k = Math.min(1, dt * 8.5);
+            if (nowWall - p.lastSeen < 350) {
+                p.x += (p.vx || 0) * dt; p.y += (p.vy || 0) * dt;
+            }
+            const k = Math.min(1, dt * 12);
             p.rx += (p.x - p.rx) * k; p.ry += (p.y - p.ry) * k;
             let da = (p.angle || 0) - p.rAngle;
             while (da > Math.PI) da -= Math.PI * 2;
             while (da < -Math.PI) da += Math.PI * 2;
-            p.rAngle += da * Math.min(1, dt * 10);
+            p.rAngle += da * Math.min(1, dt * 14);
             p.rHomeAngle += ((p.homeAngle || 0) - p.rHomeAngle) * k;
         }
     }

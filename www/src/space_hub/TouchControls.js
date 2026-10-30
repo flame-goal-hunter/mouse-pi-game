@@ -114,8 +114,13 @@ export class TouchControls {
 
         this.actionBtn.addEventListener('pointerdown', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             if (this.canDock) this.onActionTap();
             else this.turboHeld = true;
+        });
+        this.actionBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
         });
         const endTurbo = () => { this.turboHeld = false; };
         this.actionBtn.addEventListener('pointerup', endTurbo);

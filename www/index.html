@@ -11307,9 +11307,9 @@
         };
 
         function gameLoop() {
-            // While the Phaser iframe is up it owns rendering — the hidden canvas
-            // must not simulate or draw anything (Android perf).
-            if (!phaserRunning) {
+            // While the Phaser iframe is up or Space Hub is active (gameRunning === false),
+            // the hidden canvas must not simulate or draw anything.
+            if (!phaserRunning && gameRunning) {
                 update();
                 draw();
             }

@@ -73,10 +73,13 @@ export class HomeWardrobeModal {
         this.titleEl = modal.querySelector('#hpWardrobeTitle');
         this.balanceEl = modal.querySelector('#hpWardrobeBalance');
         modal.querySelector('#hpWardrobeClose').addEventListener('click', () => this.close());
-        modal.addEventListener('click', (e) => { if (e.target === modal) this.close(); });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && performance.now() - (this._openedAt || 0) > 350) this.close();
+        });
     }
 
     open(visitData = null) {
+        this._openedAt = performance.now();
         this.visitData = visitData;
         PlayerProfile._syncFromStorage();
         this._renderItems();

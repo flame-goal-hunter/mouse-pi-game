@@ -82,7 +82,8 @@ export class HomePlanetRenderer {
         ctx.fillText(nickname, 0, -35);
         if (facing < 0) ctx.scale(-1, 1);
         const skin = getPlayerSkinSprite(skinId);
-        const img = moving ? (Math.floor(timeSec * 9) % 2 === 0 ? skin.walk1 : skin.walk2) : skin.idle;
+        const frame = moving ? (Math.floor(timeSec * 9) % 2 === 0 ? skin.walk1 : skin.walk2) : skin.idle;
+        const img = (frame && frame.complete && frame.naturalWidth > 0) ? frame : skin.idle;
         if (img && img.complete && img.naturalWidth > 0) ctx.drawImage(img, -28, -30, 56, 56);
         else { ctx.fillStyle = skin.bodyColor || '#38bdf8'; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
