@@ -1,13 +1,15 @@
 // ============================================================================
-// HomePlanetRenderer.js — Отрисовка Домашней Планеты с цветами/кольцами владельца,
+// HomePlanetRenderer.js — Отрисовка Домашней Планеты с живым Биомом и 3D-кольцами,
 // Горой Сыра, Гардеробом, Терминалом «Красить планету» и Космодромом
 // ============================================================================
 
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
+import { normalizeAppearance } from '../space_hub/PersonalPlanetSystem.js';
+import { drawStyledPlanet } from '../space_hub/PlanetStyleRenderer.js';
 
 export const HOME_ZONES = [
     { id: 'storage',    angle: -1.08, name: '🧀 Хранилище Сыра',   actionLabel: 'ВЫГРУЗИТЬ', icon: '🧀', hint: 'Сложить сыр из ракеты на Склад' },
-    { id: 'paint',      angle: -0.52, name: '🎨 Терминал Планеты', actionLabel: 'КРАСИТЬ!',  icon: '🎨', hint: 'Поменять цвет, узор и кольца планеты' },
+    { id: 'paint',      angle: -0.52, name: '🎨 Терминал Планеты', actionLabel: 'СТИЛЬ!',    icon: '🎨', hint: 'Выбрать Биом планеты, кольца и спутник' },
     { id: 'cosmodrome', angle: 0.05,  name: '🚀 Космодром',        actionLabel: 'ВЗЛЁТ!',    icon: '🚀', hint: 'Вернуться на карту Космоса' },
     { id: 'wardrobe',   angle: 0.98,  name: '👗 Гардероб Скинов',  actionLabel: 'ГАРДЕРОБ',  icon: '👗', hint: 'Купить и надеть скин Мышонка Пи' }
 ];
@@ -15,9 +17,9 @@ export const HOME_ZONES = [
 export class HomePlanetRenderer {
     draw(ctx, viewW, viewH, state, timeSec, peersOnPlanet = []) {
         const cx = viewW / 2, cy = viewH * 0.62, R = Math.min(viewW, viewH) * 0.34;
-        const app = (state.isVisiting ? state.visitData?.planetAppearance : PlayerProfile.planetAppearance) || {};
+        const rawApp = (state.isVisiting ? state.visitData?.planetAppearance : PlayerProfile.planetAppearance) || {};
+        const app = normalizeAppearance(rawApp);
         const baseCol = app.baseColor || '#fde047';
-        const accCol = app.accentColor || '#eab308';
 
         const sky = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, Math.max(viewW, viewH));
         sky.addColorStop(0, '#1e1b4b'); sky.addColorStop(0.55, '#0f172a'); sky.addColorStop(1, '#040613');
@@ -29,25 +31,13 @@ export class HomePlanetRenderer {
             ctx.beginPath(); ctx.arc(sx, sy, 1.2 + (i % 2), 0, Math.PI * 2); ctx.fill();
         }
 
-        ctx.save();
-        ctx.translate(cx, cy);
-        const atmo = ctx.createRadialGradient(0, 0, R * 0.85, 0, 0, R * 1.48);
-        atmo.addColorStop(0, app.atmosphereGlow || 'rgba(250, 204, 21, 0.36)');
-        atmo.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = atmo; ctx.beginPath(); ctx.arc(0, 0, R * 1.48, 0, Math.PI * 2); ctx.fill();
-
-        if (app.ringType && app.ringType !== 'none') {
-            ctx.save();
-            ctx.rotate(app.ringType === 'tilted' ? 0.35 : -0.18);
-            ctx.strokeStyle = baseCol; ctx.globalAlpha = 0.35; ctx.lineWidth = 10;
-            ctx.beginPath(); ctx.ellipse(0, 0, R * 1.55, R * 0.36, 0, 0, Math.PI * 2); ctx.stroke();
-            ctx.restore();
-        }
-
         const storedCheese = state.isVisiting ? (state.visitData?.homeSnapshot?.storedCheese || 0) : PlayerProfile.storedCheese;
 
         ctx.save();
+        ctx.translate(cx, cy);
         ctx.rotate(-state.playerAngle * 0.55);
+
+        // Постройки на кромке планеты
         for (const z of HOME_ZONES) {
             if (state.isVisiting && z.id === 'paint') continue;
             ctx.save(); ctx.rotate(z.angle); ctx.translate(0, -R);
@@ -59,17 +49,10 @@ export class HomePlanetRenderer {
             ctx.restore();
         }
 
-        const bodyG = ctx.createRadialGradient(-R * 0.25, -R * 0.3, R * 0.1, 0, 0, R);
-        bodyG.addColorStop(0, baseCol); bodyG.addColorStop(0.68, accCol); bodyG.addColorStop(1, '#0f172a');
-        ctx.fillStyle = bodyG; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = baseCol; ctx.lineWidth = 10;
-        ctx.beginPath(); ctx.arc(0, 0, R - 4, 0, Math.PI * 2); ctx.stroke();
+        // Отрисовка сферы планеты с выбранным Биомом, рельефом, 3D-кольцами и спутником
+        drawStyledPlanet(ctx, R, app, timeSec);
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
-        [[-0.35, -0.45, 0.12], [0.4, -0.35, 0.1], [0.05, -0.6, 0.08], [-0.45, 0.2, 0.14], [0.35, 0.3, 0.11]].forEach(([x, y, r]) => {
-            ctx.beginPath(); ctx.arc(x * R, y * R, r * R, 0, Math.PI * 2); ctx.fill();
-        });
-
+        // Мышата на поверхности планеты
         for (const peer of peersOnPlanet) {
             this._drawSurfaceMouse(ctx, R, peer.rHomeAngle || 0, peer.facing || 1, Boolean(peer.moving), peer.equippedSkinId, peer.nickname || 'Пи', timeSec, true);
         }
@@ -77,6 +60,7 @@ export class HomePlanetRenderer {
             this._drawSurfaceMouse(ctx, R, state.playerAngle, state.facing, state.moving, PlayerProfile.equippedSkinId, PlayerProfile.nickname, timeSec, false);
         }
 
+        // Летящие кусочки сыра при выгрузке
         for (const fw of state.flyingCheese) {
             const pAngle = fw.startAngle + (HOME_ZONES[0].angle - fw.startAngle) * fw.t;
             const arcH = R + 28 + Math.sin(fw.t * Math.PI) * 75;
@@ -88,7 +72,6 @@ export class HomePlanetRenderer {
             ctx.fill(); ctx.stroke();
             ctx.restore();
         }
-        ctx.restore();
         ctx.restore();
     }
 
@@ -122,7 +105,7 @@ export class HomePlanetRenderer {
         ctx.beginPath(); ctx.roundRect(-26, -54, 52, 54, [16, 16, 4, 4]); ctx.fill(); ctx.stroke();
         ctx.font = '22px "Nunito", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('🎨', 0, -22);
         ctx.font = '900 11.5px "Nunito", sans-serif'; ctx.fillStyle = '#fde047';
-        ctx.fillText('КРАСИТЬ', 0, -64 - Math.sin(timeSec * 3) * 2);
+        ctx.fillText('БИОМ И КОЛЬЦА', 0, -64 - Math.sin(timeSec * 3) * 2);
     }
 
     _drawWardrobeBoutique(ctx, isNear, timeSec, isVisiting) {

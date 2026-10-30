@@ -1,11 +1,12 @@
 // ============================================================================
-// PlanetRenderer.js — Живые мультяшные планеты + кружащие на орбите
-// «припаркованные» ракеты игроков и значок 🎮 N для активных мини-игр
+// PlanetRenderer.js — Отрисовка центральных планет мини-игр с уникальными
+// биомами, 3D-кольцами, спутниками и кружащими ракетами игроков онлайн
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
 import { getPlayerSkinSprite } from '../core/PlayerProfile.js';
 import { SpaceNetwork } from './SpaceNetwork.js';
+import { drawStyledPlanet } from './PlanetStyleRenderer.js';
 
 export class PlanetRenderer {
     constructor() {
@@ -14,7 +15,6 @@ export class PlanetRenderer {
         for (const p of SPACE_CONFIG.planets) {
             this.states.set(p.id, {
                 bobPhase: Math.random() * Math.PI * 2,
-                orbitAngle: Math.random() * Math.PI * 2,
                 squashVel: 0,
                 squashOffset: 0,
                 dockGlow: 0
@@ -36,7 +36,6 @@ export class PlanetRenderer {
         for (const p of SPACE_CONFIG.planets) {
             const st = this.states.get(p.id);
             st.bobPhase += dt * 1.85;
-            st.orbitAngle += dt * 1.15;
             const springF = -65 * st.squashOffset - 9.5 * st.squashVel;
             st.squashVel += springF * dt;
             st.squashOffset += st.squashVel * dt;
@@ -69,68 +68,32 @@ export class PlanetRenderer {
             ctx.lineWidth = 4 * st.dockGlow;
             ctx.setLineDash([16, 10]);
             ctx.beginPath();
-            ctx.arc(0, 0, p.radius + 26 + Math.sin(timeSec * 6) * 4, 0, Math.PI * 2);
+            ctx.arc(0, 0, p.radius + 30 + Math.sin(timeSec * 6) * 4, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
         }
 
-        const atmo = ctx.createRadialGradient(0, 0, p.radius * 0.75, 0, 0, p.radius * 1.55);
-        atmo.addColorStop(0, p.atmoColor);
-        atmo.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = atmo;
-        ctx.beginPath(); ctx.arc(0, 0, p.radius * 1.55, 0, Math.PI * 2); ctx.fill();
-
-        const img = p.isHomePlanet ? getPlayerSkinSprite().idle : this.images.get(p.id);
+        // Выглядывающий монстрик-хранитель планеты
+        const img = this.images.get(p.id);
         if (img && img.complete && img.naturalWidth > 0) {
             ctx.save();
             const peek = Math.sin(timeSec * 2.2 + p.x) * 4;
-            ctx.translate(p.radius * 0.56, -p.radius * 0.66 + peek);
+            ctx.translate(p.radius * 0.56, -p.radius * 0.68 + peek);
             ctx.rotate(0.28);
             const sz = p.radius * 0.68;
             ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
             ctx.restore();
         }
 
-        ctx.save();
-        ctx.scale(sx, sy);
+        // Процедурная планета с биомом, 3D-кольцами и частицами
+        drawStyledPlanet(ctx, p.radius, { biome: p.biome || 'lava', ringType: p.ringType || 'saturn' }, timeSec, { sx, sy });
 
-        const bodyG = ctx.createRadialGradient(-p.radius * 0.32, -p.radius * 0.32, p.radius * 0.1, 0, 0, p.radius);
-        bodyG.addColorStop(0, p.coreColor);
-        bodyG.addColorStop(0.62, p.midColor);
-        bodyG.addColorStop(1, p.rimColor);
-        ctx.fillStyle = bodyG;
-        ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
-
-        ctx.save();
-        ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.13)';
-        ctx.beginPath(); ctx.arc(-p.radius * 0.28, -p.radius * 0.22, p.radius * 0.2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(p.radius * 0.2, p.radius * 0.3, p.radius * 0.14, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(5, 8, 22, 0.36)';
-        ctx.beginPath(); ctx.arc(p.radius * 0.36, p.radius * 0.12, p.radius * 0.95, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-
-        ctx.save();
-        ctx.rotate(-0.35 + Math.sin(timeSec * 0.9) * 0.08);
-        ctx.strokeStyle = p.ringColor;
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, p.radius * 1.42, p.radius * 0.36, 0, 0.15 * Math.PI, 0.85 * Math.PI);
-        ctx.stroke();
-        ctx.restore();
-
-        const mx = Math.cos(st.orbitAngle) * (p.radius * 1.36);
-        const my = Math.sin(st.orbitAngle) * (p.radius * 0.55);
-        ctx.fillStyle = p.moonColor;
-        ctx.beginPath(); ctx.arc(mx, my, 8.5, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-
-        // Orbiting parked rockets + 🎮 N badge when other players are playing on this planet
+        // Орбитальные ракеты игроков онлайн и значок 🎮 N
         if (playingHere.length > 0) {
             playingHere.forEach((peer, idx) => {
                 const a = timeSec * 1.4 + (idx / playingHere.length) * Math.PI * 2;
-                const ox = Math.cos(a) * (p.radius + 34);
-                const oy = Math.sin(a) * (p.radius + 34);
+                const ox = Math.cos(a) * (p.radius + 36);
+                const oy = Math.sin(a) * (p.radius + 36);
                 const skin = getPlayerSkinSprite(peer.equippedSkinId);
                 ctx.save();
                 ctx.translate(ox, oy);
@@ -145,20 +108,20 @@ export class PlanetRenderer {
             ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
             ctx.strokeStyle = '#4ade80';
             ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.roundRect(-34, -p.radius - 38, 68, 24, 12); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.roundRect(-34, -p.radius - 40, 68, 24, 12); ctx.fill(); ctx.stroke();
             ctx.font = '900 13px "Nunito", sans-serif';
             ctx.textAlign = 'center';
             ctx.fillStyle = '#4ade80';
-            ctx.fillText(`🎮 ${playingHere.length}`, 0, -p.radius - 22);
+            ctx.fillText(`🎮 ${playingHere.length}`, 0, -p.radius - 24);
         }
 
         ctx.font = '900 13px "Nunito", sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#fef08a';
-        ctx.fillText(p.badge, 0, p.radius + 24);
+        ctx.fillText(p.badge, 0, p.radius + 26);
         ctx.font = '900 16px "Nunito", sans-serif';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(p.name, 0, p.radius + 44);
+        ctx.fillText(p.name, 0, p.radius + 46);
         ctx.restore();
     }
 }
