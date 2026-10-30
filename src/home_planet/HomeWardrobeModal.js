@@ -1,6 +1,6 @@
 // ============================================================================
 // HomeWardrobeModal.js — Гардероб и Магазин Скинов на Домашней Планете
-// Покупка скинов за сыр со Склада (storedCheese) и мгновенное переодевание Пи
+// Покупка скинов за сыр со Склада + просмотр коллекции скинов друга в гостях
 // ============================================================================
 
 import { PlayerProfile, SKIN_CATALOG, getPlayerSkinSprite } from '../core/PlayerProfile.js';
@@ -9,6 +9,7 @@ export class HomeWardrobeModal {
     constructor(parentEl, onSkinChanged) {
         this.parentEl = parentEl;
         this.onSkinChanged = onSkinChanged || (() => {});
+        this.visitData = null;
         this._buildDOM();
     }
 
@@ -42,7 +43,7 @@ export class HomeWardrobeModal {
                 .hp-skin-item {
                     background: rgba(30, 41, 59, 0.85); border: 2px solid rgba(148, 163, 184, 0.35);
                     border-radius: 18px; padding: 10px; display: flex; flex-direction: column;
-                    align-items: center; text-align: center; gap: 5px; transition: transform 0.12s;
+                    align-items: center; text-align: center; gap: 5px;
                 }
                 .hp-skin-item.equipped { border-color: #4ade80; box-shadow: 0 0 18px rgba(74, 222, 128, 0.35); }
                 .hp-skin-item img { width: 58px; height: 58px; object-fit: contain; }
@@ -58,7 +59,7 @@ export class HomeWardrobeModal {
             <div class="hp-wardrobe-card">
                 <div class="hp-wardrobe-head">
                     <div>
-                        <div style="font-weight:900;font-size:18px;color:#f3e8ff;">👗 Космо-Гардероб Мышонка Пи</div>
+                        <div style="font-weight:900;font-size:18px;color:#f3e8ff;" id="hpWardrobeTitle">👗 Космо-Гардероб Мышонка Пи</div>
                         <div style="font-size:12.5px;color:#cbd5e1;" id="hpWardrobeBalance">🧀 На складе: 0</div>
                     </div>
                     <button type="button" id="hpWardrobeClose" style="background:#ef4444;color:#fff;border:none;width:36px;height:36px;border-radius:50%;font-weight:900;font-size:16px;cursor:pointer;">✕</button>
@@ -69,36 +70,44 @@ export class HomeWardrobeModal {
         this.parentEl.appendChild(modal);
         this.modal = modal;
         this.grid = modal.querySelector('#hpWardrobeGrid');
+        this.titleEl = modal.querySelector('#hpWardrobeTitle');
         this.balanceEl = modal.querySelector('#hpWardrobeBalance');
         modal.querySelector('#hpWardrobeClose').addEventListener('click', () => this.close());
         modal.addEventListener('click', (e) => { if (e.target === modal) this.close(); });
     }
 
-    open() {
+    open(visitData = null) {
+        this.visitData = visitData;
         PlayerProfile._syncFromStorage();
         this._renderItems();
         this.modal.classList.add('open');
     }
 
-    close() {
-        this.modal.classList.remove('open');
-    }
+    close() { this.modal.classList.remove('open'); }
 
     _renderItems() {
-        this.balanceEl.textContent = `🧀 Сыр на Складе: ${PlayerProfile.storedCheese} (В багажнике: ${PlayerProfile.pocketCheese})`;
+        const isGuest = Boolean(this.visitData);
+        const ownerSkins = isGuest ? (this.visitData.homeSnapshot?.unlockedSkins || ['blue']) : PlayerProfile.unlockedSkins;
+        this.titleEl.textContent = isGuest ? `👗 Коллекция скинов игрока ${this.visitData.ownerNick}` : '👗 Космо-Гардероб Мышонка Пи';
+        this.balanceEl.textContent = isGuest
+            ? `Открыто скинов у хозяина: ${ownerSkins.length} из ${SKIN_CATALOG.length}`
+            : `🧀 Сыр на Складе: ${PlayerProfile.storedCheese} (В багажнике: ${PlayerProfile.pocketCheese})`;
         this.grid.innerHTML = '';
 
         for (const skin of SKIN_CATALOG) {
             const spr = getPlayerSkinSprite(skin.id);
-            const unlocked = PlayerProfile.unlockedSkins.includes(skin.id);
-            const equipped = PlayerProfile.equippedSkinId === skin.id;
+            const unlocked = ownerSkins.includes(skin.id);
+            const equipped = isGuest ? (this.visitData.ownerSkinId === skin.id) : (PlayerProfile.equippedSkinId === skin.id);
             const canAfford = PlayerProfile.storedCheese >= skin.price;
 
             const card = document.createElement('div');
             card.className = `hp-skin-item${equipped ? ' equipped' : ''}`;
 
             let btnClass = 'buy', btnText = `Купить · ${skin.price} 🧀`;
-            if (equipped) { btnClass = 'active'; btnText = '✓ Надет'; }
+            if (isGuest) {
+                btnClass = unlocked ? 'active' : 'locked';
+                btnText = equipped ? '★ На хозяине' : (unlocked ? '✓ Открыт у друга' : '🔒 Закрыт');
+            } else if (equipped) { btnClass = 'active'; btnText = '✓ Надет'; }
             else if (unlocked) { btnClass = 'equip'; btnText = 'Надеть'; }
             else if (!canAfford) { btnClass = 'locked'; btnText = `Нужно ${skin.price} 🧀`; }
 
@@ -109,15 +118,17 @@ export class HomeWardrobeModal {
                 <button type="button" class="hp-skin-btn ${btnClass}">${btnText}</button>
             `;
 
-            card.querySelector('button').addEventListener('click', () => {
-                if (equipped) return;
-                const res = PlayerProfile.buyAndEquipSkin(skin.id);
-                if (res.ok) {
-                    try { navigator.vibrate?.(18); } catch (_) {}
-                    this.onSkinChanged(skin.id);
-                    this._renderItems();
-                }
-            });
+            if (!isGuest) {
+                card.querySelector('button').addEventListener('click', () => {
+                    if (equipped) return;
+                    const res = PlayerProfile.buyAndEquipSkin(skin.id);
+                    if (res.ok) {
+                        try { navigator.vibrate?.(18); } catch (_) {}
+                        this.onSkinChanged(skin.id);
+                        this._renderItems();
+                    }
+                });
+            }
             this.grid.appendChild(card);
         }
     }

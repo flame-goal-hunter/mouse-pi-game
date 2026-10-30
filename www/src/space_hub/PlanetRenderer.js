@@ -1,10 +1,11 @@
 // ============================================================================
-// PlanetRenderer.js — Живые мультяшные планеты в рукавах спиральной галактики:
-// неоновая атмосфера, серп тени 2D-объёма, кольца/спутники, монстры и squash & stretch
+// PlanetRenderer.js — Живые мультяшные планеты + кружащие на орбите
+// «припаркованные» ракеты игроков и значок 🎮 N для активных мини-игр
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
 import { getPlayerSkinSprite } from '../core/PlayerProfile.js';
+import { SpaceNetwork } from './SpaceNetwork.js';
 
 export class PlanetRenderer {
     constructor() {
@@ -45,10 +46,14 @@ export class PlanetRenderer {
     }
 
     draw(ctx, timeSec) {
-        for (const p of SPACE_CONFIG.planets) this._drawPlanet(ctx, p, timeSec);
+        const peers = SpaceNetwork.getOnlinePeers();
+        for (const p of SPACE_CONFIG.planets) {
+            const playingHere = peers.filter(peer => peer.currentLocation === p.id);
+            this._drawPlanet(ctx, p, timeSec, playingHere);
+        }
     }
 
-    _drawPlanet(ctx, p, timeSec) {
+    _drawPlanet(ctx, p, timeSec, playingHere) {
         const st = this.states.get(p.id);
         const bobY = Math.sin(st.bobPhase) * 6;
         const sx = 1 + st.squashOffset * 0.22;
@@ -73,9 +78,7 @@ export class PlanetRenderer {
         atmo.addColorStop(0, p.atmoColor);
         atmo.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = atmo;
-        ctx.beginPath();
-        ctx.arc(0, 0, p.radius * 1.55, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, p.radius * 1.55, 0, Math.PI * 2); ctx.fill();
 
         const img = p.isHomePlanet ? getPlayerSkinSprite().idle : this.images.get(p.id);
         if (img && img.complete && img.naturalWidth > 0) {
@@ -96,21 +99,15 @@ export class PlanetRenderer {
         bodyG.addColorStop(0.62, p.midColor);
         bodyG.addColorStop(1, p.rimColor);
         ctx.fillStyle = bodyG;
-        ctx.beginPath();
-        ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
 
         ctx.save();
-        ctx.beginPath();
-        ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
-        ctx.clip();
+        ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.clip();
         ctx.fillStyle = 'rgba(255, 255, 255, 0.13)';
         ctx.beginPath(); ctx.arc(-p.radius * 0.28, -p.radius * 0.22, p.radius * 0.2, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(p.radius * 0.2, p.radius * 0.3, p.radius * 0.14, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(5, 8, 22, 0.36)';
-        ctx.beginPath();
-        ctx.arc(p.radius * 0.36, p.radius * 0.12, p.radius * 0.95, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(p.radius * 0.36, p.radius * 0.12, p.radius * 0.95, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
         ctx.save();
@@ -125,10 +122,35 @@ export class PlanetRenderer {
         const mx = Math.cos(st.orbitAngle) * (p.radius * 1.36);
         const my = Math.sin(st.orbitAngle) * (p.radius * 0.55);
         ctx.fillStyle = p.moonColor;
-        ctx.beginPath();
-        ctx.arc(mx, my, 8.5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(mx, my, 8.5, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
+
+        // Orbiting parked rockets + 🎮 N badge when other players are playing on this planet
+        if (playingHere.length > 0) {
+            playingHere.forEach((peer, idx) => {
+                const a = timeSec * 1.4 + (idx / playingHere.length) * Math.PI * 2;
+                const ox = Math.cos(a) * (p.radius + 34);
+                const oy = Math.sin(a) * (p.radius + 34);
+                const skin = getPlayerSkinSprite(peer.equippedSkinId);
+                ctx.save();
+                ctx.translate(ox, oy);
+                ctx.rotate(a + Math.PI / 2);
+                ctx.fillStyle = '#f8fafc'; ctx.strokeStyle = skin.bodyColor || '#38bdf8'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.ellipse(0, 0, 12, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath(); ctx.arc(8, 0, 4.5, -1.2, 1.2); ctx.fill();
+                ctx.restore();
+            });
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(-34, -p.radius - 38, 68, 24, 12); ctx.fill(); ctx.stroke();
+            ctx.font = '900 13px "Nunito", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#4ade80';
+            ctx.fillText(`🎮 ${playingHere.length}`, 0, -p.radius - 22);
+        }
 
         ctx.font = '900 13px "Nunito", sans-serif';
         ctx.textAlign = 'center';

@@ -1,5 +1,5 @@
 // ============================================================================
-// PlayerProfile.js — Единый профиль Мышонка Пи (скины, сыр в ракете и на складе)
+// PlayerProfile.js — Единый профиль Мышонка Пи (скины, сыр, никнейм, локация)
 // Синхронизируется с mousiePi.progress.v1 для полной совместимости со всеми играми
 // ============================================================================
 
@@ -33,9 +33,7 @@ function _readJson(key, fallback) {
     try {
         const raw = localStorage.getItem(key);
         return raw ? { ...fallback, ...JSON.parse(raw) } : { ...fallback };
-    } catch (_) {
-        return { ...fallback };
-    }
+    } catch (_) { return { ...fallback }; }
 }
 
 function _writeJson(key, obj) {
@@ -45,42 +43,43 @@ function _writeJson(key, obj) {
 class PlayerProfileStore {
     constructor() {
         this._listeners = new Set();
+        this.currentLocation = 'space';
         this._syncFromStorage();
     }
 
     _syncFromStorage() {
-        const prog = _readJson(PROGRESS_KEY, {
-            cheeseBank: 50,
-            skinsUnlocked: ['blue'],
-            currentSkin: 'blue'
-        });
+        const prog = _readJson(PROGRESS_KEY, { cheeseBank: 50, skinsUnlocked: ['blue'], currentSkin: 'blue' });
+        const defaultId = 'pi_' + Math.random().toString(36).slice(2, 8);
+        const defaultNick = (typeof localStorage !== 'undefined' && localStorage.getItem('mousie_nickname')) || ('Пи-' + Math.floor(100 + Math.random() * 899));
         const space = _readJson(SPACE_KEY, {
+            playerId: defaultId,
+            nickname: defaultNick,
             pocketCheese: 12,
             storedCheese: typeof prog.cheeseBank === 'number' ? prog.cheeseBank : 50,
             equippedSkinId: prog.currentSkin || 'blue',
             unlockedSkins: Array.isArray(prog.skinsUnlocked) ? prog.skinsUnlocked : ['blue']
         });
 
-        const mergedUnlocked = Array.from(new Set(['blue', ...(prog.skinsUnlocked || []), ...(space.unlockedSkins || [])]));
-        const skinId = SKIN_CATALOG.some(s => s.id === ( prog.currentSkin || space.equippedSkinId ))
-            ? (prog.currentSkin || space.equippedSkinId)
-            : 'blue';
-        const stored = Math.max(prog.cheeseBank || 0, space.storedCheese || 0);
-
-        this.equippedSkinId = skinId;
-        this.unlockedSkins = mergedUnlocked;
+        this.playerId = space.playerId || defaultId;
+        this.nickname = (space.nickname || defaultNick).slice(0, 16);
+        this.unlockedSkins = Array.from(new Set(['blue', ...(prog.skinsUnlocked || []), ...(space.unlockedSkins || [])]));
+        const candidate = prog.currentSkin || space.equippedSkinId;
+        this.equippedSkinId = SKIN_CATALOG.some(s => s.id === candidate) ? candidate : 'blue';
         this.pocketCheese = Math.max(0, Math.round(space.pocketCheese || 0));
-        this.storedCheese = Math.max(0, Math.round(stored));
+        this.storedCheese = Math.max(prog.cheeseBank || 0, space.storedCheese || 0);
         this._persist();
     }
 
     _persist() {
         _writeJson(SPACE_KEY, {
+            playerId: this.playerId,
+            nickname: this.nickname,
             equippedSkinId: this.equippedSkinId,
             unlockedSkins: this.unlockedSkins,
             pocketCheese: this.pocketCheese,
             storedCheese: this.storedCheese
         });
+        try { localStorage.setItem('mousie_nickname', this.nickname); } catch (_) {}
         const prog = _readJson(PROGRESS_KEY, {});
         prog.cheeseBank = this.storedCheese;
         prog.currentSkin = this.equippedSkinId;
@@ -89,9 +88,22 @@ class PlayerProfileStore {
         this._listeners.forEach(fn => { try { fn(this); } catch (_) {} });
     }
 
-    onChange(fn) {
-        this._listeners.add(fn);
-        return () => this._listeners.delete(fn);
+    setNickname(name) {
+        const clean = String(name || '').trim().slice(0, 16);
+        if (!clean) return;
+        this.nickname = clean;
+        this._persist();
+    }
+
+    setLocation(loc) {
+        this.currentLocation = loc || 'space';
+    }
+
+    getHomeSnapshot() {
+        return {
+            storedCheese: this.storedCheese,
+            unlockedSkins: this.unlockedSkins.slice()
+        };
     }
 
     addPocketCheese(amount = 1) {
@@ -130,28 +142,11 @@ export const PlayerProfile = new PlayerProfileStore();
 export function getPlayerSkinSprite(skinId = PlayerProfile.equippedSkinId) {
     const id = SKIN_CATALOG.some(s => s.id === skinId) ? skinId : 'blue';
     if (_spriteCache.has(id)) return _spriteCache.get(id);
-
     const def = SKIN_CATALOG.find(s => s.id === id) || SKIN_CATALOG[0];
     const slug = id.replace(/_/g, '-');
-    const basePath = id === 'blue'
-        ? 'assets/characters/transylvania/pi'
-        : `assets/characters/transylvania/skins/${slug}`;
-
-    const makeImg = (suffix = '') => {
-        const img = new Image();
-        img.src = `${basePath}${suffix}.svg`;
-        return img;
-    };
-
-    const entry = {
-        id,
-        name: def.name,
-        bodyColor: def.body,
-        svgUrl: `${basePath}.svg`,
-        idle: makeImg(''),
-        walk1: makeImg('-walk1'),
-        walk2: makeImg('-walk2')
-    };
+    const basePath = id === 'blue' ? 'assets/characters/transylvania/pi' : `assets/characters/transylvania/skins/${slug}`;
+    const makeImg = (s = '') => { const img = new Image(); img.src = `${basePath}${s}.svg`; return img; };
+    const entry = { id, name: def.name, bodyColor: def.body, svgUrl: `${basePath}.svg`, idle: makeImg(''), walk1: makeImg('-walk1'), walk2: makeImg('-walk2') };
     _spriteCache.set(id, entry);
     return entry;
 }
