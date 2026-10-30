@@ -2,7 +2,7 @@ import { generateHeistFloor } from '../sneak/ProceduralHeistGenerator.js';
 import { Progress } from '../storage/ProgressStore.js';
 import { bus } from '../audio/EventBus.js';
 import { SFX } from '../audio/SoundKeys.js';
-import { preloadAudio } from '../audio/AudioAssetLoader.js';
+import { preloadAudio } from '../audio/AudioManager.js';
 
 // ============================================================================
 // SneakScene.js — «Тихая Лапка: Том и Джерри в Замке Теней!»
