@@ -46,7 +46,7 @@ export class SpaceHubScene {
             <style>
                 #spaceHubOverlay {
                     position: fixed; inset: 0; width: 100vw; height: 100vh;
-                    z-index: 9990; overflow: hidden; touch-action: none;
+                    z-index: 9990; overflow: hidden; display: none; touch-action: none;
                     user-select: none; -webkit-user-select: none; font-family: 'Nunito', sans-serif;
                 }
                 #spaceHubCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -121,7 +121,8 @@ export class SpaceHubScene {
         if (this.running) return;
         PlayerProfile._syncFromStorage();
         this._updateCheeseHUD();
-        document.getElementById('startScreen')?.classList.remove('visible');
+        const ss = document.getElementById('startScreen');
+        if (ss) { ss.classList.remove('visible'); ss.style.display = 'none'; }
         this.overlay.style.display = 'block';
         this.dockingPlanet = null;
         this.rocket.zoomTargetPlanet = null;
@@ -141,6 +142,8 @@ export class SpaceHubScene {
     stop() {
         this.running = false;
         this.overlay.style.display = 'none';
+        const ss = document.getElementById('startScreen');
+        if (ss) ss.style.display = '';
     }
 
     _step(dt, timeSec) {
@@ -181,16 +184,13 @@ export class SpaceHubScene {
 
         this.planets.update(dt, this.activePlanet?.id || null);
         const ctx = this.ctx;
-        ctx.save();
-        ctx.scale(this.dpr, this.dpr);
+        ctx.save(); ctx.scale(this.dpr, this.dpr);
         this.bg.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec);
         ctx.save();
         ctx.translate(this.viewW / 2, this.viewH / 2);
         ctx.scale(this.rocket.camZoom, this.rocket.camZoom);
         ctx.translate(-this.rocket.camX, -this.rocket.camY);
-        this.env.draw(ctx, timeSec);
-        this.planets.draw(ctx, timeSec);
-        this.rocket.draw(ctx);
+        this.env.draw(ctx, timeSec); this.planets.draw(ctx, timeSec); this.rocket.draw(ctx);
         ctx.restore();
         this.radar.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec);
         ctx.restore();

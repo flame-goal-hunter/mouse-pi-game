@@ -1,18 +1,20 @@
 // ============================================================================
-// SpaceBackground.js — Процедурные туманности и 3 слоя звёзд с параллаксом
+// SpaceBackground.js — Процедурные туманности и 3 слоя звёзд с параллаксом (0.1, 0.3, 0.6)
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
 
 export class SpaceBackground {
     constructor() {
-        this.layers = SPACE_CONFIG.starLayers.map((cfg) => {
+        const wSpan = SPACE_CONFIG.world.halfWidth * 2;
+        const hSpan = SPACE_CONFIG.world.halfHeight * 2;
+        this.layers = SPACE_CONFIG.background.parallaxLayers.map((cfg) => {
             const stars = [];
             for (let i = 0; i < cfg.count; i++) {
                 stars.push({
-                    x: (Math.random() - 0.5) * SPACE_CONFIG.world.width,
-                    y: (Math.random() - 0.5) * SPACE_CONFIG.world.height,
-                    r: cfg.minR + Math.random() * (cfg.maxR - cfg.minR),
+                    x: (Math.random() - 0.5) * wSpan,
+                    y: (Math.random() - 0.5) * hSpan,
+                    r: cfg.minSize + Math.random() * (cfg.maxSize - cfg.minSize),
                     phase: Math.random() * Math.PI * 2,
                     speed: 1.5 + Math.random() * 2.5,
                     tint: Math.random() > 0.78 ? '#bae6fd' : (Math.random() > 0.85 ? '#fef08a' : '#ffffff')
@@ -23,24 +25,24 @@ export class SpaceBackground {
     }
 
     draw(ctx, camX, camY, viewW, viewH, timeSec) {
-        const wSpan = SPACE_CONFIG.world.width;
-        const hSpan = SPACE_CONFIG.world.height;
+        const wSpan = SPACE_CONFIG.world.halfWidth * 2;
+        const hSpan = SPACE_CONFIG.world.halfHeight * 2;
+        const bgCfg = SPACE_CONFIG.background;
 
         // 1. Deep Space Screen Gradient
         const skyGrad = ctx.createLinearGradient(0, 0, 0, viewH);
-        skyGrad.addColorStop(0, '#050614');
-        skyGrad.addColorStop(0.5, '#0b0e29');
-        skyGrad.addColorStop(1, '#07091c');
+        skyGrad.addColorStop(0, bgCfg.baseColorTop || '#040613');
+        skyGrad.addColorStop(1, bgCfg.baseColorBottom || '#0c1130');
         ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, viewW, viewH);
 
         // 2. Soft Radial Gradient Nebulas (with gentle 0.22 parallax)
         ctx.save();
         ctx.translate(viewW / 2 - camX * 0.22, viewH / 2 - camY * 0.22);
-        for (const neb of SPACE_CONFIG.nebulas) {
+        for (const neb of bgCfg.nebulas) {
             const g = ctx.createRadialGradient(neb.x, neb.y, 10, neb.x, neb.y, neb.r);
-            g.addColorStop(0, neb.inner);
-            g.addColorStop(1, neb.outer);
+            g.addColorStop(0, neb.color);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
             ctx.fillStyle = g;
             ctx.beginPath();
             ctx.arc(neb.x, neb.y, neb.r, 0, Math.PI * 2);
@@ -50,7 +52,7 @@ export class SpaceBackground {
 
         // 3. Three Parallax Star Layers (0.1, 0.3, 0.6) with Twinkling
         for (const layer of this.layers) {
-            const p = layer.cfg.parallax;
+            const p = layer.cfg.factor;
             const baseAlpha = layer.cfg.alpha;
 
             for (const s of layer.stars) {
@@ -79,4 +81,3 @@ export class SpaceBackground {
         ctx.globalAlpha = 1;
     }
 }
-
