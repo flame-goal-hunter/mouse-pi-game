@@ -57,9 +57,9 @@ class AutoUpdaterService {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'mpi-reload-chip';
-        btn.title = 'Сбросить кэш и загрузить свежую версию с сервера';
+        btn.title = 'Перезапустить бортовой компьютер ракеты';
         btn.textContent = `🔄 ${this.currentLabel}`;
-        btn.addEventListener('click', () => this.forceHardReload('🔄 Сброс кэша и перезагрузка...', this.currentVersion || Date.now()));
+        btn.addEventListener('click', () => this.forceHardReload('🧀 Протираем иллюминатор и перезапускаем двигатели! 🚀', this.currentVersion || Date.now()));
         this.badges.add(btn);
         return btn;
     }
