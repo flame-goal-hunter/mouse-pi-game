@@ -1,747 +1,758 @@
 // ============================================================================
-// PROCEDURAL ISLAND BURROW GENERATOR — «Тихая лапка: Операция Нора»
-// ============================================================================
-// Psychological & Game-Design Pillars (Designed for a 10-year-old player):
-//   1. BURROWS ARE 100% ESSENTIAL:
-//      Each floor is a cluster of 3 to 6 physically separated Floating Islands
-//      over a magical starry sky/lagoon. There are NO walking bridges between
-//      islands — the ONLY way to reach the Captive Pets, Star Cheeses, and the
-//      Rainbow Escape Portal is by diving into Color-Coded Burrows connected
-//      by glowing subterranean energy tubes!
-//   2. EMOTIONAL GOAL — RESCUE CUTE PET FRIENDS ("Паровозик Друзей"):
-//      Monsters guard 1–3 cute captive pets (Мышка Мими 🎀, Хомячок Бублик 🧁,
-//      Котёнок Облачко ☁️, Зайка Звёздочка ⭐, Лисичка Лучик ✨) in crystal
-//      bubbles. Rescued pets follow Pi in a bouncy chain through burrows!
-//   3. SAFE ADRENALINE ("Я в домике!"):
-//      Every guarded island has 2+ burrow mouths so Pi can dive underground at
-//      any moment, peek safely out of the hole, whistle (`📣 СВИСТ!`) to lure
-//      the monster away, and pop out behind its back!
-//   4. DAUGHTER'S HAND-DRAWN MONSTERS:
-//      All Castle of Shadows monsters (cat, zombie, skeleton, ghost, bat,
-//      slime, count) patrol the islands with distinct personalities.
+// ProceduralHeistGenerator.js — «Тихая Лапка: Том и Джерри в Замке Теней!»
+//
+// Two-Layer Cutaway («Двухуровневый мир в разрезе: Над полом + Подземная Норка»)
+//
+// Psychological Pillars for a 10-year-old:
+// 1. Cozy Sanctuary vs. Giant Monster World («Домик под одеялом»):
+//    - UPPER LAYER (Rows 2..12): The grand Castle Halls where the daughter's
+//      hand-drawn monsters patrol, guarding Giant Cheeses, Golden Keys, and
+//      Captive Pet Friends.
+//    - CUTAWAY FLOOR SLAB (Rows 13..14): Cross-section floorboards, stone beams,
+//      and vertical Burrow Chutes connecting the rooms above to the tunnels below.
+//      Monsters walking above shake dust & footstep ripples through the ceiling!
+//    - UNDERGROUND BURROW LAYER (Rows 15..20): Warm, root-lined subterranean
+//      tunnels with Pi's Cozy Home Nest (sofa, fairy lights, growing treasure
+//      pile), secret crystal pockets, and Underground Sabotage Levers that drop
+//      chandelier cakes or disable laser gates in the room above!
+// 2. The "Tom & Jerry" Grab-and-Dash Loop («Утащи добычу в свою норку!»):
+//    - Pi grabs a Giant Prize (Royal Cheese Wheel, Crown, Captive Pet) in the
+//      upper room and dashes for the nearest baseboard Mouse-Hole!
+//    - Diving into the mouse-hole while a monster chases you makes the monster
+//      CRASH into the wall above the hole («БАМ! 💫 НЕ ДОГНАЛ!») with spinning
+//      stars!
+// 3. 4 Distinct Mission Archetypes (No repetitive levels!):
+//    - Mission A: «Охота за Королевским Сыром» (Grab & haul giant cheeses home)
+//    - Mission B: «Секретный Ключ Стража» (Steal the key, unlock cages & vaults)
+//    - Mission C: «Подземный Саботаж» (Pull underground levers to drop cakes & open laser gates)
+//    - Mission D: «Большой Побег Друзей» (Rescue multiple captive pets across locked wings)
 // ============================================================================
 
-export const BURROW_PALETTE = [
+export const HEIST_THEMES = [
     {
-        id: 'gold',
-        name: 'Золотой туннель',
-        ringColor: 0xfacc15,
-        glowColor: 0xfef08a,
-        coreColor: 0x422006,
-        hex: '#facc15',
-        badge: '🟡'
+        id: 'royal_kitchen',
+        name: 'Сырная Кухня Графа',
+        subtitle: 'Утащи гигантские сыры и друзей с хозяйского стола прямо в норку!',
+        icon: '🧀',
+        wallTop: 0x3b1d5e,
+        wallBot: 0x24103d,
+        floorMain: 0x4c2878,
+        floorChecker: 0x5b328f,
+        carpetColor: 0xbe185d,
+        carpetTrim: 0xfbbf24,
+        beamColor: 0x78350f,
+        earthTop: 0x5c2d16,
+        earthBot: 0x3b1a0b,
+        tunnelFloor: 0x7c3f1d,
+        tunnelGlow: 0xf59e0b,
+        bgm: 'bgm_sneak'
     },
     {
-        id: 'magenta',
-        name: 'Неоновый туннель',
-        ringColor: 0xf472b6,
-        glowColor: 0xfbcfe8,
-        coreColor: 0x500724,
-        hex: '#f472b6',
-        badge: '🩷'
+        id: 'velvet_gallery',
+        name: 'Бархатная Сокровищница',
+        subtitle: 'Проберись под полом, отключи охранные лучи и утащи реликвии!',
+        icon: '👑',
+        wallTop: 0x1e295b,
+        wallBot: 0x111936,
+        floorMain: 0x1e3a6e,
+        floorChecker: 0x254885,
+        carpetColor: 0x9333ea,
+        carpetTrim: 0x38bdf8,
+        beamColor: 0x475569,
+        earthTop: 0x4a2511,
+        earthBot: 0x2d1508,
+        tunnelFloor: 0x6b3619,
+        tunnelGlow: 0x38bdf8,
+        bgm: 'bgm_sneak_library'
     },
     {
-        id: 'cyan',
-        name: 'Кристальный туннель',
-        ringColor: 0x38bdf8,
-        glowColor: 0xbae6fd,
-        coreColor: 0x082f49,
-        hex: '#38bdf8',
-        badge: '🔵'
+        id: 'clockwork_nursery',
+        name: 'Игрушечный Чердак',
+        subtitle: 'Спаси пушистиков из клеток и обхитри стражей через подземные лазы!',
+        icon: '🧸',
+        wallTop: 0x4a1d46,
+        wallBot: 0x2d0f2b,
+        floorMain: 0x63265f,
+        floorChecker: 0x783073,
+        carpetColor: 0x0d9488,
+        carpetTrim: 0xfde047,
+        beamColor: 0x854d0e,
+        earthTop: 0x572814,
+        earthBot: 0x361709,
+        tunnelFloor: 0x78391d,
+        tunnelGlow: 0xf472b6,
+        bgm: 'bgm_sneak'
     },
     {
-        id: 'emerald',
-        name: 'Изумрудный туннель',
-        ringColor: 0x34d399,
-        glowColor: 0xa7f3d0,
-        coreColor: 0x064e3b,
-        hex: '#34d399',
-        badge: '🟢'
-    },
-    {
-        id: 'violet',
-        name: 'Звёздный туннель',
-        ringColor: 0xc084fc,
-        glowColor: 0xe9d5ff,
-        coreColor: 0x3b0764,
-        hex: '#c084fc',
-        badge: '🟣'
+        id: 'crystal_banquet',
+        name: 'Хрустальный Банкетный Зал',
+        subtitle: 'Дёргай подземные рычаги в норке, чтобы сбрасывать торты на монстров!',
+        icon: '🎂',
+        wallTop: 0x133840,
+        wallBot: 0x0a2126,
+        floorMain: 0x164e59,
+        floorChecker: 0x1c6270,
+        carpetColor: 0xe11d48,
+        carpetTrim: 0xfef08a,
+        beamColor: 0x64748b,
+        earthTop: 0x4d2612,
+        earthBot: 0x2b1408,
+        tunnelFloor: 0x6e371b,
+        tunnelGlow: 0x34d399,
+        bgm: 'bgm_sneak_cellar'
     }
 ];
 
-export const MAGICAL_THEMES = [
+export const MISSION_TYPES = [
     {
-        id: 'candy_sky',
-        title: '🧁 Облачная Кондитерская',
-        subtitle: 'Сладкие острова над звёздным небом',
-        bgm: 'bgm_kitchen',
-        skyTop: '#1b1038',
-        skyBot: '#351b63',
-        nebulaColor: 'rgba(244, 114, 182, 0.22)',
-        islandTopA: '#fff1f5',
-        islandTopB: '#ffe4e6',
-        islandChecker: 'rgba(244, 114, 182, 0.13)',
-        islandRim: '#f472b6',
-        islandRimGlow: 'rgba(244, 114, 182, 0.45)',
-        islandCliffTop: '#be185d',
-        islandCliffBot: '#500724',
-        accentHex: '#f472b6',
-        accentInt: 0xf472b6
+        id: 'cheese_feast',
+        badge: '🧀 ОПЕРАЦИЯ: СЫРНЫЙ ПИР',
+        title: 'Утащи всю добычу в Уютную Норку!',
+        hint: 'Хватай Большой Сыр и друзей наверху и ныряй с ними в ближайшую норку! Погоня врежется в стену — БАМ! 💫'
     },
     {
-        id: 'neon_arcade',
-        title: '🕹️ Неоновый Кибер-Парк',
-        subtitle: 'Светящиеся платформы и плазменные норы',
-        bgm: 'bgm_library',
-        skyTop: '#070b1e',
-        skyBot: '#15224d',
-        nebulaColor: 'rgba(56, 189, 248, 0.20)',
-        islandTopA: '#1e2b58',
-        islandTopB: '#25356b',
-        islandChecker: 'rgba(56, 189, 248, 0.12)',
-        islandRim: '#38bdf8',
-        islandRimGlow: 'rgba(56, 189, 248, 0.50)',
-        islandCliffTop: '#0284c7',
-        islandCliffBot: '#082f49',
-        accentHex: '#38bdf8',
-        accentInt: 0x38bdf8
+        id: 'key_rescue',
+        badge: '🗝️ ОПЕРАЦИЯ: ЗОЛОТОЙ КЛЮЧ',
+        title: 'Найди Ключ Стража и открой клетки!',
+        hint: 'Некоторые клетки заперты на замок 🔒! Вынырни из норки возле Золотого Ключа 🗝️, открой клетку и беги в норку!'
     },
     {
-        id: 'sakura_lagoon',
-        title: '🌸 Лунная Лагуна Сакуры',
-        subtitle: 'Парящие сады со светлячками',
-        bgm: 'bgm_garden',
-        skyTop: '#061a23',
-        skyBot: '#0f3847',
-        nebulaColor: 'rgba(52, 211, 153, 0.20)',
-        islandTopA: '#ecfdf5',
-        islandTopB: '#d1fae5',
-        islandChecker: 'rgba(16, 185, 129, 0.13)',
-        islandRim: '#34d399',
-        islandRimGlow: 'rgba(52, 211, 153, 0.45)',
-        islandCliffTop: '#059669',
-        islandCliffBot: '#064e3b',
-        accentHex: '#34d399',
-        accentInt: 0x34d399
+        id: 'underground_sabotage',
+        badge: '⚡ ОПЕРАЦИЯ: ПОДЗЕМНЫЙ САБОТАЖ',
+        title: 'Дёргай рычаги в норке и сбрасывай торты!',
+        hint: 'В подземной норке есть Рычаги ⚡ — они отключают лазеры наверху и роняют кремовые торты прямо на головы монстрам!'
     },
     {
-        id: 'starlight_circus',
-        title: '🎪 Звёздный Парк Чудес',
-        subtitle: 'Золотые арены и весёлые аттракционы',
-        bgm: 'bgm_dungeon',
-        skyTop: '#1c0b36',
-        skyBot: '#3b156b',
-        nebulaColor: 'rgba(250, 204, 21, 0.20)',
-        islandTopA: '#fef9c3',
-        islandTopB: '#fef08a',
-        islandChecker: 'rgba(245, 158, 11, 0.14)',
-        islandRim: '#facc15',
-        islandRimGlow: 'rgba(250, 204, 21, 0.48)',
-        islandCliffTop: '#d97706',
-        islandCliffBot: '#451a03',
-        accentHex: '#facc15',
-        accentInt: 0xfacc15
-    },
-    {
-        id: 'crystal_palace',
-        title: '💎 Хрустальный Дворец Ратулы',
-        subtitle: 'Королевский остров Главного Хранителя!',
-        bgm: 'bgm_throne',
-        skyTop: '#16072b',
-        skyBot: '#34105e',
-        nebulaColor: 'rgba(192, 132, 252, 0.25)',
-        islandTopA: '#f5f3ff',
-        islandTopB: '#ede9fe',
-        islandChecker: 'rgba(168, 85, 247, 0.14)',
-        islandRim: '#c084fc',
-        islandRimGlow: 'rgba(192, 132, 252, 0.52)',
-        islandCliffTop: '#7e22ce',
-        islandCliffBot: '#2e1065',
-        accentHex: '#c084fc',
-        accentInt: 0xc084fc
+        id: 'grand_rescue',
+        badge: '🐾 ОПЕРАЦИЯ: БОЛЬШОЙ ПОБЕГ',
+        title: 'Спаси всех пушистиков в свой подземный домик!',
+        hint: 'Слушай шаги монстров над потолком норки (ТОП-ТОП), выскакивай из люков за их спиной и уводи друзей в норку!'
     }
 ];
 
 export const CAPTIVE_PETS = [
+    { id: 'mimi',   name: 'Мышка Мими',      badge: '🎀', color: 0xf472b6, spriteKey: 'skin_pink',        bonusText: '+10% к скорости' },
+    { id: 'bublik', name: 'Хомячок Бублик',  badge: '🧁', color: 0xfbbf24, spriteKey: 'skin_bear',        bonusText: '+25% сыра за добычу' },
+    { id: 'cloud',  name: 'Котёнок Облачко', badge: '☁️', color: 0x38bdf8, spriteKey: 'skin_kitty',       bonusText: 'Тихие лапки (-20% шума)' },
+    { id: 'star',   name: 'Бобрик Боб',      badge: '🪵', color: 0xd97706, spriteKey: 'skin_beaver',      bonusText: 'Крепкая каска (+щит)' },
+    { id: 'spark',  name: 'Лягушонок Прыг',  badge: '🐸', color: 0x4ade80, spriteKey: 'skin_frog',        bonusText: 'Быстрый кувырок' }
+];
+
+export const CARRY_TREASURES = [
+    { id: 'giant_cheese', name: 'Королевский Сыр',  icon: '🧀', value: 25, weightMul: 0.88, tint: 0xfacc15 },
+    { id: 'berry_cake',   name: 'Праздничный Торт', icon: '🎂', value: 30, weightMul: 0.86, tint: 0xf472b6 },
+    { id: 'gold_crown',   name: 'Корона Графа',     icon: '👑', value: 35, weightMul: 0.90, tint: 0xfde047 },
+    { id: 'honey_jar',    name: 'Горшочек Мёда',    icon: '🍯', value: 28, weightMul: 0.88, tint: 0xf59e0b }
+];
+
+const MONSTER_POOL = [
     {
-        id: 'mimi',
-        name: 'Мышка Мими',
-        badge: '🎀',
-        bodyColor: '#ffffff',
-        earColor: '#fbcfe8',
-        accColor: '#f43f5e',
-        cryText: 'Пи-пи! Спаси меня!',
-        thanksText: 'Ура! Я с тобой! 💖'
+        type: 'zombie',
+        spriteKey: 'd_zombie',
+        name: 'Сонный Зомби',
+        minFloor: 1,
+        speed: 50,
+        chaseSpeed: 84,
+        coneLen: 155,
+        coneHalfRad: 0.44,
+        hearRadius: 150,
+        scale: 0.31,
+        footstepWeight: 1.1
     },
     {
-        id: 'bublik',
-        name: 'Хомячок Бублик',
-        badge: '🧁',
-        bodyColor: '#fed7aa',
-        earColor: '#fdba74',
-        accColor: '#f97316',
-        cryText: 'Хочу домой! 🧁',
-        thanksText: 'Побежали в нору! ⭐'
+        type: 'slime',
+        spriteKey: 'd_slime',
+        name: 'Желейный Слайм',
+        minFloor: 1,
+        speed: 44,
+        chaseSpeed: 76,
+        coneLen: 135,
+        coneHalfRad: 0.50,
+        hearRadius: 135,
+        scale: 0.32,
+        footstepWeight: 0.9
     },
     {
-        id: 'cloud',
-        name: 'Котёнок Облачко',
-        badge: '☁️',
-        bodyColor: '#e0f2fe',
-        earColor: '#7dd3fc',
-        accColor: '#0ea5e9',
-        cryText: 'Мяу! Открой клетку!',
-        thanksText: 'Ты лучшая! ✨'
+        type: 'cat',
+        spriteKey: 'd_cat',
+        name: 'Кошка-Ищейка',
+        minFloor: 1,
+        speed: 66,
+        chaseSpeed: 102,
+        coneLen: 175,
+        coneHalfRad: 0.40,
+        hearRadius: 195,
+        scale: 0.32,
+        footstepWeight: 0.8
     },
     {
-        id: 'star',
-        name: 'Зайка Звёздочка',
-        badge: '⭐',
-        bodyColor: '#f3e8ff',
-        earColor: '#d8b4fe',
-        accColor: '#eab308',
-        cryText: 'Ой, стражник рядом!',
-        thanksText: 'Прыг-скок за тобой! 🌟'
+        type: 'skeleton',
+        spriteKey: 'd_skeleton',
+        name: 'Скелет-Часовой',
+        minFloor: 2,
+        speed: 60,
+        chaseSpeed: 94,
+        coneLen: 170,
+        coneHalfRad: 0.42,
+        hearRadius: 170,
+        scale: 0.32,
+        footstepWeight: 1.0
     },
     {
-        id: 'luchik',
-        name: 'Лисичка Лучик',
-        badge: '✨',
-        bodyColor: '#ffedd5',
-        earColor: '#fb923c',
-        accColor: '#ec4899',
-        cryText: 'Выпусти меня скорее!',
-        thanksText: 'Вперёд к порталу! 🌈'
+        type: 'count',
+        spriteKey: 'd_count',
+        name: 'Граф Теней',
+        minFloor: 2,
+        speed: 68,
+        chaseSpeed: 106,
+        coneLen: 190,
+        coneHalfRad: 0.42,
+        hearRadius: 190,
+        scale: 0.30,
+        footstepWeight: 1.25
+    },
+    {
+        type: 'ghost',
+        spriteKey: 'd_ghost',
+        name: 'Призрак Замка',
+        minFloor: 3,
+        speed: 58,
+        chaseSpeed: 90,
+        coneLen: 165,
+        coneHalfRad: 0.46,
+        hearRadius: 165,
+        scale: 0.31,
+        footstepWeight: 0.6
+    },
+    {
+        type: 'bat',
+        spriteKey: 'd_bat',
+        name: 'Ночной Нетопырь',
+        minFloor: 3,
+        speed: 74,
+        chaseSpeed: 110,
+        coneLen: 165,
+        coneHalfRad: 0.42,
+        hearRadius: 210,
+        scale: 0.32,
+        footstepWeight: 0.5
     }
 ];
 
-export const HEIST_MONSTERS = {
-    cat: {
-        id: 'cat',
-        name: 'Кот-страж',
-        texFront: 'd_cat',
-        speedMul: 1.0,
-        coneRange: 205,
-        coneAngle: 64,
-        coneColor: 0xfbbf24,
-        alertColor: 0xef4444,
-        scale: 0.38,
-        idleLines: ['Мяу? Сыр пахнет!', 'Хм, кто шуршит в норе?', 'Ни одна мышь не пройдёт!']
-    },
-    zombie: {
-        id: 'zombie',
-        name: 'Зомби-повар',
-        texFront: 'd_zombie',
-        speedMul: 0.78,
-        coneRange: 175,
-        coneAngle: 58,
-        coneColor: 0x4ade80,
-        alertColor: 0xef4444,
-        scale: 0.36,
-        idleLines: ['У-у-у... где мой торт?', 'Кто свистел из норки?', 'Топ-топ-топ...']
-    },
-    skeleton: {
-        id: 'skeleton',
-        name: 'Скелет-дозорный',
-        texFront: 'd_skeleton',
-        speedMul: 1.12,
-        coneRange: 215,
-        coneAngle: 56,
-        coneColor: 0x38bdf8,
-        alertColor: 0xf97316,
-        scale: 0.38,
-        idleLines: ['Клац-клац! Вижу нору!', 'Проверю-ка этот угол!', 'Кто тут бегает?!']
-    },
-    ghost: {
-        id: 'ghost',
-        name: 'Призрак замка',
-        texFront: 'd_ghost',
-        speedMul: 0.95,
-        coneRange: 195,
-        coneAngle: 68,
-        coneColor: 0xc084fc,
-        alertColor: 0xf43f5e,
-        scale: 0.38,
-        floats: true,
-        idleLines: ['У-у-у! Я всё вижу~', 'Сквозь туман лечу!', 'Кто прячется в норке?']
-    },
-    bat: {
-        id: 'bat',
-        name: 'Летучая мышь',
-        texFront: 'd_bat',
-        speedMul: 1.22,
-        coneRange: 180,
-        coneAngle: 72,
-        coneColor: 0xf472b6,
-        alertColor: 0xef4444,
-        scale: 0.40,
-        floats: true,
-        idleLines: ['Пи-пи! Слышу шорох!', 'Крылья ночи на страже!', 'Вжух-вжух!']
-    },
-    slime: {
-        id: 'slime',
-        name: 'Желейный слайм',
-        texFront: 'd_slime',
-        speedMul: 0.72,
-        coneRange: 160,
-        coneAngle: 76,
-        coneColor: 0x34d399,
-        alertColor: 0xeab308,
-        scale: 0.38,
-        idleLines: ['Бульк-бульк! Вкусно пахнет!', 'Прыг-плюх!', 'Ой, кто там в норе?']
-    },
-    count: {
-        id: 'count',
-        name: 'Граф Ратула',
-        texFront: 'd_count',
-        speedMul: 1.14,
-        coneRange: 230,
-        coneAngle: 66,
-        coneColor: 0xf43f5e,
-        alertColor: 0xdc2626,
-        scale: 0.42,
-        isBoss: true,
-        idleLines: ['Муа-ха-ха! Это мои пушистики!', 'Даже норы тебя не спасут!', 'Стража, держи мышку!']
-    }
-};
-
-export const RUN_PERKS = [
-    {
-        id: 'speed_skates',
-        title: 'Неоновые Ролики',
-        icon: '🛼',
-        desc: '+25% к скорости бега Пи и пушистиков!',
-        color: '#38bdf8'
-    },
-    {
-        id: 'ghost_cloak',
-        title: 'Прыжок-Невидимка',
-        icon: '🧥',
-        desc: 'Выпрыгивание из норы даёт 2.5 сек полной невидимости!',
-        color: '#c084fc'
-    },
-    {
-        id: 'cake_factory',
-        title: 'Сладкий Арсенал',
-        icon: '🎂',
-        desc: '+2 кремовых торта сразу и +1 торт на каждом этаже!',
-        color: '#f472b6'
-    },
-    {
-        id: 'cheese_magnet',
-        title: 'Сырный Пылесос',
-        icon: '🧲',
-        desc: 'Притягивает все сырки, кристаллы и бонусы издалека!',
-        color: '#facc15'
-    },
-    {
-        id: 'hypno_whistle',
-        title: 'Гипно-Свисток',
-        icon: '📣',
-        desc: 'Свист из норы приманивает монстров и усыпляет их на 3 сек!',
-        color: '#34d399'
-    },
-    {
-        id: 'extra_heart',
-        title: 'Золотое Сердечко',
-        icon: '💖',
-        desc: 'Восстанавливает все сердечки + 15 бонусных сырков!',
-        color: '#fb7185'
-    }
-];
-
-function mulberry32(seed) {
-    let a = seed >>> 0;
-    return function () {
-        a |= 0;
-        a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+function createRng(seed) {
+    let s = (seed >>> 0) || 123456789;
+    return function rng() {
+        s = (s + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
 
-function pickMonsterPool(floorNum) {
-    if (floorNum === 1) return ['cat', 'slime'];
-    if (floorNum === 2) return ['cat', 'zombie', 'slime'];
-    if (floorNum === 3) return ['cat', 'skeleton', 'ghost'];
-    if (floorNum === 4) return ['skeleton', 'ghost', 'bat', 'cat'];
-    if (floorNum % 5 === 0) return ['count', 'ghost', 'skeleton', 'bat'];
-    return ['cat', 'zombie', 'skeleton', 'ghost', 'bat', 'slime'];
-}
-
-export function themeForFloor(floorNum) {
-    if (floorNum % 5 === 0) return MAGICAL_THEMES[4]; // Crystal Palace for Boss floors
-    return MAGICAL_THEMES[(floorNum - 1) % 4];
-}
-
 /**
- * Generates an Island-Burrow Heist Floor.
- *
- * Every floor consists of separated rectangular/rounded Walkable Islands on a
- * grid of W x H cells (`cell = 80px`). Cells outside islands are `#` (VOID chasm).
- * Because islands do NOT touch each other, the player MUST use the color-coded
- * burrows (`holes`) to teleport across the chasm from the Start Island to the
- * Guarded Pet Islands and finally to the Escape Portal Island!
+ * Generates a Two-Layer Cutaway («Том и Джерри / Муравьиная ферма») level:
+ * - Upper Layer (y: 2..11): 2 to 3 Castle Rooms separated by walls or laser gates,
+ *   patrolled by the daughter's monsters, holding Carryable Prizes & Captive Pets.
+ * - Cutaway Floor Slab (y: 12..13): Solid cross-section floor beam pierced by
+ *   3 to 5 Vertical Burrow Chutes (`chutes`) with baseboard archways at the top
+ *   and tunnel openings at the bottom.
+ * - Underground Burrow Layer (y: 14..18): Continuous subterranean tunnel network
+ *   with Pi's Cozy Home Sanctuary (`homeNest`) on the left, secret alcoves,
+ *   spring mushrooms, and Underground Sabotage Levers (`sabotageLevers`).
  */
-export function generateHeistFloor(floorNum = 1, customSeed = null) {
-    const seed = customSeed !== null
-        ? customSeed
-        : ((floorNum * 2654435761) ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    const rng = mulberry32(seed);
+export function generateHeistFloor(floorNumber = 1, customSeed = null) {
+    const floor = Math.max(1, floorNumber | 0);
+    const seed = customSeed || Math.floor(Date.now() % 100000000) + floor * 9973;
+    const rng = createRng(seed);
 
-    const isBossFloor = floorNum % 5 === 0;
-    const theme = themeForFloor(floorNum);
+    const theme = HEIST_THEMES[(floor - 1) % HEIST_THEMES.length];
 
-    const W = 23;
-    const H = 15;
-    const cell = 80;
+    // Pick mission type so consecutive floors always feel fresh
+    const missionIndex = (floor - 1) % MISSION_TYPES.length;
+    const mission = MISSION_TYPES[missionIndex];
 
-    // Choose island topology based on floor progression:
-    // Floor 1: 3 Islands (Start Island -> Guarded Pet Island -> Portal Island)
-    // Floor 2-3: 4 Islands (Start Island -> 2 Guarded Pet Islands -> Portal Island)
-    // Floor 4+: 5 Islands (Start Island -> 3 Guarded Pet Islands -> Portal Island)
-    let islands = [];
-    if (floorNum === 1) {
-        islands = [
-            { id: 0, role: 'start', name: 'Остров Старта', x1: 1, y1: 3, x2: 5, y2: 11 },
-            { id: 1, role: 'vault', name: 'Остров Пушистика', x1: 8, y1: 2, x2: 15, y2: 12, hasPillar: true },
-            { id: 2, role: 'portal', name: 'Остров Портала', x1: 18, y1: 3, x2: 21, y2: 11 }
-        ];
-    } else if (floorNum <= 3) {
-        islands = [
-            { id: 0, role: 'start', name: 'Остров Старта', x1: 1, y1: 4, x2: 5, y2: 10 },
-            { id: 1, role: 'vault', name: 'Верхний Остров', x1: 7, y1: 1, x2: 15, y2: 6, hasPillar: true },
-            { id: 2, role: 'vault', name: 'Нижний Остров', x1: 7, y1: 8, x2: 15, y2: 13, hasPillar: true },
-            { id: 3, role: 'portal', name: 'Остров Портала', x1: 17, y1: 4, x2: 21, y2: 10 }
-        ];
-    } else {
-        islands = [
-            { id: 0, role: 'start', name: 'Остров Старта', x1: 1, y1: 1, x2: 5, y2: 6 },
-            { id: 1, role: 'vault', name: 'Северный Зал', x1: 7, y1: 1, x2: 15, y2: 6, hasPillar: true },
-            { id: 2, role: 'vault', name: 'Южный Зал', x1: 1, y1: 8, x2: 9, y2: 13, hasPillar: true },
-            { id: 3, role: 'vault', name: 'Центральный Свод', x1: 11, y1: 8, x2: 17, y2: 13, hasPillar: true },
-            { id: 4, role: 'portal', name: 'Остров Портала', x1: 18, y1: 1, x2: 21, y2: 6 }
-        ];
-    }
+    const cell = 48;
+    const W = Math.min(34, 26 + Math.min(8, Math.floor((floor - 1) * 1.5)));
+    const H = 20;
 
-    // Build grid: '#' = void chasm / obstacle pillar, '.' = walkable island floor
+    // Grid legend:
+    // '#' = solid wall / earth / floor slab
+    // '.' = upper castle room walkable floor
+    // 'U' = underground burrow walkable tunnel
+    // 'C' = vertical burrow chute connecting upper room & underground tunnel
     const grid = Array.from({ length: H }, () => Array(W).fill('#'));
 
-    for (const isl of islands) {
-        for (let y = isl.y1; y <= isl.y2; y++) {
-            for (let x = isl.x1; x <= isl.x2; x++) {
+    const upperY1 = 2;
+    const upperY2 = 11;
+    const slabY1 = 12;
+    const slabY2 = 13;
+    const burrowY1 = 14;
+    const burrowY2 = 17;
+
+    // 1. Carve Upper Castle Rooms (2 or 3 distinct halls with doorways or laser gates)
+    const numRooms = floor === 1 ? 2 : (floor <= 3 ? 3 : 3);
+    const rooms = [];
+    const totalInnerW = W - 4;
+    const roomStep = Math.floor(totalInnerW / numRooms);
+
+    for (let i = 0; i < numRooms; i++) {
+        const rx1 = 2 + i * roomStep + (i > 0 ? 1 : 0);
+        const rx2 = (i === numRooms - 1) ? (W - 3) : (2 + (i + 1) * roomStep - 1);
+        const ry1 = upperY1 + (i % 2 === 1 && rng() > 0.5 ? 1 : 0);
+        const ry2 = upperY2;
+        rooms.push({ id: i, x1: rx1, y1: ry1, x2: rx2, y2: ry2 });
+
+        for (let y = ry1; y <= ry2; y++) {
+            for (let x = rx1; x <= rx2; x++) {
                 grid[y][x] = '.';
             }
         }
-        // Optional central decorative pillar inside larger vault islands so Pi can
-        // loop around it AND monsters patrol around a clear visual landmark
-        if (isl.hasPillar) {
-            const cx = Math.floor((isl.x1 + isl.x2) / 2);
-            const cy = Math.floor((isl.y1 + isl.y2) / 2);
-            const w = isl.x2 - isl.x1;
-            const h = isl.y2 - isl.y1;
-            if (w >= 6 && h >= 5) {
-                grid[cy][cx] = '#';
-                isl.pillarCell = { x: cx, y: cy };
+    }
+
+    // Connect adjacent upper rooms via a hallway door (some guarded by laser barriers!)
+    const laserGates = [];
+    for (let i = 0; i < rooms.length - 1; i++) {
+        const leftR = rooms[i];
+        const rightR = rooms[i + 1];
+        const wallX = leftR.x2 + 1;
+        const doorY = Math.floor((Math.max(leftR.y1, rightR.y1) + Math.min(leftR.y2, rightR.y2)) / 2);
+
+        // Carve doorway between rooms
+        for (let dy = -1; dy <= 1; dy++) {
+            const y = Math.max(upperY1 + 1, Math.min(upperY2 - 1, doorY + dy));
+            for (let x = leftR.x2; x <= rightR.x1; x++) {
+                grid[y][x] = '.';
             }
+        }
+
+        // On floors with sabotage or later floors, put a toggleable laser gate on the doorway
+        // so diving into the burrow below is the smartest way around (or you can flip the underground lever!)
+        if (mission.id === 'underground_sabotage' || i === 1 || floor >= 2) {
+            laserGates.push({
+                id: `gate_${i}`,
+                gx: wallX,
+                gy1: doorY - 1,
+                gy2: doorY + 1,
+                x: (wallX + 0.5) * cell,
+                y1: (doorY - 1) * cell,
+                y2: (doorY + 2) * cell,
+                active: true,
+                color: i === 0 ? 0xf43f5e : 0x38bdf8
+            });
         }
     }
 
-    const used = new Set();
-    const keyOf = (x, y) => `${x},${y}`;
-    const markUsed = (pt, pad = 0) => {
-        if (!pt) return;
-        for (let dy = -pad; dy <= pad; dy++) {
-            for (let dx = -pad; dx <= pad; dx++) {
-                used.add(keyOf(pt.x + dx, pt.y + dy));
-            }
+    // Add a couple of decorative pillars / tables inside wide upper rooms (for line-of-sight stealth)
+    const pillars = [];
+    rooms.forEach((r, idx) => {
+        const rw = r.x2 - r.x1 + 1;
+        if (rw >= 7) {
+            const px = Math.floor((r.x1 + r.x2) / 2);
+            const py = Math.floor((r.y1 + r.y2) / 2) - 1;
+            grid[py][px] = '#';
+            pillars.push({ gx: px, gy: py, x: (px + 0.5) * cell, y: (py + 0.5) * cell, roomIdx: idx });
         }
+    });
+
+    // 2. Carve the Underground Burrow Network (Rows 14..17)
+    // Main horizontal burrow highway + cozy alcoves
+    for (let x = 2; x <= W - 3; x++) {
+        // Gentle organic wave in the tunnel height
+        const wave = (x % 7 >= 3 && x % 7 <= 5) ? 1 : 0;
+        const ty1 = burrowY1 + wave;
+        const ty2 = Math.min(burrowY2, ty1 + 2);
+        for (let y = ty1; y <= ty2; y++) {
+            grid[y][x] = 'U';
+        }
+    }
+    // Ensure continuous horizontal connectivity across rows 15..16
+    for (let x = 2; x <= W - 3; x++) {
+        grid[15][x] = 'U';
+        grid[16][x] = 'U';
+    }
+    // Cozy Home Sanctuary on the bottom-left (x: 2..6, y: 14..17)
+    for (let y = 14; y <= 17; y++) {
+        for (let x = 2; x <= 6; x++) {
+            grid[y][x] = 'U';
+        }
+    }
+
+    const homeNest = {
+        gx: 4,
+        gy: 16,
+        x: 4.5 * cell,
+        y: 16.0 * cell,
+        radius: 78
     };
 
-    const pickCellInIsland = (isl, preferCorner = null) => {
-        const candidates = [];
-        for (let y = isl.y1; y <= isl.y2; y++) {
-            for (let x = isl.x1; x <= isl.x2; x++) {
-                if (grid[y][x] !== '.') continue;
-                if (used.has(keyOf(x, y))) continue;
-                candidates.push({ x, y });
+    // 3. Carve Vertical Burrow Chutes (`chutes`) connecting Upper Rooms <-> Underground Burrow
+    // At least 1 or 2 chutes per room so Pi always has exciting mouse-holes to dive into & pop out of!
+    const chutes = [];
+    const burrowHoles = [];
+    const CHUTE_COLORS = [
+        { name: 'Янтарный лаз', hex: 0xf59e0b, css: '#f59e0b' },
+        { name: 'Изумрудный лаз', hex: 0x10b981, css: '#10b981' },
+        { name: 'Розовый лаз', hex: 0xf472b6, css: '#f472b6' },
+        { name: 'Сапфировый лаз', hex: 0x38bdf8, css: '#38bdf8' },
+        { name: 'Фиолетовый лаз', hex: 0xa855f7, css: '#a855f7' }
+    ];
+
+    const chuteXs = [];
+    rooms.forEach((r, rIdx) => {
+        const rw = r.x2 - r.x1 + 1;
+        if (rIdx === 0) {
+            // Chute 0 right above Home Nest
+            chuteXs.push({ gx: Math.min(r.x2 - 1, r.x1 + 2), roomIdx: rIdx });
+            if (rw >= 8) {
+                chuteXs.push({ gx: r.x2 - 1, roomIdx: rIdx });
+            }
+        } else {
+            const leftX = r.x1 + 1;
+            const rightX = r.x2 - 1;
+            chuteXs.push({ gx: leftX, roomIdx: rIdx });
+            if (rightX - leftX >= 4) {
+                chuteXs.push({ gx: rightX, roomIdx: rIdx });
             }
         }
-        if (candidates.length === 0) {
-            // Fallback without `used` filter
-            for (let y = isl.y1; y <= isl.y2; y++) {
-                for (let x = isl.x1; x <= isl.x2; x++) {
-                    if (grid[y][x] === '.') return { x, y };
-                }
+    });
+
+    chuteXs.forEach((info, idx) => {
+        const gx = info.gx;
+        const topGy = upperY2;      // Row 11 (bottom edge of upper room, right by the floor/baseboard)
+        const botGy = 15;           // Row 15 (inside underground tunnel)
+        const palette = CHUTE_COLORS[idx % CHUTE_COLORS.length];
+
+        // Carve the vertical chute through the floor slab (rows 11..15)
+        for (let y = topGy; y <= botGy + 1; y++) {
+            if (y >= slabY1 && y <= slabY2) {
+                grid[y][gx] = 'C';
+            } else if (y > slabY2) {
+                grid[y][gx] = 'U';
+            } else {
+                grid[y][gx] = '.';
             }
         }
-        if (preferCorner === 'left') {
-            candidates.sort((a, b) => a.x - b.x || a.y - b.y);
-            return candidates[0];
+
+        const chute = {
+            id: `chute_${idx}`,
+            index: idx,
+            roomIdx: info.roomIdx,
+            gx,
+            topGy,
+            botGy,
+            topX: (gx + 0.5) * cell,
+            topY: (topGy + 0.35) * cell,
+            botX: (gx + 0.5) * cell,
+            botY: (botGy + 0.5) * cell,
+            colorHex: palette.hex,
+            colorCss: palette.css,
+            label: `${idx + 1}`
+        };
+        chutes.push(chute);
+
+        burrowHoles.push({
+            id: chute.id,
+            pairId: idx,
+            label: chute.label,
+            colorName: palette.name,
+            colorHex: palette.hex,
+            colorCss: palette.css,
+            gx: chute.gx,
+            gy: chute.topGy,
+            x: chute.topX,
+            y: chute.topY,
+            botX: chute.botX,
+            botY: chute.botY,
+            islandId: info.roomIdx
+        });
+    });
+
+    // 4. Spawn Big Carryable Prizes & Captive Pets in the Upper Rooms
+    // Everything collected in the upper room can be hauled back into ANY mouse-hole
+    // (which sends it down the chute into Pi's Cozy Home Nest!).
+    const carryables = [];
+    const captivePets = [];
+    let needKeyLock = (mission.id === 'key_rescue' || floor >= 2);
+    let keySpawned = false;
+    let goldenKey = null;
+
+    // Place 1 Captive Pet + 1..2 Giant Carryable Treasures per room
+    rooms.forEach((r, rIdx) => {
+        const midX = Math.floor((r.x1 + r.x2) / 2);
+        const topRowY = r.y1 + 1;
+        const midRowY = Math.floor((r.y1 + r.y2) / 2);
+
+        if (rIdx === 0) {
+            // First room: 1 easy Giant Cheese right near the first chute so the player immediately experiences Grab -> Dive into Burrow!
+            const tCfg = CARRY_TREASURES[(floor + rIdx) % CARRY_TREASURES.length];
+            const tx = Math.min(r.x2 - 1, r.x1 + 4);
+            const ty = topRowY + 1;
+            grid[ty][tx] = '.';
+            carryables.push({
+                id: `prize_r0`,
+                kind: 'treasure',
+                ...tCfg,
+                gx: tx,
+                gy: ty,
+                x: (tx + 0.5) * cell,
+                y: (ty + 0.5) * cell,
+                locked: false,
+                delivered: false
+            });
+        } else {
+            // Room 1..N: 1 Captive Pet Friend + 1 Giant Treasure
+            const petCfg = CAPTIVE_PETS[(floor + rIdx - 1) % CAPTIVE_PETS.length];
+            const px = Math.max(r.x1 + 1, Math.min(r.x2 - 1, midX + 1));
+            const py = topRowY;
+            grid[py][px] = '.';
+
+            const isLocked = needKeyLock && (rIdx === rooms.length - 1);
+            captivePets.push({
+                id: `pet_${rIdx}`,
+                ...petCfg,
+                gx: px,
+                gy: py,
+                x: (px + 0.5) * cell,
+                y: (py + 0.5) * cell,
+                islandId: rIdx,
+                locked: isLocked,
+                rescued: false
+            });
+
+            // Also place a Giant Carryable Treasure in this room
+            const tCfg = CARRY_TREASURES[(floor + rIdx) % CARRY_TREASURES.length];
+            const tx = Math.max(r.x1 + 1, px - 2);
+            const ty = Math.min(r.y2 - 2, midRowY);
+            grid[ty][tx] = '.';
+            carryables.push({
+                id: `prize_${rIdx}`,
+                kind: 'treasure',
+                ...tCfg,
+                gx: tx,
+                gy: ty,
+                x: (tx + 0.5) * cell,
+                y: (ty + 0.5) * cell,
+                locked: false,
+                delivered: false
+            });
+
+            if (isLocked && !keySpawned) {
+                keySpawned = true;
+                // Spawn Golden Key in an earlier room (or opposite corner)
+                const keyRoom = rooms[Math.max(0, rIdx - 1)];
+                const kx = Math.floor((keyRoom.x1 + keyRoom.x2) / 2);
+                const ky = keyRoom.y1 + 1;
+                grid[ky][kx] = '.';
+                goldenKey = {
+                    id: 'golden_key',
+                    gx: kx,
+                    gy: ky,
+                    x: (kx + 0.5) * cell,
+                    y: (ky + 0.5) * cell,
+                    collected: false
+                };
+            }
         }
-        if (preferCorner === 'right') {
-            candidates.sort((a, b) => b.x - a.x || b.y - a.y);
-            return candidates[0];
-        }
-        if (preferCorner === 'top-left') {
-            candidates.sort((a, b) => (a.x + a.y) - (b.x + b.y));
-            return candidates[0];
-        }
-        if (preferCorner === 'bottom-right') {
-            candidates.sort((a, b) => (b.x + b.y) - (a.x + a.y));
-            return candidates[0];
-        }
-        if (preferCorner === 'center') {
-            const cx = (isl.x1 + isl.x2) / 2;
-            const cy = (isl.y1 + isl.y2) / 2;
-            candidates.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
-            return candidates[0];
-        }
-        return candidates[Math.floor(rng() * candidates.length)];
-    };
+    });
 
-    // 1. Entry on Start Island (Island 0) & Rainbow Escape Portal on Portal Island (last island)
-    const startIsland = islands[0];
-    const portalIsland = islands[islands.length - 1];
-    const vaultIslands = islands.slice(1, islands.length - 1);
-
-    const entry = pickCellInIsland(startIsland, 'left');
-    markUsed(entry, 1);
-
-    const exitPortal = pickCellInIsland(portalIsland, 'right');
-    markUsed(exitPortal, 1);
-
-    // 2. Connect ALL islands via Color-Coded Burrow Pairs!
-    //    Chain: Island 0 -> Island 1 -> Island 2 -> ... -> Portal Island
-    //    Plus an extra shortcut/escape burrow on multi-island floors!
-    const holes = [];
-    for (let i = 0; i < islands.length - 1; i++) {
-        const islA = islands[i];
-        const islB = islands[i + 1];
-        const pal = BURROW_PALETTE[i % BURROW_PALETTE.length];
-
-        const mouthA = pickCellInIsland(islA, 'bottom-right');
-        markUsed(mouthA, 1);
-        const mouthB = pickCellInIsland(islB, 'top-left');
-        markUsed(mouthB, 1);
-
-        holes.push({
-            id: `hole_${i + 1}`,
-            pairIndex: i,
-            color: pal,
-            islandA: islA.id,
-            islandB: islB.id,
-            a: mouthA,
-            b: mouthB
+    // Ensure at least 1 captive pet on floor 1 too so rescuing friends is always part of the joy
+    if (captivePets.length === 0) {
+        const rLast = rooms[rooms.length - 1];
+        const petCfg = CAPTIVE_PETS[(floor - 1) % CAPTIVE_PETS.length];
+        const px = Math.floor((rLast.x1 + rLast.x2) / 2);
+        const py = rLast.y1 + 1;
+        grid[py][px] = '.';
+        captivePets.push({
+            id: 'pet_main',
+            ...petCfg,
+            gx: px,
+            gy: py,
+            x: (px + 0.5) * cell,
+            y: (py + 0.5) * cell,
+            islandId: rooms.length - 1,
+            locked: false,
+            rescued: false
         });
     }
 
-    // Add a bonus Tactical Escape / Loop Burrow inside the biggest Vault Island (or linking Portal Island back to Start/Vault)
-    if (vaultIslands.length >= 1) {
-        const targetVault = vaultIslands[vaultIslands.length - 1];
-        const pal = BURROW_PALETTE[holes.length % BURROW_PALETTE.length];
-        const mA = pickCellInIsland(targetVault, 'left');
-        markUsed(mA, 1);
-        const mB = pickCellInIsland(targetVault, 'right');
-        markUsed(mB, 1);
-        if (mA && mB && (mA.x !== mB.x || mA.y !== mB.y)) {
-            holes.push({
-                id: `hole_${holes.length + 1}`,
-                pairIndex: holes.length,
-                color: pal,
-                islandA: targetVault.id,
-                islandB: targetVault.id,
-                a: mA,
-                b: mB
-            });
-        }
-    }
-
-    // 3. Place Cute Captive Pets (1 on every Vault Island!)
-    //    Rescuing all captive pets unlocks the Rainbow Escape Portal!
-    const captivePets = [];
-    const goldenCheeses = [];
-    vaultIslands.forEach((isl, idx) => {
-        const petPos = pickCellInIsland(isl, 'center');
-        markUsed(petPos, 1);
-        const petDef = CAPTIVE_PETS[(floorNum + idx - 1) % CAPTIVE_PETS.length];
-        const petObj = {
-            id: `pet_${idx + 1}`,
-            x: petPos.x,
-            y: petPos.y,
-            islandId: isl.id,
-            value: 20 + Math.min(25, floorNum * 3),
-            petDef
-        };
-        captivePets.push(petObj);
-        // Keep `goldenCheeses` alias pointing to same coordinates for backwards compatibility
-        goldenCheeses.push(petObj);
+    // 5. Spawn Underground Sabotage Levers & Ceiling Cake Traps!
+    // Pulling a lever in the underground burrow disables laser gates AND drops a giant cream cake
+    // from the ceiling in the room above, stunning any monster nearby!
+    const sabotageLevers = [];
+    rooms.forEach((r, rIdx) => {
+        if (rIdx === 0 && rooms.length > 2) return;
+        const lx = Math.floor((r.x1 + r.x2) / 2);
+        const ly = 16;
+        grid[ly][lx] = 'U';
+        sabotageLevers.push({
+            id: `lever_${rIdx}`,
+            roomIdx: rIdx,
+            gx: lx,
+            gy: ly,
+            x: (lx + 0.5) * cell,
+            y: (ly + 0.5) * cell,
+            trapTargetX: (lx + 0.5) * cell,
+            trapTargetY: Math.floor((r.y1 + r.y2) / 2 + 0.5) * cell,
+            used: false
+        });
     });
 
-    // 4. Secret Surprise Chest (`🎁 Сундук-Сюрприз`) on one of the islands
-    const chestIsland = vaultIslands[vaultIslands.length - 1] || portalIsland;
-    const chestCell = pickCellInIsland(chestIsland);
-    markUsed(chestCell, 1);
-    const secretChest = {
-        x: chestCell.x,
-        y: chestCell.y,
-        islandId: chestIsland.id,
-        value: 25 + floorNum * 5,
-        kind: 'chest'
-    };
-
-    // 5. Shadow Hiding Cushions (`🐾 Неоновый коврик-невидимка`) — 1 per vault island
-    const shadowZones = [];
-    for (const isl of vaultIslands) {
-        const sz = pickCellInIsland(isl);
-        if (sz) {
-            markUsed(sz, 0);
-            shadowZones.push({ x: sz.x, y: sz.y, islandId: isl.id });
-        }
-    }
-
-    // 6. Power-up Boosters (`🧥 Плащ`, `🧲 Магнит`, `⚡ Турбо`)
-    const boosterTypes = [
-        { type: 'cloak', label: '🧥 Плащ-невидимка', durationMs: 6500, color: 0xc084fc },
-        { type: 'magnet', label: '🧲 Сырный магнит', durationMs: 8000, color: 0x38bdf8 },
-        { type: 'turbo', label: '⚡ Турбо-лапки', durationMs: 6500, color: 0xfacc15 }
-    ];
-    const boosters = [];
-    const b1Cell = pickCellInIsland(startIsland);
-    if (b1Cell) {
-        markUsed(b1Cell, 0);
-        const bDef = boosterTypes[(floorNum - 1) % boosterTypes.length];
-        boosters.push({ x: b1Cell.x, y: b1Cell.y, ...bDef });
-    }
-    if (vaultIslands.length >= 2) {
-        const b2Cell = pickCellInIsland(vaultIslands[0]);
-        if (b2Cell) {
-            markUsed(b2Cell, 0);
-            const bDef = boosterTypes[floorNum % boosterTypes.length];
-            boosters.push({ x: b2Cell.x, y: b2Cell.y, ...bDef });
-        }
-    }
-
-    // 7. Cream Cakes (`🎂 Торт`) for throwing at monsters
-    const pies = [];
-    const startCake = pickCellInIsland(startIsland);
-    if (startCake) {
-        markUsed(startCake, 0);
-        pies.push(startCake);
-    }
-    const vaultCake = pickCellInIsland(vaultIslands[0]);
-    if (vaultCake) {
-        markUsed(vaultCake, 0);
-        pies.push(vaultCake);
-    }
-
-    // 8. Breadcrumb Star-Cheeses (`🧀`) scattered across all islands
-    const crumbs = [];
-    for (const isl of islands) {
-        const count = isl.role === 'vault' ? 4 : 2;
-        for (let c = 0; c < count; c++) {
-            const pt = pickCellInIsland(isl);
-            if (pt) {
-                markUsed(pt, 0);
-                crumbs.push({ x: pt.x, y: pt.y, value: 3, islandId: isl.id });
+    // 6. Spawn Small Cheese Crumbs (both in upper rooms AND in underground crystal pockets!)
+    const cheeses = [];
+    rooms.forEach((r) => {
+        for (let i = 0; i < 4; i++) {
+            const cx = r.x1 + 1 + Math.floor(rng() * Math.max(1, r.x2 - r.x1 - 1));
+            const cy = r.y1 + 1 + Math.floor(rng() * Math.max(1, r.y2 - r.y1 - 1));
+            if (grid[cy][cx] === '.') {
+                cheeses.push({
+                    x: (cx + 0.5) * cell,
+                    y: (cy + 0.5) * cell,
+                    layer: 'upper',
+                    value: 3
+                });
             }
         }
+    });
+    // Underground tunnel bonus cheeses
+    for (let x = 7; x <= W - 4; x += 3) {
+        cheeses.push({
+            x: (x + 0.5) * cell,
+            y: 15.5 * cell,
+            layer: 'burrow',
+            value: 4
+        });
     }
 
-    // 9. Daughter's Hand-Drawn Monsters — 1 monster per Vault Island (plus extra on higher floors / Boss)
-    const monsterPool = pickMonsterPool(floorNum);
-    const baseSpeed = Math.min(205, 118 + floorNum * 7);
-    const monsters = [];
-
-    vaultIslands.forEach((isl, idx) => {
-        const mKey = (isBossFloor && idx === vaultIslands.length - 1)
-            ? 'count'
-            : monsterPool[(idx + floorNum) % monsterPool.length];
-        const mDef = HEIST_MONSTERS[mKey] || HEIST_MONSTERS.cat;
-
-        // Build a smooth rectangular perimeter patrol loop around the vault island
-        const padX1 = isl.x1 + 1 <= isl.x2 - 1 ? isl.x1 + 1 : isl.x1;
-        const padX2 = isl.x2 - 1 >= isl.x1 + 1 ? isl.x2 - 1 : isl.x2;
-        const padY1 = isl.y1 + 1 <= isl.y2 - 1 ? isl.y1 + 1 : isl.y1;
-        const padY2 = isl.y2 - 1 >= isl.y1 + 1 ? isl.y2 - 1 : isl.y2;
-
-        const corners = [
-            { x: padX1, y: padY1, waitMs: 420 },
-            { x: padX2, y: padY1, waitMs: 360 },
-            { x: padX2, y: padY2, waitMs: 420 },
-            { x: padX1, y: padY2, waitMs: 360 }
-        ].filter(pt => grid[pt.y]?.[pt.x] === '.');
-
-        if (corners.length >= 2) {
-            monsters.push({
-                id: `guard_${idx + 1}`,
-                type: mDef.id,
-                name: mDef.name,
-                def: mDef,
-                islandId: isl.id,
-                speed: Math.round(baseSpeed * mDef.speedMul),
-                coneRange: mDef.coneRange + Math.min(35, floorNum * 3),
-                coneAngle: mDef.coneAngle,
-                patrol: corners
+    // 7. Spawn Velvet Shadow Cushions in Upper Rooms
+    const shadowZones = [];
+    rooms.forEach((r) => {
+        const sx = r.x1 + 1;
+        const sy = r.y1 + 2;
+        if (grid[sy]?.[sx] === '.') {
+            shadowZones.push({
+                gx: sx,
+                gy: sy,
+                x: (sx + 0.5) * cell,
+                y: (sy + 0.5) * cell,
+                r: cell * 0.82
             });
         }
     });
 
-    // On Floor 6+, add a second patrolling guard on the largest vault island
-    if (floorNum >= 6 && vaultIslands.length >= 2) {
-        const bigIsl = vaultIslands[vaultIslands.length - 1];
-        const mKey = monsterPool[(floorNum + 2) % monsterPool.length];
-        const mDef = HEIST_MONSTERS[mKey] || HEIST_MONSTERS.ghost;
-        const waypoints = [
-            { x: bigIsl.x2, y: bigIsl.y1, waitMs: 450 },
-            { x: bigIsl.x1, y: bigIsl.y2, waitMs: 450 }
-        ].filter(pt => grid[pt.y]?.[pt.x] === '.');
-        if (waypoints.length >= 2) {
+    // 8. Spawn Boosters (1 in upper room, 1 in underground burrow alcove)
+    const boosters = [
+        {
+            type: 'turbo',
+            name: 'Реактивные Кеды',
+            icon: '⚡',
+            durationMs: 7000,
+            color: 0xfacc15,
+            x: ( Math.min(W - 4, 9) + 0.5 ) * cell,
+            y: 16.2 * cell
+        },
+        {
+            type: 'cloak',
+            name: 'Звёздный Плащ-Невидимка',
+            icon: '🌟',
+            durationMs: 6500,
+            color: 0xa855f7,
+            x: (Math.floor((rooms[rooms.length - 1].x1 + rooms[rooms.length - 1].x2) / 2) + 0.5) * cell,
+            y: (rooms[rooms.length - 1].y2 - 1.5) * cell
+        }
+    ];
+
+    // 9. Spawn Daughter's Hand-Drawn Monsters in Upper Rooms
+    // Monsters ONLY patrol the Upper Castle Rooms — they CANNOT fit inside the underground burrow!
+    const eligiblePool = MONSTER_POOL.filter(m => m.minFloor <= floor);
+    const speedScale = 1 + Math.min(0.32, (floor - 1) * 0.045);
+    const monsters = [];
+
+    rooms.forEach((r, rIdx) => {
+        // Room 0 has 1 gentle monster on patrol away from the home chute; later rooms have 1..2 monsters
+        const countInRoom = (rIdx === 0) ? 1 : (floor >= 3 && rIdx === rooms.length - 1 ? 2 : 1);
+        for (let m = 0; m < countInRoom; m++) {
+            const template = eligiblePool[Math.floor(rng() * eligiblePool.length)];
+            const wy = Math.min(r.y2 - 1, r.y1 + 2 + m * 3);
+            const wx1 = Math.max(r.x1 + 1, rIdx === 0 ? r.x1 + 3 : r.x1 + 1);
+            const wx2 = Math.max(wx1 + 2, r.x2 - 1);
+
+            // Clear patrol line of pillars
+            for (let x = wx1; x <= wx2; x++) {
+                if (grid[wy][x] === '#') grid[wy][x] = '.';
+            }
+
+            const waypoints = [
+                { x: (wx1 + 0.5) * cell, y: (wy + 0.5) * cell },
+                { x: (wx2 + 0.5) * cell, y: (wy + 0.5) * cell },
+                { x: (wx2 + 0.5) * cell, y: (Math.min(r.y2 - 0.8, wy + 2.2)) * cell },
+                { x: (wx1 + 0.5) * cell, y: (Math.min(r.y2 - 0.8, wy + 2.2)) * cell }
+            ];
+
             monsters.push({
-                id: `guard_extra`,
-                type: mDef.id,
-                name: mDef.name,
-                def: mDef,
-                islandId: bigIsl.id,
-                speed: Math.round(baseSpeed * mDef.speedMul * 0.92),
-                coneRange: mDef.coneRange,
-                coneAngle: mDef.coneAngle,
-                patrol: waypoints
+                ...template,
+                id: `monster_${rIdx}_${m}`,
+                islandId: rIdx,
+                roomIdx: rIdx,
+                speed: Math.round(template.speed * speedScale),
+                chaseSpeed: Math.round(template.chaseSpeed * speedScale),
+                x: waypoints[0].x,
+                y: waypoints[0].y,
+                waypoints
             });
         }
-    }
+    });
+
+    // Player starts safely inside her Cozy Underground Home Burrow!
+    const spawn = {
+        gx: homeNest.gx,
+        gy: homeNest.gy,
+        x: homeNest.x,
+        y: homeNest.y,
+        layer: 'burrow'
+    };
+
+    // Required quota of Big Hauls (Captive Pets + Giant Treasures) to complete the floor
+    const totalHaulables = captivePets.length + carryables.length;
 
     return {
-        id: `floor_${floorNum}`,
-        floor: floorNum,
+        floor,
         seed,
-        isBossFloor,
-        biome: theme,
         theme,
-        title: isBossFloor
-            ? `ЭТАЖ ${floorNum} • 👑 ${theme.title}`
-            : `ЭТАЖ ${floorNum} • ${theme.title}`,
-        subtitle: isBossFloor
-            ? 'Граф Ратула охраняет пушистиков! Ныряй в норы между островами!'
-            : 'Прыгай в цветные норы, чтобы перелетать с острова на остров и спасать друзей!',
+        mission,
         cell,
         W,
         H,
-        grid: grid.map(r => r.join('')),
-        islands,
-        entry,
-        exits: [exitPortal, { x: entry.x, y: entry.y }],
-        primaryExit: exitPortal,
-        holes,
+        upperY1,
+        upperY2,
+        slabY1,
+        slabY2,
+        burrowY1,
+        burrowY2,
+        grid,
+        rooms,
+        islands: rooms,
+        pillars,
+        laserGates,
+        chutes,
+        burrowPairs: [],
+        burrowHoles,
+        homeNest,
+        spawn,
+        exit: {
+            gx: homeNest.gx,
+            gy: homeNest.gy,
+            x: homeNest.x,
+            y: homeNest.y
+        },
+        carryables,
         captivePets,
-        goldenCheeses,
-        secretChest,
+        goldenKey,
+        sabotageLevers,
+        cheeses,
+        chests: [],
         shadowZones,
         boosters,
-        pies,
-        crumbs,
-        props: [],
-        monsters
+        monsters,
+        totalHaulables
     };
 }

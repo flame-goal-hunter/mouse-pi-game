@@ -1,56 +1,92 @@
-// ============================================================================
-// SNEAK SCENE — «Тихая лапка: Операция Нора» (Burrow Heist & Pet Rescue)
-// ============================================================================
-// Complete Redesign based on 10-Year-Old Player Psychology:
-//   - Floating Magical Islands separated by starry chasms: Burrows are 100%
-//     essential to travel between islands and rescue captive cute pets!
-//   - "Я в домике!" Safe Burrow Peek Mode: diving into a burrow hides Pi
-//     underground, lets her peek out safely at the exit hole, whistle (`📣 СВИСТ!`)
-//     from the opposite hole to trick monsters, and pop out with a Ninja Boost!
-//   - Cute Pet Follower Train ("Паровозик Друзей"): rescued pets (Мими 🎀,
-//     Бублик 🧁, Облачко ☁️, Звёздочка ⭐, Лучик ✨) trot behind Pi and dive
-//     through burrows with her!
-//   - Glossy 3D HTML/CSS Arcade Controls & Crisp DOM HUD matching Snowball Fight.
-//   - Between-Floor 1-of-3 Super-Perk Selector (Brawl Stars / Roguelite loop).
-// ============================================================================
-
-import { bus } from '../audio/EventBus.js';
+import { generateHeistFloor } from '../sneak/ProceduralHeistGenerator.js';
 import { Progress } from '../storage/ProgressStore.js';
+import { bus } from '../audio/EventBus.js';
 import { SFX } from '../audio/SoundKeys.js';
-import { preloadAudio } from '../audio/AudioManager.js';
-import {
-    generateHeistFloor,
-    RUN_PERKS
-} from '../sneak/ProceduralHeistGenerator.js';
+import { preloadAudio } from '../audio/AudioAssetLoader.js';
 
-const FONT = 'Nunito, sans-serif';
+// ============================================================================
+// SneakScene.js — «Тихая Лапка: Том и Джерри в Замке Теней!»
+//
+// Two-Layer Cutaway («Двухуровневый мир в разрезе: Над полом + Подземная Норка»)
+//
+// Core Loop for a 10-year-old:
+// 1. Cutaway Dollhouse / Ant-Farm View:
+//    - TOP LAYER: Castle Rooms where the daughter's hand-drawn monsters patrol
+//      around Giant Treasures, Locked Cages, Golden Keys, and Laser Gates.
+//    - MIDDLE SLAB: Cross-section floor beam with floorboards, stone bricks,
+//      and numbered Vertical Burrow Chutes (#1, #2, #3...). Monsters walking
+//      above shake dust & footstep rings ("ТОП-ТОП!") down through the ceiling!
+//    - BOTTOM LAYER: Cozy Underground Burrow Network where Pi is 100% safe!
+//      Features Pi's Cozy Home Sanctuary (sofa, lamp, growing treasure hoard,
+//      rescued pet friends cheering) + Underground Sabotage Levers that disable
+//      lasers & drop ceiling cream-cakes on monsters above!
+// 2. "Tom & Jerry" Haul-to-Burrow Mechanic:
+//    - Grab a Giant Cheese / Crown / Pet Friend in the upper room and carry it
+//      to ANY baseboard Mouse-Hole!
+//    - Diving into a Mouse-Hole delivers the haul straight to your Cozy Home
+//      Nest AND makes any chasing monster SLAM into the wall above the hole
+//      ("💥 БАМ! НЕ ДОГНАЛ! 💫") with spinning stars and bonus cheese!
+// ============================================================================
 
-const PLAYER_BASE_SPEED = 248;
-const PLAYER_RADIUS = 18;
-const PLAYER_SPRITE_SCALE = 0.38;
-const PLAYER_PEEK_SCALE = 0.25;
+const PLAYER_BASE_SPEED = 178;
+const PLAYER_BURROW_SPEED = 205;
+const PLAYER_DASH_SPEED = 350;
+const PLAYER_DASH_MS = 250;
+const PLAYER_DASH_CD_MS = 1600;
 
-const HOLE_TRIGGER_RADIUS = 64;
-const BURROW_PEEK_MAX_MS = 4200;
-const DASH_DURATION_MS = 340;
-const DASH_COOLDOWN_MS = 2200;
-const DASH_SPEED_MUL = 2.05;
-
-const CAKE_FLIGHT_MS = 320;
+const CAKE_SPEED = 420;
 const CAKE_HEAR_RADIUS = 380;
-const CAKE_BLIND_RADIUS = 95;
+const CAKE_BLIND_RADIUS = 100;
 const CAKE_DISTRACT_MS = 3600;
-const CAKE_BLIND_MS = 4000;
+const CAKE_BLIND_MS = 4200;
 
-const WHISTLE_DISTRACT_MS = 4200;
+const WHISTLE_DISTRACT_MS = 4500;
 const CATCH_DIST = 34;
-const SUSPICION_FILL_MS = 480;
+const SUSPICION_FILL_MS = 520;
 const SUSPICION_DECAY_MS = 900;
 
 const SKIN_KEYS = [
     'brown', 'pink', 'yellow-antler', 'robot', 'green-monster', 'shadow',
     'devil', 'angel', 'yellow-lion', 'bear', 'frog', 'professor',
     'pirate', 'astronaut', 'kitty', 'beaver', 'cockroach'
+];
+
+const RUN_PERKS = [
+    {
+        id: 'ninja_paws',
+        icon: '🐾',
+        title: 'Бархатные Лапки',
+        desc: '+18% к скорости бега в зале и под землёй',
+        color: '#38bdf8'
+    },
+    {
+        id: 'cake_factory',
+        icon: '🎂',
+        title: 'Сладкий Кондитер',
+        desc: '+2 кремовых тортика на каждом этаже',
+        color: '#f472b6'
+    },
+    {
+        id: 'burrow_turbo',
+        icon: '🚀',
+        title: 'Пружинный Лаз',
+        desc: 'Выпрыгивание из норки даёт 3 сек. супер-ускорения и невидимости!',
+        color: '#a855f7'
+    },
+    {
+        id: 'cheese_magnet',
+        icon: '🧲',
+        title: 'Сырный Магнит',
+        desc: 'Сыр сам летит в лапки издалека (+30% бонусного сыра)',
+        color: '#facc15'
+    },
+    {
+        id: 'extra_heart',
+        icon: '💖',
+        title: 'Уютный Плед в Норке',
+        desc: 'Полное лечение сердечек + 20 бонусного сыра в копилку',
+        color: '#fb7185'
+    }
 ];
 
 export class SneakScene extends Phaser.Scene {
@@ -118,7 +154,6 @@ export class SneakScene extends Phaser.Scene {
     create() {
         this.dpr = window.__GAME_DPR || 1;
 
-        // Apply equipped skin sidegrades (e.g., Забавный таракан / Лягушонок / Тень)
         this.skinSpeedMul = 1;
         this.skinDashCdMul = 1;
         this.skinStealthMul = 1;
@@ -134,39 +169,41 @@ export class SneakScene extends Phaser.Scene {
         } catch (_) {}
 
         if (this.runPerks.cake_factory) {
-            this.piesLeft = Math.min(9, this.piesLeft + 1);
+            this.piesLeft = Math.min(9, this.piesLeft + 2);
         }
 
-        // 1. Generate Multi-Island Burrow Heist Floor
+        // 1. Generate Two-Layer Cutaway Level («Над полом + Подземная Норка в разрезе»)
         this.room = generateHeistFloor(this.floor);
         this.theme = this.room.theme;
+        this.mission = this.room.mission;
 
         const mapPxW = this.room.W * this.room.cell;
         const mapPxH = this.room.H * this.room.cell;
 
-        this.cameras.main.setBackgroundColor('#090614');
+        this.cameras.main.setBackgroundColor('#0c0717');
 
-        // 2. Render Seamless HD Magical Islands & Subterranean Burrow Tubes
+        // 2. Render Two-Layer Cutaway Dollhouse / Ant-Farm World
         this._ensureCustomTextures();
-        this._renderMagicalIslands(mapPxW, mapPxH);
-        this._buildBurrowEntrances();
+        this._renderCutawayWorld(mapPxW, mapPxH);
+        this._buildCozyHomeSanctuary();
+        this._buildBurrowChutes();
+        this._buildLaserGatesAndSabotageLevers();
         this._buildShadowCushions();
-        this._buildEscapePortal();
-        this._buildLootAndCaptivePets();
+        this._buildLootAndHaulables();
 
-        // 3. Player (Pi) + Rescued Pet Follower Train
+        // 3. Player (Pi) + Overhead Carried Loot + Home Nest Stash
         this._buildPlayer();
 
-        // 4. Daughter's Hand-Drawn Monsters + Vision Cones
+        // 4. Daughter's Hand-Drawn Monsters + Vision Cones + Ceiling Footstep Ripples
         this._buildMonsters();
 
-        // 5. Camera setup — account for DPR so world scale looks crisp & natural
+        // 5. Camera setup — framed so you see both the Castle Room above AND the Underground Burrow below!
         const cssW = this.scale.width / this.dpr;
         const cssH = this.scale.height / this.dpr;
-        const fitCssZoom = Math.min(cssW / (mapPxW + 80), cssH / (mapPxH + 120));
-        const worldCssZoom = Math.max(0.62, Math.min(0.95, fitCssZoom * 1.18));
+        const fitCssZoom = Math.min(cssW / (mapPxW + 60), cssH / (mapPxH + 100));
+        const worldCssZoom = Math.max(0.60, Math.min(0.92, fitCssZoom * 1.16));
         this.cameras.main.setZoom(worldCssZoom * this.dpr);
-        this.cameras.main.setBounds(-120, -100, mapPxW + 240, mapPxH + 220);
+        this.cameras.main.setBounds(-90, -80, mapPxW + 180, mapPxH + 180);
         this.cameras.main.startFollow(this.player, false, 0.14, 0.14);
 
         // 6. State flags
@@ -174,11 +211,11 @@ export class SneakScene extends Phaser.Scene {
         this.seenOnThisFloor = false;
         this.ended = false;
         this.isPaused = false;
-        this.isTeleporting = false;
-        this.inBurrowPeek = false;
-        this.burrowPeekHole = null;
-        this.burrowPeekMouth = null;
-        this.burrowPeekUntil = 0;
+        this.isChuteSliding = false;
+        this.hasGoldenKey = false;
+        this.carriedItem = null; // Currently carried Giant Cheese / Crown / Pet Friend
+        this.deliveredCount = 0;
+        this.totalQuota = this.room.totalHaulables;
         this.whistleCooldownUntil = 0;
 
         this.invulnerableUntil = this.time.now + 1200;
@@ -186,12 +223,12 @@ export class SneakScene extends Phaser.Scene {
         this.dashCooldownUntil = 0;
         this.activeBoosters = { cloak: 0, magnet: 0, turbo: 0 };
 
-        // 7. Mount Crisp HTML/CSS HUD + Glossy 3D Arcade Controls (matching Snowballs)
+        // 7. Mount Crisp HTML/CSS HUD + Glossy 3D Controls
         this._mountDomControlsAndHud();
         this._setupKeyboardAndMapTap();
         this._showFloorIntroBanner();
 
-        // 8. Audio — start theme BGM + sparkling fanfare
+        // 8. Audio
         if (this.theme?.bgm) {
             bus.emit(this.theme.bgm);
         }
@@ -202,2256 +239,1980 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // CUSTOM PROCEDURAL TEXTURES (Cute Pets, Crystal Bubbles, Strawberry Cakes)
+    // 1. TWO-LAYER CUTAWAY WORLD («ЗАЛ СВЕРХУ + РАЗРЕЗ ПОЛА + НОРКА ВНИЗУ»)
     // =========================================================================
 
     _ensureCustomTextures() {
-        const pets = [
-            { key: 'pet_mimi', body: '#ffffff', ear: '#fbcfe8', bow: '#f43f5e', kind: 'mouse' },
-            { key: 'pet_bublik', body: '#fed7aa', ear: '#fb923c', bow: '#f97316', kind: 'hamster' },
-            { key: 'pet_cloud', body: '#e0f2fe', ear: '#7dd3fc', bow: '#0ea5e9', kind: 'cat' },
-            { key: 'pet_star', body: '#f3e8ff', ear: '#d8b4fe', bow: '#eab308', kind: 'bunny' },
-            { key: 'pet_luchik', body: '#ffedd5', ear: '#fb923c', bow: '#ec4899', kind: 'fox' }
-        ];
-
-        for (const p of pets) {
-            if (this.textures.exists(p.key)) continue;
-            const c = this.textures.createCanvas(p.key, 64, 64);
-            const ctx = c.getContext();
-
-            ctx.save();
-            ctx.translate(32, 34);
-
-            ctx.fillStyle = p.body;
-            ctx.strokeStyle = '#1e1b4b';
-            ctx.lineWidth = 2.8;
-            if (p.kind === 'bunny') {
-                for (const dir of [-1, 1]) {
-                    ctx.beginPath();
-                    ctx.ellipse(dir * 10, -18, 6, 13, dir * 0.15, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                    ctx.fillStyle = p.ear;
-                    ctx.beginPath();
-                    ctx.ellipse(dir * 10, -18, 3, 8, dir * 0.15, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = p.body;
-                }
-            } else {
-                for (const dir of [-1, 1]) {
-                    ctx.beginPath();
-                    ctx.arc(dir * 13, -13, 8.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.stroke();
-                    ctx.fillStyle = p.ear;
-                    ctx.beginPath();
-                    ctx.arc(dir * 13, -13, 4.8, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = p.body;
-                }
-            }
-
-            ctx.fillStyle = p.body;
-            ctx.beginPath();
-            ctx.ellipse(0, 2, 18, 16, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.fillStyle = 'rgba(244, 63, 94, 0.55)';
-            ctx.beginPath();
-            ctx.ellipse(-10, 4, 4.2, 2.6, 0, 0, Math.PI * 2);
-            ctx.ellipse(10, 4, 4.2, 2.6, 0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = '#0f172a';
-            for (const dir of [-1, 1]) {
-                ctx.beginPath();
-                ctx.arc(dir * 6.5, -1, 3.3, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(dir * 6.5 - 1, -2.2, 1.3, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#0f172a';
-            }
-
-            ctx.fillStyle = '#f43f5e';
-            ctx.beginPath();
-            ctx.arc(0, 2.5, 2.0, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = p.bow;
-            ctx.beginPath();
-            ctx.arc(0, -13, 4.2, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.restore();
-            c.refresh();
-        }
-
-        if (!this.textures.exists('heist_cake')) {
-            const c = this.textures.createCanvas('heist_cake', 48, 48);
-            const ctx = c.getContext();
-            ctx.translate(24, 26);
-            ctx.fillStyle = '#fde68a';
-            ctx.strokeStyle = '#78350f';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.roundRect(-14, -4, 28, 14, 5);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = '#f472b6';
-            ctx.beginPath();
-            ctx.roundRect(-16, -11, 32, 10, 6);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = '#ef4444';
-            ctx.beginPath();
-            ctx.arc(0, -14, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            c.refresh();
+        if (!this.textures.exists('sneak_spark')) {
+            const g = this.make.graphics({ x: 0, y: 0, add: false });
+            g.fillStyle(0xffffff, 1);
+            g.fillCircle(8, 8, 7);
+            g.generateTexture('sneak_spark', 16, 16);
+            g.destroy();
         }
     }
 
-    // =========================================================================
-    // SEAMLESS MAGICAL ISLANDS & SUBTERRANEAN BURROW TUBES RENDERER
-    // =========================================================================
+    _renderCutawayWorld(mapPxW, mapPxH) {
+        const { W, H, cell, grid, rooms, theme, slabY1, slabY2, burrowY1 } = this.room;
 
-    _renderMagicalIslands(mapPxW, mapPxH) {
-        const texKey = `magical_islands_floor_${this.floor}_${this.room.seed}`;
-        if (this.textures.exists(texKey)) {
-            this.textures.remove(texKey);
-        }
+        const bg = this.add.graphics().setDepth(-30);
+        // Deep night backdrop above, warm subterranean earth below
+        const slabMidY = (slabY1 + 0.5) * cell;
+        bg.fillGradientStyle(0x120924, 0x120924, 0x261242, 0x261242, 1);
+        bg.fillRect(-200, -160, mapPxW + 400, slabMidY + 160);
 
-        const pad = 80;
-        const canvasW = mapPxW + pad * 2;
-        const canvasH = mapPxH + pad * 2;
-        const canvasTex = this.textures.createCanvas(texKey, canvasW, canvasH);
-        const ctx = canvasTex.getContext();
-        const C = this.room.cell;
-        const t = this.theme;
+        bg.fillGradientStyle(theme.earthTop, theme.earthTop, theme.earthBot, theme.earthBot, 1);
+        bg.fillRect(-200, slabMidY, mapPxW + 400, mapPxH - slabMidY + 220);
 
-        ctx.save();
-        ctx.translate(pad, pad);
+        const worldGfx = this.add.graphics().setDepth(-15);
 
-        // 1. Deep Magical Starry Sky / Lagoon Background
-        const skyGrad = ctx.createLinearGradient(0, -pad, 0, mapPxH + pad);
-        skyGrad.addColorStop(0, t.skyTop);
-        skyGrad.addColorStop(1, t.skyBot);
-        ctx.fillStyle = skyGrad;
-        ctx.fillRect(-pad, -pad, canvasW, canvasH);
+        // --- A. RENDER UPPER CASTLE ROOMS (Cutaway Dollhouse Rooms) ---
+        rooms.forEach((r, idx) => {
+            const rx = r.x1 * cell;
+            const ry = r.y1 * cell;
+            const rw = (r.x2 - r.x1 + 1) * cell;
+            const rh = (r.y2 - r.y1 + 1) * cell;
 
-        for (let i = 0; i < 6; i++) {
-            const nx = ((i * 397 + 150) % mapPxW);
-            const ny = ((i * 263 + 120) % mapPxH);
-            const rad = 220 + (i % 3) * 80;
-            const nGrad = ctx.createRadialGradient(nx, ny, 10, nx, ny, rad);
-            nGrad.addColorStop(0, t.nebulaColor);
-            nGrad.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = nGrad;
-            ctx.beginPath();
-            ctx.arc(nx, ny, rad, 0, Math.PI * 2);
-            ctx.fill();
-        }
+            // Back Wall Band at the top of each room (Gothic windows + wainscoting)
+            const wallH = cell * 1.45;
+            worldGfx.fillGradientStyle(theme.wallTop, theme.wallTop, theme.wallBot, theme.wallBot, 1);
+            worldGfx.fillRoundedRect(rx, ry - wallH * 0.65, rw, wallH, { tl: 14, tr: 14, bl: 0, br: 0 });
+            worldGfx.lineStyle(3, 0xfef08a, 0.35);
+            worldGfx.strokeRoundedRect(rx, ry - wallH * 0.65, rw, wallH, { tl: 14, tr: 14, bl: 0, br: 0 });
 
-        for (let s = 0; s < 95; s++) {
-            const sx = ((s * 173 + 41) % (canvasW - 20)) - pad + 10;
-            const sy = ((s * 251 + 83) % (canvasH - 20)) - pad + 10;
-            const sr = (s % 4 === 0) ? 2.4 : 1.3;
-            ctx.fillStyle = (s % 5 === 0) ? t.accentHex : 'rgba(255, 255, 255, 0.65)';
-            ctx.beginPath();
-            ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // 2. Glowing Subterranean Energy Tubes connecting Burrow Pairs across the abyss!
-        for (const h of this.room.holes) {
-            const ax = (h.a.x + 0.5) * C;
-            const ay = (h.a.y + 0.5) * C;
-            const bx = (h.b.x + 0.5) * C;
-            const by = (h.b.y + 0.5) * C;
-            const mx = (ax + bx) / 2;
-            const my = (ay + by) / 2 + (ay <= by ? -36 : 36);
-
-            ctx.save();
-            ctx.strokeStyle = h.color.hex;
-            ctx.globalAlpha = 0.30;
-            ctx.lineWidth = 34;
-            ctx.lineCap = 'round';
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.quadraticCurveTo(mx, my, bx, by);
-            ctx.stroke();
-
-            ctx.globalAlpha = 0.75;
-            ctx.strokeStyle = '#090d16';
-            ctx.lineWidth = 20;
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.quadraticCurveTo(mx, my, bx, by);
-            ctx.stroke();
-
-            ctx.globalAlpha = 0.95;
-            ctx.strokeStyle = h.color.hex;
-            ctx.lineWidth = 5;
-            ctx.setLineDash([14, 12]);
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.quadraticCurveTo(mx, my, bx, by);
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        // 3. Draw Each Floating Rounded Island with 3D Extruded Cliff & Pastel/Neon Top
-        const cliffDepth = 26;
-        const cornerRadius = 28;
-
-        for (const isl of this.room.islands) {
-            const ix = isl.x1 * C;
-            const iy = isl.y1 * C;
-            const iw = (isl.x2 - isl.x1 + 1) * C;
-            const ih = (isl.y2 - isl.y1 + 1) * C;
-
-            ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
-            ctx.beginPath();
-            ctx.roundRect(ix - 8, iy + 14, iw + 16, ih + cliffDepth + 14, cornerRadius + 6);
-            ctx.fill();
-
-            const cliffGrad = ctx.createLinearGradient(ix, iy + ih - 10, ix, iy + ih + cliffDepth);
-            cliffGrad.addColorStop(0, t.islandCliffTop);
-            cliffGrad.addColorStop(1, t.islandCliffBot);
-            ctx.fillStyle = cliffGrad;
-            ctx.beginPath();
-            ctx.roundRect(ix, iy + cliffDepth, iw, ih, cornerRadius);
-            ctx.fill();
-
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
-            ctx.lineWidth = 2;
-            for (let sx = ix + C; sx < ix + iw; sx += C) {
-                ctx.beginPath();
-                ctx.moveTo(sx, iy + ih);
-                ctx.lineTo(sx, iy + ih + cliffDepth - 4);
-                ctx.stroke();
+            // Arched Moonlit Windows along the back wall
+            const winCount = Math.max(1, Math.floor(rw / (cell * 3.5)));
+            for (let w = 0; w < winCount; w++) {
+                const wx = rx + (w + 0.5) * (rw / winCount);
+                const wy = ry - wallH * 0.18;
+                worldGfx.fillStyle(0x38bdf8, 0.22);
+                worldGfx.fillRoundedRect(wx - 22, wy - 20, 44, 34, { tl: 20, tr: 20, bl: 4, br: 4 });
+                worldGfx.lineStyle(2, 0xbae6fd, 0.5);
+                worldGfx.strokeRoundedRect(wx - 22, wy - 20, 44, 34, { tl: 20, tr: 20, bl: 4, br: 4 });
             }
 
-            ctx.save();
-            ctx.beginPath();
-            ctx.roundRect(ix, iy, iw, ih, cornerRadius);
-            ctx.clip();
+            // Room Floor Tiles
+            worldGfx.fillStyle(theme.floorMain, 1);
+            worldGfx.fillRect(rx, ry + cell * 0.5, rw, rh - cell * 0.5);
 
-            const topGrad = ctx.createLinearGradient(ix, iy, ix, iy + ih);
-            topGrad.addColorStop(0, t.islandTopA);
-            topGrad.addColorStop(1, t.islandTopB);
-            ctx.fillStyle = topGrad;
-            ctx.fillRect(ix, iy, iw, ih);
-
-            ctx.fillStyle = t.islandChecker;
-            for (let gy = isl.y1; gy <= isl.y2; gy++) {
-                for (let gx = isl.x1; gx <= isl.x2; gx++) {
+            for (let gy = r.y1 + 1; gy <= r.y2; gy++) {
+                for (let gx = r.x1; gx <= r.x2; gx++) {
                     if ((gx + gy) % 2 === 0) {
-                        ctx.fillRect(gx * C + 4, gy * C + 4, C - 8, C - 8);
+                        worldGfx.fillStyle(theme.floorChecker, 0.55);
+                        worldGfx.fillRect(gx * cell + 2, gy * cell + 2, cell - 4, cell - 4);
                     }
                 }
             }
 
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-            ctx.lineWidth = 8;
-            ctx.beginPath();
-            ctx.roundRect(ix + 4, iy + 4, iw - 8, ih - 8, cornerRadius - 4);
-            ctx.stroke();
-            ctx.restore();
-
-            ctx.strokeStyle = t.islandRim;
-            ctx.lineWidth = 5;
-            ctx.beginPath();
-            ctx.roundRect(ix, iy, iw, ih, cornerRadius);
-            ctx.stroke();
-
-            if (isl.pillarCell) {
-                const px = isl.pillarCell.x * C;
-                const py = isl.pillarCell.y * C;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-                ctx.beginPath();
-                ctx.roundRect(px + 4, py + 8, C - 8, C - 4, 18);
-                ctx.fill();
-                const pGrad = ctx.createLinearGradient(px, py, px, py + C);
-                pGrad.addColorStop(0, t.islandRim);
-                pGrad.addColorStop(1, t.islandCliffTop);
-                ctx.fillStyle = pGrad;
-                ctx.beginPath();
-                ctx.roundRect(px + 6, py + 4, C - 12, C - 12, 18);
-                ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2.5;
-                ctx.stroke();
-                ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                ctx.beginPath();
-                ctx.arc(px + C / 2, py + C / 2 - 2, 10, 0, Math.PI * 2);
-                ctx.fill();
+            // Royal Plush Carpet Runner inside each room
+            if (rw >= cell * 4) {
+                const padX = cell * 0.9;
+                const padY = cell * 1.4;
+                worldGfx.fillStyle(theme.carpetColor, 0.72);
+                worldGfx.fillRoundedRect(rx + padX, ry + padY, rw - padX * 2, rh - padY * 1.6, 10);
+                worldGfx.lineStyle(2, theme.carpetTrim, 0.75);
+                worldGfx.strokeRoundedRect(rx + padX + 4, ry + padY + 4, rw - padX * 2 - 8, rh - padY * 1.6 - 8, 8);
             }
 
-            ctx.restore();
-        }
-
-        ctx.restore();
-        canvasTex.refresh();
-
-        this.add.image(-pad, -pad, texKey).setOrigin(0, 0).setDepth(0);
-
-        for (const isl of this.room.islands) {
-            if (isl.role === 'start' || isl.role === 'portal') {
-                const cx = ((isl.x1 + isl.x2 + 1) / 2) * C;
-                const topY = isl.y1 * C - 16;
-                const label = isl.role === 'start' ? '🐾 СТАРТ' : '🌈 ВЫХОД';
-                this.add.text(cx, topY, label, {
-                    fontFamily: FONT,
-                    fontSize: '13px',
-                    fontStyle: '900',
-                    color: '#ffffff',
-                    stroke: '#090614',
-                    strokeThickness: 4,
-                    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-                    padding: { x: 8, y: 3 }
-                }).setOrigin(0.5).setDepth(5);
-            }
-        }
-    }
-
-    // =========================================================================
-    // COLOR-CODED BURROW PORTALS (`🕳️ Норы-Туннели`)
-    // =========================================================================
-
-    _buildBurrowEntrances() {
-        this.holeSprites = [];
-
-        this.room.holes.forEach((h) => {
-            const ax = (h.a.x + 0.5) * this.room.cell;
-            const ay = (h.a.y + 0.5) * this.room.cell;
-            const bx = (h.b.x + 0.5) * this.room.cell;
-            const by = (h.b.y + 0.5) * this.room.cell;
-
-            const makeBurrowMouth = (x, y, partnerX, partnerY, mouthKey) => {
-                const outerGlow = this.add.circle(x, y, 34, h.color.ringColor, 0.28)
-                    .setStrokeStyle(3.5, h.color.ringColor, 0.95)
-                    .setDepth(6);
-
-                const innerRing = this.add.circle(x, y, 24, h.color.coreColor, 0.94)
-                    .setStrokeStyle(3, h.color.glowColor, 0.92)
-                    .setDepth(6.2);
-
-                const arrow = Math.abs(partnerX - x) > Math.abs(partnerY - y)
-                    ? (partnerX > x ? '➔' : '⬅')
-                    : (partnerY > y ? '⬇' : '⬆');
-                const badge = this.add.text(x, y - 34, `${h.color.badge} НОРА ${arrow}`, {
-                    fontFamily: FONT,
-                    fontSize: '11px',
-                    fontStyle: '900',
-                    color: '#ffffff',
-                    stroke: '#000000',
-                    strokeThickness: 3.5,
-                    backgroundColor: 'rgba(15, 23, 42, 0.84)',
-                    padding: { x: 6, y: 2 }
-                }).setOrigin(0.5).setDepth(7.5);
-
-                this.tweens.add({
-                    targets: outerGlow,
-                    scaleX: 1.16,
-                    scaleY: 1.16,
-                    alpha: 0.48,
-                    duration: 850,
-                    yoyo: true,
-                    repeat: -1,
-                    ease: 'Sine.easeInOut'
-                });
-
-                return {
-                    x,
-                    y,
-                    partnerX,
-                    partnerY,
-                    mouthKey,
-                    outerGlow,
-                    innerRing,
-                    badge,
-                    hole: h
-                };
-            };
-
-            const mouthA = makeBurrowMouth(ax, ay, bx, by, 'a');
-            const mouthB = makeBurrowMouth(bx, by, ax, ay, 'b');
-            this.holeSprites.push({ hole: h, a: mouthA, b: mouthB });
-        });
-    }
-
-    _buildShadowCushions() {
-        this.shadowRects = [];
-        for (const sz of (this.room.shadowZones || [])) {
-            const x = (sz.x + 0.5) * this.room.cell;
-            const y = (sz.y + 0.5) * this.room.cell;
-            const r = this.room.cell * 0.42;
-
-            const pad = this.add.circle(x, y, r, 0x311042, 0.72)
-                .setStrokeStyle(2.5, 0xc084fc, 0.85)
-                .setDepth(4.2);
-            const lbl = this.add.text(x, y, '🐾 ТЕНЬ', {
-                fontFamily: FONT,
-                fontSize: '11px',
-                fontStyle: '900',
-                color: '#e9d5ff',
-                stroke: '#000000',
-                strokeThickness: 3
-            }).setOrigin(0.5).setDepth(4.3);
-
-            this.shadowRects.push({ x, y, r, pad, lbl });
-        }
-    }
-
-    // =========================================================================
-    // RAINBOW ESCAPE PORTAL (`🌈 ПОРТАЛ СПАСЕНИЯ`)
-    // =========================================================================
-
-    _buildEscapePortal() {
-        const ex = this.room.primaryExit;
-        this.exitPos = {
-            x: (ex.x + 0.5) * this.room.cell,
-            y: (ex.y + 0.5) * this.room.cell,
-            r: 44
-        };
-        this.exitUnlocked = false;
-
-        this.exitRingOuter = this.add.circle(this.exitPos.x, this.exitPos.y, 38, 0x475569, 0.32)
-            .setStrokeStyle(4, 0x94a3b8, 0.85)
-            .setDepth(6);
-        this.exitRingInner = this.add.circle(this.exitPos.x, this.exitPos.y, 26, 0x1e293b, 0.85)
-            .setStrokeStyle(2.5, 0xcbd5e1, 0.7)
-            .setDepth(6.1);
-
-        if (this.textures.exists('stairs')) {
-            this.exitSprite = this.add.image(this.exitPos.x, this.exitPos.y, 'stairs')
-                .setDisplaySize(54, 54)
-                .setAlpha(0.6)
-                .setDepth(6.3);
-        }
-
-        this.exitBadge = this.add.text(this.exitPos.x, this.exitPos.y - 44, '🔒 СПАСИ ДРУЗЕЙ', {
-            fontFamily: FONT,
-            fontSize: '12px',
-            fontStyle: '900',
-            color: '#cbd5e1',
-            stroke: '#090614',
-            strokeThickness: 4,
-            backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            padding: { x: 8, y: 3 }
-        }).setOrigin(0.5).setDepth(8);
-    }
-
-    _unlockEscapePortal() {
-        if (this.exitUnlocked) return;
-        this.exitUnlocked = true;
-
-        this.exitRingOuter.setFillStyle(0x10b981, 0.38).setStrokeStyle(4.5, 0x34d399, 1.0);
-        this.exitRingInner.setFillStyle(0x065f46, 0.90).setStrokeStyle(3, 0xa7f3d0, 1.0);
-        if (this.exitSprite) {
-            this.exitSprite.setAlpha(1).clearTint();
-        }
-        this.exitBadge.setText('🌈 ПОРТАЛ ОТКРЫТ!').setColor('#6ee7b7');
-
-        this.tweens.add({
-            targets: [this.exitRingOuter, this.exitBadge],
-            scaleX: 1.14,
-            scaleY: 1.14,
-            duration: 520,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
-        });
-
-        bus.emit(SFX.DOOR_OPEN);
-        this._playMusicalChime([587.33, 783.99, 987.77, 1174.66], 0.09, 'triangle');
-        this._showToast('🌈 Все пушистики спасены! Прыгай в нору к Порталу Выхода!', '#4ade80');
-    }
-
-    // =========================================================================
-    // CUTE CAPTIVE PETS, SURPRISE CHEST, BOOSTERS, CAKES & CRUMBS
-    // =========================================================================
-
-    _buildLootAndCaptivePets() {
-        this.petTargets = [];
-        this.rescuedPetsCount = 0;
-        this.totalPetsToRescue = this.room.captivePets.length;
-
-        for (const pet of this.room.captivePets) {
-            const x = (pet.x + 0.5) * this.room.cell;
-            const y = (pet.y + 0.5) * this.room.cell;
-            const texKey = `pet_${pet.petDef.id}`;
-
-            const padGlow = this.add.circle(x, y + 6, 30, 0xf472b6, 0.25)
-                .setStrokeStyle(2.5, 0xfbcfe8, 0.85)
-                .setDepth(6.5);
-
-            const petSprite = this.add.image(x, y, this.textures.exists(texKey) ? texKey : 'd_grandma')
-                .setDisplaySize(50, 50)
-                .setDepth(7.2);
-
-            const bubble = this.add.circle(x, y, 28, 0x38bdf8, 0.22)
-                .setStrokeStyle(3, 0xe0f2fe, 0.95)
-                .setDepth(7.5);
-            const bubbleShine = this.add.circle(x - 9, y - 10, 6, 0xffffff, 0.65)
-                .setDepth(7.6);
-
-            const label = this.add.text(x, y - 40, `${pet.petDef.badge} ${pet.petDef.name}`, {
-                fontFamily: FONT,
+            // Room Title Tag on the back wall
+            const roomLabels = ['🍽️ ЗАЛ №1', '👑 ЗАЛ №2', '🗝️ ЗАЛ №3'];
+            this.add.text(rx + rw / 2, ry - 14, roomLabels[idx % roomLabels.length], {
+                fontFamily: 'Nunito, sans-serif',
                 fontSize: '12px',
                 fontStyle: '900',
                 color: '#fef08a',
-                stroke: '#090614',
-                strokeThickness: 4,
-                backgroundColor: 'rgba(15, 23, 42, 0.84)',
-                padding: { x: 7, y: 2 }
-            }).setOrigin(0.5).setDepth(8.5);
+                stroke: '#0f172a',
+                strokeThickness: 3
+            }).setOrigin(0.5).setDepth(-10).setResolution(this.dpr);
+        });
 
+        // Render Doorways between adjacent rooms
+        for (let gy = this.room.upperY1; gy <= this.room.upperY2; gy++) {
+            for (let gx = 1; gx < W - 1; gx++) {
+                if (grid[gy][gx] === '.') {
+                    worldGfx.fillStyle(theme.floorMain, 1);
+                    worldGfx.fillRect(gx * cell, gy * cell, cell, cell);
+                }
+            }
+        }
+
+        // Render Decorative Pillars / Tables inside rooms
+        this.room.pillars.forEach((p) => {
+            const px = p.gx * cell;
+            const py = p.gy * cell;
+            worldGfx.fillStyle(0x1e1b4b, 1);
+            worldGfx.fillRoundedRect(px + 4, py + 4, cell - 8, cell - 8, 8);
+            worldGfx.lineStyle(3, 0xfbbf24, 0.8);
+            worldGfx.strokeRoundedRect(px + 4, py + 4, cell - 8, cell - 8, 8);
+        });
+
+        // --- B. RENDER THE CROSS-SECTION FLOOR SLAB («ТОЛЩА ПОЛА В РАЗРЕЗЕ») ---
+        const slabTopPx = slabY1 * cell;
+        const slabH = (slabY2 - slabY1 + 1) * cell;
+
+        // Wooden baseboard & floorboards at the top of the slab
+        worldGfx.fillStyle(theme.beamColor, 1);
+        worldGfx.fillRect(cell, slabTopPx, (W - 2) * cell, 18);
+        worldGfx.lineStyle(2.5, 0xfde68a, 0.55);
+        worldGfx.strokeRect(cell, slabTopPx, (W - 2) * cell, 18);
+
+        // Cross-section masonry bricks & earth layers between floor and underground burrow
+        worldGfx.fillStyle(0x3b1f0e, 1);
+        worldGfx.fillRect(cell, slabTopPx + 18, (W - 2) * cell, slabH - 18);
+
+        for (let bx = cell + 12; bx < (W - 2) * cell; bx += 48) {
+            worldGfx.fillStyle(0x572f18, 0.85);
+            worldGfx.fillRoundedRect(bx, slabTopPx + 24, 40, 18, 4);
+            worldGfx.fillRoundedRect(bx + 18, slabTopPx + 48, 40, 18, 4);
+        }
+
+        // --- C. RENDER THE UNDERGROUND BURROW NETWORK («ПОДЗЕМНАЯ НОРКА В РАЗРЕЗЕ») ---
+        for (let gy = burrowY1; gy < H; gy++) {
+            for (let gx = 1; gx < W - 1; gx++) {
+                if (grid[gy][gx] === 'U') {
+                    const tx = gx * cell;
+                    const ty = gy * cell;
+                    worldGfx.fillStyle(theme.tunnelFloor, 1);
+                    worldGfx.fillRoundedRect(tx - 2, ty - 2, cell + 4, cell + 4, 8);
+
+                    if ((gx + gy) % 2 === 0) {
+                        worldGfx.fillStyle(0x9a4e1c, 0.28);
+                        worldGfx.fillCircle(tx + cell * 0.5, ty + cell * 0.5, cell * 0.28);
+                    }
+                }
+            }
+        }
+
+        // Warm subterranean root archways & fairy lights along the burrow ceiling
+        const burrowCeilingY = burrowY1 * cell;
+        worldGfx.lineStyle(4, 0x451a03, 0.95);
+        worldGfx.beginPath();
+        worldGfx.moveTo(2 * cell, burrowCeilingY);
+        worldGfx.lineTo((W - 2) * cell, burrowCeilingY);
+        worldGfx.strokePath();
+
+        for (let gx = 3; gx <= W - 4; gx += 3) {
+            const lx = (gx + 0.5) * cell;
+            const ly = burrowCeilingY + 8;
+            // Glowing subterranean lantern bulb
+            worldGfx.fillStyle(0xfef08a, 0.22);
+            worldGfx.fillCircle(lx, ly + 8, 22);
+            worldGfx.fillStyle(0xfacc15, 0.95);
+            worldGfx.fillCircle(lx, ly + 4, 5);
+        }
+
+        // Layer Indicator Banner along the Floor Slab
+        this.add.text(mapPxW / 2, slabTopPx + slabH / 2, '⬇️ ПОДЗЕМНАЯ СЕТЬ НОРОК (МОНСТРЫ СЮДА НЕ ПРОЛЕЗУТ!) ⬇️', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '12px',
+            fontStyle: '900',
+            color: '#fde68a',
+            backgroundColor: 'rgba(30, 15, 6, 0.85)',
+            padding: { x: 10, y: 3 }
+        }).setOrigin(0.5).setDepth(-5).setResolution(this.dpr);
+    }
+
+    // =========================================================================
+    // 2. COZY HOME SANCTUARY («УЮТНЫЙ ДОМИК-НОРКА ПИ ВНИЗУ СЛЕВА»)
+    // =========================================================================
+
+    _buildCozyHomeSanctuary() {
+        const nest = this.room.homeNest;
+        this.homeNestVisual = this.add.container(nest.x, nest.y).setDepth(12);
+
+        const bg = this.add.graphics();
+        // Warm arched subterranean living room
+        bg.fillStyle(0x9a3412, 0.45);
+        bg.fillRoundedRect(-96, -54, 192, 104, 22);
+        bg.lineStyle(3.5, 0xfbbf24, 0.9);
+        bg.strokeRoundedRect(-96, -54, 192, 104, 22);
+
+        // Cozy braided rug on the burrow floor
+        bg.fillStyle(0xe11d48, 0.75);
+        bg.fillEllipse(0, 22, 145, 36);
+        bg.lineStyle(2, 0xfde047, 0.85);
+        bg.strokeEllipse(0, 22, 130, 28);
+
+        // Cute mini-sofa & warm floor lamp inside Pi's home burrow
+        bg.fillStyle(0x10b981, 1);
+        bg.fillRoundedRect(-76, -12, 48, 26, 8);
+        bg.fillStyle(0x34d399, 1);
+        bg.fillRoundedRect(-72, -22, 40, 14, 6);
+
+        const title = this.add.text(0, -40, '🏠 УЮТНАЯ НОРКА ПИ (СКЛАД ДОБЫЧИ)', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '11px',
+            fontStyle: '900',
+            color: '#fef08a',
+            stroke: '#451a03',
+            strokeThickness: 3.5
+        }).setOrigin(0.5).setResolution(this.dpr);
+
+        this.homeQuotaLabel = this.add.text(0, 34, '', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '12px',
+            fontStyle: '900',
+            color: '#86efac',
+            stroke: '#052e16',
+            strokeThickness: 3.5
+        }).setOrigin(0.5).setResolution(this.dpr);
+
+        // Container where delivered Giant Cheeses, Crowns, and Rescued Friends visibly pile up!
+        this.homeStashContainer = this.add.container(28, 4);
+
+        this.homeNestVisual.add([bg, title, this.homeStashContainer, this.homeQuotaLabel]);
+        this._refreshHomeQuotaLabel();
+    }
+
+    _refreshHomeQuotaLabel() {
+        if (!this.homeQuotaLabel) return;
+        const left = Math.max(0, (this.room.totalHaulables || 1) - (this.deliveredCount || 0));
+        if (left > 0) {
+            this.homeQuotaLabel.setText(`Утащи в норку ещё: ${left} шт.`);
+            this.homeQuotaLabel.setColor('#fde047');
+        } else {
+            this.homeQuotaLabel.setText('🎉 ВСЁ В НОРКЕ! ЗАБЕГАЙ СЮДА НА СЛЕД. ЭТАЖ!');
+            this.homeQuotaLabel.setColor('#4ade80');
+        }
+    }
+
+    // =========================================================================
+    // 3. VERTICAL BURROW CHUTES («АРОЧНЫЕ НОРКИ В ПЛИНТУСЕ И ЛАЗЫ ВНИЗ»)
+    // =========================================================================
+
+    _buildBurrowChutes() {
+        this.chuteSprites = [];
+
+        this.room.chutes.forEach((ch) => {
+            const g = this.add.graphics().setDepth(-4);
+
+            // Vertical tunnel pipe cutting through the floor slab
+            const pipeW = 38;
+            const pipeH = ch.botY - ch.topY;
+            g.fillStyle(0x1c0d06, 0.92);
+            g.fillRoundedRect(ch.topX - pipeW / 2, ch.topY, pipeW, pipeH, 12);
+            g.lineStyle(3, ch.colorHex, 0.85);
+            g.strokeRoundedRect(ch.topX - pipeW / 2, ch.topY, pipeW, pipeH, 12);
+
+            // Cute wooden ladder rungs inside the vertical burrow chute
+            g.lineStyle(2.5, 0xd97706, 0.75);
+            for (let ry = ch.topY + 18; ry < ch.botY - 12; ry += 18) {
+                g.beginPath();
+                g.moveTo(ch.topX - 12, ry);
+                g.lineTo(ch.topX + 12, ry);
+                g.strokePath();
+            }
+
+            // UPPER ENTRANCE: Classic "Tom & Jerry" Arched Baseboard Mouse-Hole!
+            const topArch = this.add.container(ch.topX, ch.topY).setDepth(9);
+            const archGfx = this.add.graphics();
+            archGfx.fillStyle(ch.colorHex, 0.22);
+            archGfx.fillCircle(0, 0, 28);
+            archGfx.fillStyle(0x140904, 1);
+            archGfx.fillRoundedRect(-18, -22, 36, 34, { tl: 18, tr: 18, bl: 4, br: 4 });
+            archGfx.lineStyle(3.5, ch.colorHex, 1);
+            archGfx.strokeRoundedRect(-18, -22, 36, 34, { tl: 18, tr: 18, bl: 4, br: 4 });
+
+            const topBadge = this.add.text(0, -28, `🕳️ НОРКА #${ch.label}`, {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10.5px',
+                fontStyle: '900',
+                color: '#ffffff',
+                backgroundColor: ch.colorCss,
+                padding: { x: 5, y: 1 }
+            }).setOrigin(0.5).setResolution(this.dpr);
+            topArch.add([archGfx, topBadge]);
+
+            // LOWER EXIT: Subterranean Chute Landing inside the burrow
+            const botLanding = this.add.container(ch.botX, ch.botY).setDepth(9);
+            const botGfx = this.add.graphics();
+            botGfx.fillStyle(ch.colorHex, 0.25);
+            botGfx.fillEllipse(0, 6, 44, 22);
+            botGfx.lineStyle(2.5, ch.colorHex, 0.9);
+            botGfx.strokeEllipse(0, 6, 44, 22);
+
+            const botBadge = this.add.text(0, 18, `🔼 ЛАЗ #${ch.label}`, {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10px',
+                fontStyle: '900',
+                color: '#fef08a',
+                stroke: '#1e1b4b',
+                strokeThickness: 3
+            }).setOrigin(0.5).setResolution(this.dpr);
+            botLanding.add([botGfx, botBadge]);
+
+            this.chuteSprites.push({ chute: ch, topArch, botLanding });
+        });
+    }
+
+    // =========================================================================
+    // 4. LASER GATES & UNDERGROUND SABOTAGE LEVERS («ПОДЗЕМНЫЙ САБОТАЖ ⚡»)
+    // =========================================================================
+
+    _buildLaserGatesAndSabotageLevers() {
+        this.laserGateObjs = [];
+        (this.room.laserGates || []).forEach((lg) => {
+            const g = this.add.graphics().setDepth(14);
+            const label = this.add.text(lg.x, lg.y1 - 10, '⚡ ЛУЧ', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10px',
+                fontStyle: '900',
+                color: '#fda4af',
+                stroke: '#0f172a',
+                strokeThickness: 3
+            }).setOrigin(0.5).setDepth(15).setResolution(this.dpr);
+
+            const obj = { data: lg, gfx: g, label };
+            this._redrawLaserGate(obj);
+            this.laserGateObjs.push(obj);
+        });
+
+        this.leverObjs = [];
+        (this.room.sabotageLevers || []).forEach((lv) => {
+            const c = this.add.container(lv.x, lv.y).setDepth(14);
+            const base = this.add.graphics();
+            base.fillStyle(0x334155, 1);
+            base.fillRoundedRect(-18, 2, 36, 12, 5);
+            base.lineStyle(2.5, 0x38bdf8, 1);
+            base.strokeRoundedRect(-18, 2, 36, 12, 5);
+
+            const handle = this.add.text(0, -10, '🕹️', {
+                fontSize: '24px'
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            const tag = this.add.text(0, -28, '⚡ РЫЧАГ ТОРТА!', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10px',
+                fontStyle: '900',
+                color: '#38bdf8',
+                stroke: '#0f172a',
+                strokeThickness: 3
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            c.add([base, handle, tag]);
+
+            // Also draw the hanging Ceiling Cake Trap in the upper room above this lever!
+            const trapIcon = this.add.text(lv.trapTargetX, this.room.upperY1 * this.room.cell + 6, '🎂⛓️', {
+                fontSize: '22px'
+            }).setOrigin(0.5).setDepth(18).setResolution(this.dpr);
+
+            this.leverObjs.push({ data: lv, container: c, handle, tag, trapIcon });
+        });
+    }
+
+    _redrawLaserGate(obj) {
+        const { data, gfx, label } = obj;
+        gfx.clear();
+        if (!data.active) {
+            label.setText('🔓 ОТКРЫТО');
+            label.setColor('#86efac');
+            return;
+        }
+        gfx.lineStyle(6, data.color, 0.35);
+        gfx.lineBetween(data.x, data.y1, data.x, data.y2);
+        gfx.lineStyle(2.5, 0xffffff, 0.95);
+        gfx.lineBetween(data.x, data.y1, data.x, data.y2);
+    }
+
+    _triggerSabotageLever(leverObj) {
+        if (leverObj.data.used) return;
+        leverObj.data.used = true;
+        leverObj.tag.setText('✅ СРАБОТАЛО!');
+        leverObj.tag.setColor('#4ade80');
+        leverObj.handle.setAngle(35);
+
+        bus.emit(SFX.CHEST_OPEN);
+        this._playMusicalChime([440, 554.37, 659.25, 880], 0.06, 'square');
+
+        // 1. Disable all laser gates!
+        this.laserGateObjs.forEach((lg) => {
+            lg.data.active = false;
+            this._redrawLaserGate(lg);
+        });
+
+        // 2. Drop the giant Ceiling Cream Cake in the upper room!
+        const tx = leverObj.data.trapTargetX;
+        const ty = leverObj.data.trapTargetY;
+        if (leverObj.trapIcon) {
             this.tweens.add({
-                targets: [petSprite, bubble, bubbleShine],
-                y: y - 5,
+                targets: leverObj.trapIcon,
+                y: ty,
+                scale: 1.5,
+                duration: 340,
+                ease: 'Cubic.easeIn',
+                onComplete: () => {
+                    leverObj.trapIcon.setText('💥🎂');
+                    this._splatCakeAt(tx, ty, true);
+                    this.time.delayedCall(900, () => leverObj.trapIcon?.destroy());
+                }
+            });
+        }
+        this._showToast('⚡ Подземный рычаг отключил лучи и уронил торт сверху!', '#38bdf8');
+    }
+
+    // =========================================================================
+    // 5. SHADOW CUSHIONS, CARRYABLE PRIZES, GOLDEN KEY & CAPTIVE PETS
+    // =========================================================================
+
+    _buildShadowCushions() {
+        this.shadowRects = [];
+        (this.room.shadowZones || []).forEach((sz) => {
+            const g = this.add.graphics().setDepth(2);
+            g.fillStyle(0x311042, 0.72);
+            g.fillCircle(sz.x, sz.y, sz.r);
+            g.lineStyle(2.5, 0xc084fc, 0.7);
+            g.strokeCircle(sz.x, sz.y, sz.r);
+
+            this.add.text(sz.x, sz.y, '🌙 ТЕНЬ', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10px',
+                fontStyle: '900',
+                color: '#e9d5ff'
+            }).setOrigin(0.5).setDepth(3).setResolution(this.dpr);
+
+            this.shadowRects.push(sz);
+        });
+    }
+
+    _buildLootAndHaulables() {
+        // Small instant cheese crumbs
+        this.cheeseSprites = this.room.cheeses.map((ch) => {
+            const img = this.add.image(ch.x, ch.y, 'd_cheese')
+                .setDisplaySize(26, 22)
+                .setDepth(10);
+            this.tweens.add({
+                targets: img,
+                y: ch.y - 4,
+                duration: 850 + Math.random() * 250,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+            return { ...ch, sprite: img, collected: false };
+        });
+
+        // Golden Key (if present on this floor)
+        this.goldenKeyObj = null;
+        if (this.room.goldenKey) {
+            const gk = this.room.goldenKey;
+            const c = this.add.container(gk.x, gk.y).setDepth(16);
+            const glow = this.add.graphics();
+            glow.fillStyle(0xfacc15, 0.32);
+            glow.fillCircle(0, 0, 24);
+            const img = this.add.image(0, 0, 'd_key').setDisplaySize(44, 24);
+            const lbl = this.add.text(0, -24, '🗝️ КЛЮЧ СТРАЖА', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10.5px',
+                fontStyle: '900',
+                color: '#fef08a',
+                stroke: '#0f172a',
+                strokeThickness: 3.5
+            }).setOrigin(0.5).setResolution(this.dpr);
+            c.add([glow, img, lbl]);
+            this.tweens.add({
+                targets: c,
+                y: gk.y - 6,
                 duration: 750,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
-
-            this.petTargets.push({
-                ...pet,
-                wx: x,
-                wy: y,
-                texKey,
-                taken: false,
-                padGlow,
-                petSprite,
-                bubble,
-                bubbleShine,
-                label
-            });
+            this.goldenKeyObj = { ...gk, container: c };
         }
 
-        // 2. Secret Surprise Chest (`🎁 СУПЕР-СУНДУК`)
-        this.secretChest = null;
-        if (this.room.secretChest) {
-            const sc = this.room.secretChest;
-            const x = (sc.x + 0.5) * this.room.cell;
-            const y = (sc.y + 0.5) * this.room.cell;
-            const glow = this.add.circle(x, y, 26, 0xfacc15, 0.28)
-                .setStrokeStyle(2.5, 0xfde047, 0.9)
-                .setDepth(6.5);
-            const sp = this.add.image(x, y, this.textures.exists('chest_closed') ? 'chest_closed' : 'd_cheese')
-                .setDisplaySize(46, 44)
-                .setDepth(7.2);
-            const badge = this.add.text(x, y - 34, '🎁 СЮРПРИЗ x2', {
-                fontFamily: FONT,
+        // Giant Carryable Prizes («Утащи в норку!»)
+        this.carryableObjs = (this.room.carryables || []).map((pr) => {
+            const c = this.add.container(pr.x, pr.y).setDepth(15);
+            const pedestal = this.add.graphics();
+            pedestal.fillStyle(0xfacc15, 0.22);
+            pedestal.fillCircle(0, 4, 26);
+            pedestal.lineStyle(2.5, 0xfde047, 0.85);
+            pedestal.strokeCircle(0, 4, 26);
+
+            const icon = this.add.text(0, -2, pr.icon, {
+                fontSize: '30px'
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            const tag = this.add.text(0, -28, `${pr.name} (+${pr.value}🧀)`, {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '10.5px',
+                fontStyle: '900',
+                color: '#fef08a',
+                stroke: '#0f172a',
+                strokeThickness: 3.5
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            const sub = this.add.text(0, 24, '🏃‍♀️ УТАЩИ В НОРКУ!', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '9.5px',
+                fontStyle: '900',
+                color: '#fde68a',
+                backgroundColor: 'rgba(15, 23, 42, 0.82)',
+                padding: { x: 4, y: 1 }
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            c.add([pedestal, icon, tag, sub]);
+            this.tweens.add({
+                targets: icon,
+                y: -7,
+                duration: 850,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+
+            return { ...pr, container: c, pickedUp: false };
+        });
+
+        // Captive Pet Friends («Спаси и уведи в норку!»)
+        this.petNodes = (this.room.captivePets || []).map((pet) => {
+            const c = this.add.container(pet.x, pet.y).setDepth(16);
+            const bubble = this.add.graphics();
+            bubble.fillStyle(pet.color, 0.24);
+            bubble.fillCircle(0, 0, 27);
+            bubble.lineStyle(3, pet.locked ? 0xfacc15 : 0xffffff, 0.9);
+            bubble.strokeCircle(0, 0, 27);
+
+            const texKey = this.textures.exists(pet.spriteKey) ? pet.spriteKey : 'd_pi';
+            const spr = this.add.image(0, 2, texKey).setScale(0.24);
+
+            const tag = this.add.text(0, -33, `${pet.badge} ${pet.name}`, {
+                fontFamily: 'Nunito, sans-serif',
                 fontSize: '11px',
                 fontStyle: '900',
-                color: '#fde047',
-                stroke: '#090614',
-                strokeThickness: 3.5,
-                backgroundColor: 'rgba(15, 23, 42, 0.8)',
-                padding: { x: 6, y: 2 }
-            }).setOrigin(0.5).setDepth(8);
+                color: '#ffffff',
+                stroke: '#0f172a',
+                strokeThickness: 3.5
+            }).setOrigin(0.5).setResolution(this.dpr);
 
-            this.secretChest = { ...sc, wx: x, wy: y, opened: false, glow, sp, badge };
-        }
+            const lockBadge = this.add.text(0, 25, pet.locked ? '🔒 НУЖЕН КЛЮЧ 🗝️' : '🆘 СПАСИ В НОРКУ!', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '9.5px',
+                fontStyle: '900',
+                color: pet.locked ? '#fde047' : '#a7f3d0',
+                backgroundColor: 'rgba(15,23,42,0.85)',
+                padding: { x: 4, y: 1 }
+            }).setOrigin(0.5).setResolution(this.dpr);
 
-        // 3. Boosters (`🧥`, `🧲`, `⚡`)
-        this.boosterNodes = [];
-        for (const b of (this.room.boosters || [])) {
-            const x = (b.x + 0.5) * this.room.cell;
-            const y = (b.y + 0.5) * this.room.cell;
-            const ring = this.add.circle(x, y, 22, b.color, 0.28)
-                .setStrokeStyle(2.5, b.color, 0.95)
-                .setDepth(6.8);
-            const iconChar = b.type === 'cloak' ? '🧥' : b.type === 'magnet' ? '🧲' : '⚡';
-            const icon = this.add.text(x, y, iconChar, { fontSize: '23px' })
-                .setOrigin(0.5)
-                .setDepth(7.2);
+            c.add([bubble, spr, tag, lockBadge]);
             this.tweens.add({
-                targets: [ring, icon],
-                y: y - 4,
-                duration: 720,
+                targets: spr,
+                y: -3,
+                duration: 680,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
-            this.boosterNodes.push({ ...b, wx: x, wy: y, taken: false, ring, icon });
-        }
 
-        // 4. Cream Cakes (`🎂`)
-        this.pieNodes = [];
-        for (const p of (this.room.pies || [])) {
-            const x = (p.x + 0.5) * this.room.cell;
-            const y = (p.y + 0.5) * this.room.cell;
-            const glow = this.add.circle(x, y, 20, 0xf472b6, 0.25)
-                .setStrokeStyle(2, 0xfbcfe8, 0.85)
-                .setDepth(6.5);
-            const sp = this.add.image(x, y, 'heist_cake')
-                .setDisplaySize(38, 38)
-                .setDepth(7);
-            this.pieNodes.push({ wx: x, wy: y, taken: false, glow, sp });
-        }
+            return { ...pet, container: c, bubble, lockBadge, pickedUp: false };
+        });
 
-        // 5. Star Cheese Crumbs (`🧀`)
-        const cheeseTex = this.textures.exists('d_cheese') ? 'd_cheese' : 'heist_cake';
-        this.crumbNodes = [];
-        for (const c of (this.room.crumbs || [])) {
-            const x = (c.x + 0.5) * this.room.cell;
-            const y = (c.y + 0.5) * this.room.cell;
-            const sp = this.add.image(x, y, cheeseTex)
-                .setDisplaySize(30, 26)
-                .setDepth(6.5);
-            this.tweens.add({
-                targets: sp,
-                y: y - 3,
-                duration: 680 + Math.random() * 250,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-            this.crumbNodes.push({ ...c, wx: x, wy: y, taken: false, sp });
-        }
+        // Boosters
+        this.boosterSprites = (this.room.boosters || []).map((b) => {
+            const c = this.add.container(b.x, b.y).setDepth(14);
+            const g = this.add.graphics();
+            g.fillStyle(b.color, 0.28);
+            g.fillCircle(0, 0, 18);
+            g.lineStyle(2, 0xffffff, 0.85);
+            g.strokeCircle(0, 0, 18);
+            const t = this.add.text(0, 0, b.icon, { fontSize: '19px' }).setOrigin(0.5).setResolution(this.dpr);
+            c.add([g, t]);
+            return { ...b, container: c, collected: false };
+        });
+
+        this.thrownCakes = [];
     }
 
     // =========================================================================
-    // PLAYER (PI / EQUIPPED SKIN) & CUTE PET FOLLOWER TRAIN (`Паровозик Друзей`)
+    // 6. PLAYER (PI) + OVERHEAD CARRIED ITEM + NEAREST BURROW GUIDE ARROW
     // =========================================================================
 
     _buildPlayer() {
-        const startX = (this.room.entry.x + 0.5) * this.room.cell;
-        const startY = (this.room.entry.y + 0.5) * this.room.cell;
-
         const skinObj = Progress.getCurrentSkin?.() || { id: 'blue', spriteKey: 'd_pi' };
-        const skinKey = skinObj.spriteKey || 'd_pi';
-        const isBase = (skinKey === 'd_pi' || skinObj.id === 'blue' || !this.textures.exists(skinKey));
+        let baseKey = skinObj.spriteKey || 'd_pi';
+        if (!this.textures.exists(baseKey)) baseKey = 'd_pi';
 
-        this.playerTexFront = isBase ? 'd_pi' : skinKey;
-        this.playerTexWalk1 = isBase
-            ? (this.textures.exists('d_pi_walk1') ? 'd_pi_walk1' : 'd_pi')
-            : (this.textures.exists(`${skinKey}_w1`) ? `${skinKey}_w1` : skinKey);
-        this.playerTexWalk2 = isBase
-            ? (this.textures.exists('d_pi_walk2') ? 'd_pi_walk2' : 'd_pi')
-            : (this.textures.exists(`${skinKey}_w2`) ? `${skinKey}_w2` : skinKey);
-        this.playerTexBack = isBase
-            ? (this.textures.exists('d_pi_b') ? 'd_pi_b' : 'd_pi')
-            : (this.textures.exists(`${skinKey}_b`) ? `${skinKey}_b` : skinKey);
+        this.playerSkinBase = baseKey;
+        this.playerWalk1 = this.textures.exists(baseKey + '_w1') ? baseKey + '_w1' : 'd_pi_walk1';
+        this.playerWalk2 = this.textures.exists(baseKey + '_w2') ? baseKey + '_w2' : 'd_pi_walk2';
 
-        this.playerHalo = this.add.circle(startX, startY + 10, 22, 0x38bdf8, 0.28)
-            .setStrokeStyle(2.5, 0x7dd3fc, 0.85)
-            .setDepth(11);
+        const sx = this.room.spawn.x;
+        const sy = this.room.spawn.y;
 
-        this.player = this.add.image(startX, startY, this.playerTexFront)
-            .setScale(PLAYER_SPRITE_SCALE)
-            .setDepth(12);
+        this.playerHalo = this.add.graphics().setDepth(21);
+        this._redrawPlayerHalo(0x38bdf8);
 
-        this.playerStatusBadge = this.add.text(startX, startY - 38, '', {
-            fontFamily: FONT,
-            fontSize: '12px',
+        this.player = this.add.image(sx, sy, this.playerSkinBase)
+            .setScale(0.29)
+            .setDepth(22);
+
+        // Visual indicator for the Giant Treasure or Pet Friend currently being hauled to the burrow!
+        this.carriedVisual = this.add.container(sx, sy - 34).setDepth(25).setVisible(false);
+        this.carriedIconText = this.add.text(0, 0, '🧀', { fontSize: '26px' }).setOrigin(0.5).setResolution(this.dpr);
+        this.carriedLabelText = this.add.text(0, -20, 'БЕГИ В НОРКУ! 🕳️', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '10.5px',
             fontStyle: '900',
-            color: '#6ee7b7',
-            stroke: '#090614',
-            strokeThickness: 4,
-            backgroundColor: 'rgba(6, 78, 59, 0.88)',
-            padding: { x: 7, y: 2 }
-        }).setOrigin(0.5).setDepth(20).setVisible(false);
+            color: '#fef08a',
+            backgroundColor: '#be185d',
+            padding: { x: 6, y: 2 }
+        }).setOrigin(0.5).setResolution(this.dpr);
+        this.carriedVisual.add([this.carriedIconText, this.carriedLabelText]);
 
-        this.playerVel = { x: 0, y: 0 };
+        // Dynamic guide arrow pointing to the nearest Mouse-Hole when Pi is carrying loot!
+        this.burrowGuideArrow = this.add.graphics().setDepth(24).setVisible(false);
+
         this.playerFacing = { x: 1, y: 0 };
-
-        this.playerTrail = [{ x: startX, y: startY }];
-        this.rescuedFollowers = [];
+        this.walkAnimTimer = 0;
     }
 
-    _addRescuedFollower(petTarget) {
-        const followerSprite = this.add.image(this.player.x, this.player.y, petTarget.texKey)
-            .setDisplaySize(40, 40)
-            .setDepth(11.5);
-        const followerHalo = this.add.circle(this.player.x, this.player.y + 8, 15, 0xf472b6, 0.25)
-            .setDepth(11.2);
-        this.rescuedFollowers.push({
-            name: petTarget.petDef.name,
-            badge: petTarget.petDef.badge,
-            sprite: followerSprite,
-            halo: followerHalo,
-            bobPhase: this.rescuedFollowers.length * 1.3
-        });
-    }
-
-    _updateFollowers(time) {
-        if (!this.rescuedFollowers.length) return;
-        const stepGap = 11;
-        for (let i = 0; i < this.rescuedFollowers.length; i++) {
-            const f = this.rescuedFollowers[i];
-            if (this.inBurrowPeek || this.isTeleporting) {
-                f.sprite.setVisible(false);
-                f.halo.setVisible(false);
-                continue;
-            }
-            f.sprite.setVisible(true);
-            f.halo.setVisible(true);
-            const idx = Math.max(0, this.playerTrail.length - 1 - (i + 1) * stepGap);
-            const pt = this.playerTrail[idx] || this.player;
-            const bob = Math.sin(time / 120 + f.bobPhase) * 3;
-            f.sprite.setPosition(pt.x, pt.y + bob);
-            f.halo.setPosition(pt.x, pt.y + 10);
-        }
+    _redrawPlayerHalo(colorHex) {
+        this.playerHalo.clear();
+        this.playerHalo.fillStyle(colorHex, 0.25);
+        this.playerHalo.fillEllipse(0, 0, 44, 22);
+        this.playerHalo.lineStyle(2, colorHex, 0.8);
+        this.playerHalo.strokeEllipse(0, 0, 44, 22);
     }
 
     // =========================================================================
-    // DAUGHTER'S HAND-DRAWN MONSTERS & VISION CONES
+    // 7. DAUGHTER'S HAND-DRAWN MONSTERS + CEILING FOOTSTEP RIPPLES («ТОП-ТОП»)
     // =========================================================================
 
     _buildMonsters() {
-        this.visionGraphics = this.add.graphics().setDepth(5.2);
-        this.monsters = [];
+        this.monsters = this.room.monsters.map((m) => {
+            const coneGfx = this.add.graphics().setDepth(13);
+            const sprKey = this.textures.exists(m.spriteKey) ? m.spriteKey : 'd_zombie';
+            const sprite = this.add.image(m.x, m.y, sprKey)
+                .setScale(m.scale || 0.31)
+                .setDepth(19);
 
-        for (const mCfg of this.room.monsters) {
-            const startNode = mCfg.patrol[0];
-            const wx = (startNode.x + 0.5) * this.room.cell;
-            const wy = (startNode.y + 0.5) * this.room.cell;
-
-            const tex = this.textures.exists(mCfg.def.texFront) ? mCfg.def.texFront : 'd_cat';
-            const shadow = this.add.ellipse(wx, wy + 22, 42, 16, 0x000000, 0.42).setDepth(9.5);
-            const sprite = this.add.image(wx, wy, tex)
-                .setScale(mCfg.def.scale || 0.38)
-                .setDepth(10);
-
-            const badge = this.add.text(wx, wy - 44, '', {
-                fontFamily: FONT,
-                fontSize: '12px',
+            const statusBadge = this.add.text(m.x, m.y - 44, '', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '15px',
                 fontStyle: '900',
                 color: '#fef08a',
-                stroke: '#090614',
-                strokeThickness: 4,
-                backgroundColor: 'rgba(15, 23, 42, 0.85)',
-                padding: { x: 7, y: 2 }
-            }).setOrigin(0.5).setDepth(18).setVisible(false);
+                stroke: '#000000',
+                strokeThickness: 4
+            }).setOrigin(0.5).setDepth(26).setResolution(this.dpr);
 
-            const nextNode = mCfg.patrol[1 % mCfg.patrol.length];
-            const initAngle = Math.atan2(nextNode.y - startNode.y, nextNode.x - startNode.x);
-
-            this.monsters.push({
-                cfg: mCfg,
-                sprite,
-                shadow,
-                badge,
-                x: wx,
-                y: wy,
-                facing: initAngle,
-                patrolIdx: 0,
-                waitLeftMs: 0,
+            return {
+                cfg: m,
+                x: m.x,
+                y: m.y,
+                vx: 0,
+                vy: 0,
+                facingRad: 0,
+                wpIndex: 1 % m.waypoints.length,
+                state: 'patrol', // 'patrol' | 'alert' | 'chase' | 'cake_blind' | 'wall_bonk'
                 suspicion: 0,
-                state: 'patrol',
-                stateTimerMs: 0,
-                distractTarget: null,
-                nextQuipAt: this.time.now + 2400 + Math.random() * 3500
-            });
-        }
+                investigateTarget: null,
+                investigateUntil: 0,
+                blindUntil: 0,
+                bonkUntil: 0,
+                stepTimer: 0,
+                sprite,
+                coneGfx,
+                statusBadge
+            };
+        });
     }
 
     // =========================================================================
-    // CRISP HTML/CSS HUD + GLOSSY 3D TOUCH CONTROLS (Matching Snowball Fight)
+    // 8. GLOSSY 3D TOUCH CONTROLS & HUD
     // =========================================================================
 
     _mountDomControlsAndHud() {
         this._unmountDomControls();
 
-        this.joyVec = { x: 0, y: 0 };
-        this._joyTouchId = null;
-        this._joyOrigin = { x: 0, y: 0 };
-        this._joyMouseDown = false;
+        const isHidden = () => {
+            if (this._isPlayerInBurrow()) return true;
+            if (this.time.now < this.activeBoosters.cloak) return true;
+            return this._isInsideShadowCushion(this.player.x, this.player.y);
+        };
 
-        const root = document.createElement('div');
-        root.id = 'sneak-touch-ui';
-        root.innerHTML = `
-            <style id="sneak-touch-styles">
+        const ui = document.createElement('div');
+        ui.id = 'sneak-touch-ui';
+        ui.innerHTML = `
+            <style>
                 #sneak-touch-ui {
                     position: fixed;
                     inset: 0;
                     pointer-events: none;
-                    z-index: 40;
+                    z-index: 9999;
+                    font-family: 'Nunito', sans-serif;
                     user-select: none;
                     -webkit-user-select: none;
-                    font-family: 'Nunito', sans-serif;
                 }
-                /* Top Crisp HTML HUD Bar */
-                #sneak-hud-bar {
-                    position: fixed;
-                    top: 0; left: 0; right: 0;
-                    padding: max(8px, env(safe-area-inset-top, 8px))
-                             calc(14px + env(safe-area-inset-right, 0px)) 8px
-                             calc(14px + env(safe-area-inset-left, 0px));
-                    background: linear-gradient(180deg, rgba(9, 6, 20, 0.92) 0%, rgba(9, 6, 20, 0.65) 85%, transparent 100%);
+                .sneak-top-bar {
+                    position: absolute;
+                    top: max(8px, env(safe-area-inset-top, 8px));
+                    left: max(12px, env(safe-area-inset-left, 12px));
+                    right: max(12px, env(safe-area-inset-right, 12px));
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
                     gap: 8px;
                     pointer-events: none;
-                    z-index: 45;
                 }
-                .sneak-hud-left, .sneak-hud-right {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    background: rgba(15, 23, 42, 0.78);
-                    border: 1.5px solid rgba(192, 132, 252, 0.42);
+                .sneak-pill {
+                    pointer-events: auto;
+                    background: rgba(15, 10, 32, 0.86);
+                    border: 2px solid rgba(250, 204, 21, 0.55);
                     border-radius: 999px;
                     padding: 5px 13px;
-                    backdrop-filter: blur(6px);
-                    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-                }
-                #sneak-hud-floor {
-                    font-weight: 900;
-                    font-size: min(3.5vw, 15px);
-                    color: #f8fafc;
-                }
-                #sneak-hud-hearts {
-                    font-size: min(3.8vw, 16px);
-                    letter-spacing: 1px;
-                }
-                .sneak-hud-center {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    gap: 2px;
-                }
-                #sneak-hud-goal {
-                    background: rgba(15, 23, 42, 0.86);
-                    border: 2px solid ${this.theme.accentHex};
-                    border-radius: 999px;
-                    padding: 4px 14px;
-                    font-weight: 900;
-                    font-size: min(3.3vw, 14px);
-                    color: #fef08a;
-                    box-shadow: 0 4px 14px rgba(0,0,0,0.45);
-                }
-                #sneak-hud-streak {
-                    font-weight: 900;
-                    font-size: min(2.8vw, 12px);
-                    color: #f9a8d4;
-                    text-shadow: 0 1px 3px #000;
-                }
-                #sneak-hud-cheese {
-                    font-weight: 900;
-                    font-size: min(4vw, 17px);
-                    color: #facc15;
-                }
-                #sneak-hud-pause {
-                    pointer-events: auto;
-                    width: 34px;
-                    height: 34px;
-                    border-radius: 50%;
-                    border: 2px solid rgba(148, 163, 184, 0.55);
-                    background: rgba(30, 41, 59, 0.92);
                     color: #fff;
-                    font-size: 15px;
+                    font-weight: 900;
+                    font-size: clamp(12px, 2.7vw, 15px);
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    box-shadow: 0 5px 14px rgba(0,0,0,0.45);
+                }
+                .sneak-icon-btn {
+                    pointer-events: auto;
+                    width: 42px;
+                    height: 42px;
+                    border-radius: 50%;
+                    border: 2px solid rgba(255,255,255,0.45);
+                    background: linear-gradient(180deg, #475569, #1e293b);
+                    color: #fff;
+                    font-size: 18px;
+                    font-weight: 900;
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.45);
                     cursor: pointer;
                 }
-                #sneak-hud-pause:active {
-                    transform: scale(0.9);
-                }
-                /* Banner & Toast */
-                #sneak-banner {
-                    position: fixed;
-                    top: 66px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: rgba(15, 23, 42, 0.94);
-                    border: 2.5px solid ${this.theme.accentHex};
-                    border-radius: 18px;
-                    padding: 8px 18px;
-                    text-align: center;
-                    box-shadow: 0 10px 28px rgba(0,0,0,0.55);
-                    transition: opacity 0.3s ease, transform 0.3s ease;
-                    z-index: 44;
-                    max-width: 90vw;
-                }
-                #sneak-banner .b-title {
-                    font-weight: 900;
-                    font-size: min(4vw, 17px);
-                    color: #fef08a;
-                }
-                #sneak-banner .b-sub {
-                    font-weight: 700;
-                    font-size: min(2.9vw, 12.5px);
-                    color: #e2e8f0;
-                    margin-top: 2px;
-                }
-                #sneak-toast {
-                    position: fixed;
-                    top: 66px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: rgba(15, 23, 42, 0.92);
-                    border: 2px solid #fde047;
-                    border-radius: 999px;
-                    padding: 6px 16px;
-                    font-weight: 900;
-                    font-size: min(3.4vw, 14px);
-                    color: #fef08a;
-                    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
-                    opacity: 0;
-                    transition: opacity 0.22s ease;
-                    z-index: 46;
-                    white-space: nowrap;
-                }
-                /* Left 360 Virtual Thumbstick */
                 #sneak-joy-zone {
-                    position: fixed;
-                    left: env(safe-area-inset-left, 0px);
-                    bottom: env(safe-area-inset-bottom, 0px);
-                    width: 44vw;
-                    height: 52vh;
-                    pointer-events: auto;
-                    touch-action: none;
-                }
-                #sneak-joy-base {
                     position: absolute;
-                    left: 26px;
-                    bottom: 20px;
+                    left: max(18px, env(safe-area-inset-left, 18px));
+                    bottom: max(16px, env(safe-area-inset-bottom, 16px));
                     width: 132px;
                     height: 132px;
                     border-radius: 50%;
-                    background: radial-gradient(circle at 50% 50%,
-                        rgba(15, 23, 42, 0.45) 0%,
-                        rgba(15, 23, 42, 0.76) 68%,
-                        rgba(88, 28, 135, 0.85) 100%);
-                    border: 2.5px solid rgba(192, 132, 252, 0.62);
-                    box-shadow:
-                        0 8px 26px rgba(2, 6, 23, 0.6),
-                        inset 0 0 22px rgba(192, 132, 252, 0.24),
-                        inset 0 2px 4px rgba(255, 255, 255, 0.25);
-                    backdrop-filter: blur(6px);
-                    -webkit-backdrop-filter: blur(6px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    pointer-events: none;
-                    transition: border-color 0.12s ease, box-shadow 0.12s ease;
-                }
-                #sneak-joy-base::before {
-                    content: '';
-                    position: absolute;
-                    inset: 14px;
-                    border-radius: 50%;
-                    border: 1.5px dashed rgba(233, 213, 255, 0.3);
-                }
-                #sneak-joy-base.is-active {
-                    border-color: #38bdf8;
-                    box-shadow:
-                        0 0 28px rgba(56, 189, 248, 0.55),
-                        0 8px 26px rgba(2, 6, 23, 0.65),
-                        inset 0 0 26px rgba(56, 189, 248, 0.35);
-                }
-                #sneak-joy-stick {
-                    position: relative;
-                    width: 58px;
-                    height: 58px;
-                    border-radius: 50%;
-                    background: radial-gradient(circle at 34% 30%,
-                        #fdf4ff 0%,
-                        #e879f9 28%,
-                        #9333ea 76%,
-                        #581c87 100%);
-                    border: 2.5px solid rgba(255, 255, 255, 0.9);
-                    box-shadow:
-                        0 6px 16px rgba(2, 6, 23, 0.65),
-                        0 0 14px rgba(217, 70, 239, 0.5),
-                        inset 0 3px 6px rgba(255, 255, 255, 0.78),
-                        inset 0 -4px 6px rgba(59, 7, 100, 0.7);
-                    will-change: transform;
-                }
-                /* Right Glossy 3D Action Buttons */
-                .sneak-3d-btn {
-                    position: fixed;
+                    background: radial-gradient(circle, rgba(168,85,247,0.24) 0%, rgba(15,23,42,0.72) 78%);
+                    border: 2.5px solid rgba(216,180,254,0.55);
+                    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
                     pointer-events: auto;
                     touch-action: none;
+                }
+                #sneak-joy-knob {
+                    position: absolute;
+                    left: 50%;
+                    top: 50%;
+                    width: 54px;
+                    height: 54px;
+                    margin-left: -27px;
+                    margin-top: -27px;
                     border-radius: 50%;
+                    background: radial-gradient(circle at 32% 30%, #f5d0fe, #a855f7 62%, #6b21a8 100%);
+                    border: 2.5px solid #fff;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    pointer-events: none;
+                }
+                .sneak-right-cluster {
+                    position: absolute;
+                    right: max(16px, env(safe-area-inset-right, 16px));
+                    bottom: max(14px, env(safe-area-inset-bottom, 14px));
+                    display: flex;
+                    align-items: flex-end;
+                    gap: 10px;
+                    pointer-events: none;
+                }
+                .sneak-gloss-btn {
+                    pointer-events: auto;
+                    touch-action: none;
+                    position: relative;
+                    border-radius: 50%;
+                    border: 3px solid rgba(255,255,255,0.88);
+                    color: #fff;
+                    font-family: 'Nunito', sans-serif;
+                    font-weight: 900;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
                     justify-content: center;
-                    gap: 2px;
+                    box-shadow: 0 7px 18px rgba(0,0,0,0.55), inset 0 3px 6px rgba(255,255,255,0.45);
                     cursor: pointer;
-                    outline: none;
-                    padding: 0;
-                    transition: transform 0.07s cubic-bezier(0.2, 0.9, 0.3, 1), filter 0.07s ease, box-shadow 0.1s ease;
-                    will-change: transform;
+                    transition: transform 0.08s ease;
                 }
-                .sneak-3d-btn::before {
-                    content: '';
-                    position: absolute;
-                    top: 5px;
-                    left: 16%;
-                    right: 16%;
-                    height: 34%;
-                    border-radius: 999px;
-                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.04) 100%);
-                    pointer-events: none;
+                .sneak-gloss-btn:active {
+                    transform: scale(0.92);
                 }
-                .sneak-3d-btn::after {
-                    content: '';
-                    position: absolute;
-                    inset: -14px;
-                    border-radius: 50%;
+                #sneak-btn-whistle {
+                    width: 66px;
+                    height: 66px;
+                    background: radial-gradient(circle at 30% 25%, #fde047, #eab308 65%, #a16207 100%);
                 }
-                .sneak-3d-btn:active,
-                .sneak-3d-btn.is-pressed {
-                    transform: scale(0.88) translateY(2px);
-                    filter: brightness(1.18);
+                #sneak-btn-cake {
+                    width: 72px;
+                    height: 72px;
+                    background: radial-gradient(circle at 30% 25%, #f9a8d4, #ec4899 65%, #9d174d 100%);
                 }
-                .sneak-btn-icon {
-                    font-size: 30px;
-                    line-height: 1;
-                    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.45));
-                    pointer-events: none;
+                #sneak-btn-dash {
+                    width: 78px;
+                    height: 78px;
+                    background: radial-gradient(circle at 30% 25%, #7dd3fc, #0284c7 65%, #075985 100%);
                 }
-                .sneak-btn-label {
-                    font-family: 'Nunito', sans-serif;
-                    font-weight: 900;
-                    font-size: 10.5px;
-                    letter-spacing: 0.4px;
-                    color: #ffffff;
-                    text-shadow: 0 1.5px 2px rgba(0, 0, 0, 0.82);
-                    line-height: 1;
-                    pointer-events: none;
+                #sneak-btn-burrow {
+                    width: 90px;
+                    height: 90px;
+                    background: radial-gradient(circle at 30% 25%, #6ee7b7, #10b981 60%, #047857 100%);
+                    border-color: #fef08a;
+                    box-shadow: 0 0 22px rgba(16,185,129,0.75), inset 0 3px 6px rgba(255,255,255,0.5);
                 }
-                .sneak-btn-badge {
+                .sneak-badge-count {
                     position: absolute;
                     top: -4px;
                     right: -4px;
-                    min-width: 24px;
+                    width: 24px;
                     height: 24px;
-                    padding: 0 6px;
-                    border-radius: 999px;
+                    border-radius: 50%;
                     background: #0f172a;
-                    border: 2px solid #fde047;
-                    color: #fde047;
-                    font-family: 'Nunito', sans-serif;
-                    font-weight: 900;
+                    border: 2px solid #facc15;
+                    color: #fef08a;
                     font-size: 12px;
+                    font-weight: 900;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+                }
+                #sneak-toast-banner {
+                    position: absolute;
+                    top: 58px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(15, 23, 42, 0.92);
+                    border: 2px solid #facc15;
+                    border-radius: 999px;
+                    padding: 6px 16px;
+                    color: #fef08a;
+                    font-weight: 900;
+                    font-size: clamp(12px, 2.8vw, 15px);
+                    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+                    opacity: 0;
+                    transition: opacity 0.22s ease;
                     pointer-events: none;
+                    white-space: nowrap;
                 }
-                #sneak-btn-burrow {
-                    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-                    right: calc(20px + env(safe-area-inset-right, 0px));
-                    width: 94px;
-                    height: 94px;
-                    border: 3px solid rgba(254, 240, 138, 0.9);
-                    background: radial-gradient(circle at 38% 30%,
-                        #fde047 0%,
-                        #eab308 48%,
-                        #a16207 88%,
-                        #713f12 100%);
-                    box-shadow:
-                        0 7px 22px rgba(202, 138, 4, 0.65),
-                        0 0 0 4px rgba(250, 204, 21, 0.28),
-                        inset 0 3px 6px rgba(255, 255, 255, 0.6),
-                        inset 0 -5px 8px rgba(113, 63, 18, 0.75);
-                }
-                #sneak-btn-prank {
-                    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-                    right: calc(128px + env(safe-area-inset-right, 0px));
-                    width: 82px;
-                    height: 82px;
-                    border: 3px solid rgba(251, 207, 232, 0.9);
-                    background: radial-gradient(circle at 38% 30%,
-                        #f9a8d4 0%,
-                        #ec4899 48%,
-                        #9d174d 88%,
-                        #500724 100%);
-                    box-shadow:
-                        0 7px 20px rgba(190, 24, 93, 0.65),
-                        0 0 0 3px rgba(236, 72, 153, 0.25),
-                        inset 0 3px 6px rgba(255, 255, 255, 0.55),
-                        inset 0 -5px 8px rgba(80, 7, 36, 0.75);
-                }
-                /* Fullscreen Modal Container (Perk Picker / Pause / Game Over) */
                 #sneak-modal-root {
                     position: fixed;
                     inset: 0;
-                    background: rgba(6, 4, 16, 0.85);
-                    backdrop-filter: blur(8px);
-                    -webkit-backdrop-filter: blur(8px);
+                    background: rgba(8, 5, 20, 0.82);
+                    backdrop-filter: blur(6px);
                     display: none;
                     align-items: center;
                     justify-content: center;
-                    z-index: 60;
+                    padding: 16px;
                     pointer-events: auto;
-                    padding: 14px;
+                    z-index: 10001;
                 }
                 #sneak-modal-root.visible {
                     display: flex;
                 }
                 .sneak-modal-card {
-                    background: linear-gradient(180deg, #172142 0%, #0e152d 100%);
+                    background: linear-gradient(180deg, #1e1b4b, #0f172a);
                     border: 3px solid #facc15;
                     border-radius: 24px;
                     padding: 18px 20px;
-                    max-width: min(620px, 94vw);
                     width: 100%;
+                    max-width: 520px;
                     text-align: center;
-                    color: #f8fafc;
-                    box-shadow: 0 20px 50px rgba(0,0,0,0.75);
+                    color: #fff;
+                    box-shadow: 0 16px 40px rgba(0,0,0,0.65);
                 }
                 .sneak-perk-grid {
                     display: grid;
                     grid-template-columns: repeat(3, 1fr);
                     gap: 10px;
-                    margin: 12px 0;
+                    margin: 14px 0;
                 }
                 .sneak-perk-card {
-                    background: rgba(30, 41, 59, 0.95);
+                    background: rgba(30, 41, 59, 0.92);
                     border: 2.5px solid #38bdf8;
-                    border-radius: 18px;
-                    padding: 12px 8px;
-                    cursor: pointer;
+                    border-radius: 16px;
+                    padding: 10px 8px;
                     display: flex;
                     flex-direction: column;
                     align-items: center;
                     gap: 5px;
-                    transition: transform 0.12s ease, box-shadow 0.12s ease;
+                    cursor: pointer;
                 }
                 .sneak-perk-card:active {
                     transform: scale(0.95);
                 }
                 .sneak-action-btn {
-                    border: none;
+                    width: 100%;
+                    padding: 11px 16px;
                     border-radius: 14px;
-                    padding: 11px 20px;
+                    border: none;
+                    color: #fff;
                     font-family: 'Nunito', sans-serif;
                     font-weight: 900;
-                    font-size: 14.5px;
+                    font-size: 15px;
                     cursor: pointer;
-                    color: #fff;
-                    margin: 4px;
-                }
-                @media (max-height: 430px) {
-                    #sneak-joy-base { width: 114px; height: 114px; left: 18px; bottom: 12px; }
-                    #sneak-joy-stick { width: 48px; height: 48px; }
-                    #sneak-btn-burrow { width: 82px; height: 82px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); }
-                    #sneak-btn-prank { width: 72px; height: 72px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: calc(108px + env(safe-area-inset-right, 0px)); }
                 }
             </style>
 
-            <div id="sneak-hud-bar">
-                <div class="sneak-hud-left">
-                    <span id="sneak-hud-floor">🏰 ЭТАЖ ${this.floor}</span>
-                    <span id="sneak-hud-hearts"></span>
+            <div class="sneak-top-bar">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <button class="sneak-icon-btn" id="sneak-pause-btn" title="Пауза">⏸</button>
+                    <div class="sneak-pill">
+                        <span id="sneak-hud-floor">${this.theme.icon} Этаж ${this.floor}</span>
+                        <span id="sneak-hud-hearts">❤️❤️❤️</span>
+                    </div>
                 </div>
-                <div class="sneak-hud-center">
-                    <div id="sneak-hud-goal"></div>
-                    <div id="sneak-hud-streak"></div>
+
+                <div class="sneak-pill" id="sneak-hud-layer-badge" style="border-color:#34d399;color:#a7f3d0;">
+                    🏠 В НОРКЕ (БЕЗОПАСНО)
                 </div>
-                <div class="sneak-hud-right">
-                    <span id="sneak-hud-cheese">🧀 0</span>
-                    <button id="sneak-hud-pause" type="button" aria-label="Пауза">⏸</button>
+
+                <div class="sneak-pill">
+                    <span id="sneak-hud-quota">🏠 Добыча: 0/${this.totalQuota}</span>
+                    <span id="sneak-hud-cheese" style="color:#facc15;">🧀 ${this.carriedCheese}</span>
                 </div>
             </div>
 
-            <div id="sneak-banner">
-                <div class="b-title">${this.room.title}</div>
-                <div class="b-sub">${this.room.subtitle}</div>
-            </div>
-            <div id="sneak-toast"></div>
+            <div id="sneak-toast-banner"></div>
 
             <div id="sneak-joy-zone">
-                <div id="sneak-joy-base">
-                    <div id="sneak-joy-stick"></div>
-                </div>
+                <div id="sneak-joy-knob"></div>
             </div>
-            <button id="sneak-btn-prank" class="sneak-3d-btn" type="button" aria-label="Торт или Свист">
-                <span class="sneak-btn-icon" id="sneak-prank-icon">🎂</span>
-                <span class="sneak-btn-label" id="sneak-prank-label">ТОРТ!</span>
-                <span class="sneak-btn-badge" id="sneak-prank-badge">${this.piesLeft}</span>
-            </button>
-            <button id="sneak-btn-burrow" class="sneak-3d-btn" type="button" aria-label="Нора или Рывок">
-                <span class="sneak-btn-icon" id="sneak-burrow-icon">🕳️</span>
-                <span class="sneak-btn-label" id="sneak-burrow-label">В НОРУ!</span>
-            </button>
+
+            <div class="sneak-right-cluster">
+                <button class="sneak-gloss-btn" id="sneak-btn-whistle" title="Свистнуть и приманить монстра">
+                    <span style="font-size:22px;line-height:1;">📣</span>
+                    <span style="font-size:10px;">СВИСТ!</span>
+                </button>
+                <button class="sneak-gloss-btn" id="sneak-btn-cake" title="Бросить кремовый тортик">
+                    <span style="font-size:24px;line-height:1;">🎂</span>
+                    <span style="font-size:10px;">ТОРТИК</span>
+                    <div class="sneak-badge-count" id="sneak-cake-count">${this.piesLeft}</div>
+                </button>
+                <button class="sneak-gloss-btn" id="sneak-btn-dash" title="Тихий кувырок">
+                    <span style="font-size:24px;line-height:1;">💨</span>
+                    <span style="font-size:10px;">КУВЫРОК</span>
+                </button>
+                <button class="sneak-gloss-btn" id="sneak-btn-burrow" style="display:none;">
+                    <span style="font-size:28px;line-height:1;" id="sneak-burrow-icon">🕳️</span>
+                    <span style="font-size:11px;" id="sneak-burrow-label">В НОРКУ!</span>
+                </button>
+            </div>
 
             <div id="sneak-modal-root"></div>
         `;
-        document.body.appendChild(root);
-        this._domRoot = root;
 
-        const pauseBtn = document.getElementById('sneak-hud-pause');
-        if (pauseBtn) {
-            pauseBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.togglePauseModal();
-            });
-        }
+        document.body.appendChild(ui);
+        this.touchUiEl = ui;
+        this.joyVec = { x: 0, y: 0 };
 
-        const zone = document.getElementById('sneak-joy-zone');
-        const baseEl = document.getElementById('sneak-joy-base');
-        const stickEl = document.getElementById('sneak-joy-stick');
-        const maxRadius = 42;
-        const deadzone = 7;
+        // Bind Virtual Joystick
+        const joyZone = document.getElementById('sneak-joy-zone');
+        const joyKnob = document.getElementById('sneak-joy-knob');
+        let joyPointerId = null;
+        const maxR = 42;
 
-        const updateStick = (clientX, clientY) => {
-            const dx = clientX - this._joyOrigin.x;
-            const dy = clientY - this._joyOrigin.y;
-            const dist = Math.hypot(dx, dy);
-            const clamped = Math.min(dist, maxRadius);
-            const angle = dist > 0.001 ? Math.atan2(dy, dx) : 0;
-            const ox = Math.cos(angle) * clamped;
-            const oy = Math.sin(angle) * clamped;
-            stickEl.style.transform = `translate3d(${ox.toFixed(1)}px, ${oy.toFixed(1)}px, 0)`;
-
-            if (dist > deadzone) {
-                const mag = Math.min(1, (dist - deadzone) / (maxRadius - deadzone));
-                this.joyVec.x = Math.cos(angle) * mag;
-                this.joyVec.y = Math.sin(angle) * mag;
-                if (this.inBurrowPeek && dist > maxRadius * 0.55) {
-                    this.popOutOfBurrow(Math.cos(angle), Math.sin(angle));
-                }
-            } else {
-                this.joyVec.x = 0;
-                this.joyVec.y = 0;
-            }
-        };
-
-        const startStick = (clientX, clientY) => {
-            const rect = baseEl.getBoundingClientRect();
+        const updateJoy = (clientX, clientY) => {
+            const rect = joyZone.getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
-            if (Math.hypot(clientX - cx, clientY - cy) <= rect.width * 0.8) {
-                this._joyOrigin.x = cx;
-                this._joyOrigin.y = cy;
-            } else {
-                this._joyOrigin.x = clientX;
-                this._joyOrigin.y = clientY;
+            let dx = clientX - cx;
+            let dy = clientY - cy;
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxR) {
+                dx = (dx / dist) * maxR;
+                dy = (dy / dist) * maxR;
             }
-            baseEl.classList.add('is-active');
-            updateStick(clientX, clientY);
+            joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            this.joyVec.x = dx / maxR;
+            this.joyVec.y = dy / maxR;
         };
 
-        const resetStick = () => {
-            this._joyTouchId = null;
-            this._joyMouseDown = false;
+        const resetJoy = () => {
+            joyPointerId = null;
+            joyKnob.style.transform = 'translate(0px, 0px)';
             this.joyVec.x = 0;
             this.joyVec.y = 0;
-            baseEl.classList.remove('is-active');
-            stickEl.style.transform = 'translate3d(0px, 0px, 0)';
         };
 
-        zone.addEventListener('touchstart', (e) => {
+        joyZone.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            if (this._joyTouchId !== null) return;
-            const t = e.changedTouches[0];
-            if (!t) return;
-            this._joyTouchId = t.identifier;
-            startStick(t.clientX, t.clientY);
-        }, { passive: false });
-
-        zone.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (this._joyTouchId === null) return;
-            for (let i = 0; i < e.touches.length; i++) {
-                if (e.touches[i].identifier === this._joyTouchId) {
-                    updateStick(e.touches[i].clientX, e.touches[i].clientY);
-                    return;
-                }
-            }
-        }, { passive: false });
-
-        const endTouch = (e) => {
-            e.preventDefault();
-            if (this._joyTouchId === null) return;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === this._joyTouchId) {
-                    resetStick();
-                    return;
-                }
-            }
-        };
-        zone.addEventListener('touchend', endTouch, { passive: false });
-        zone.addEventListener('touchcancel', endTouch, { passive: false });
-
-        zone.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            this._joyMouseDown = true;
-            startStick(e.clientX, e.clientY);
+            joyPointerId = e.pointerId;
+            joyZone.setPointerCapture?.(e.pointerId);
+            updateJoy(e.clientX, e.clientY);
         });
-        this._onWinMouseMove = (e) => {
-            if (this._joyMouseDown) updateStick(e.clientX, e.clientY);
-        };
-        this._onWinMouseUp = () => {
-            if (this._joyMouseDown) resetStick();
-        };
-        window.addEventListener('mousemove', this._onWinMouseMove);
-        window.addEventListener('mouseup', this._onWinMouseUp);
+        joyZone.addEventListener('pointermove', (e) => {
+            if (e.pointerId !== joyPointerId) return;
+            updateJoy(e.clientX, e.clientY);
+        });
+        joyZone.addEventListener('pointerup', (e) => {
+            if (e.pointerId === joyPointerId) resetJoy();
+        });
+        joyZone.addEventListener('pointercancel', resetJoy);
 
-        const bindBtn = (id, fn) => {
-            const btn = document.getElementById(id);
-            if (!btn) return;
-            btn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.add('is-pressed');
-                fn();
-            }, { passive: false });
-            btn.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                btn.classList.remove('is-pressed');
-            }, { passive: false });
-            btn.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.add('is-pressed');
-                fn();
-            });
-            btn.addEventListener('mouseup', () => btn.classList.remove('is-pressed'));
-            btn.addEventListener('mouseleave', () => btn.classList.remove('is-pressed'));
-        };
-
-        bindBtn('sneak-btn-burrow', () => this.onPrimaryActionPressed());
-        bindBtn('sneak-btn-prank', () => this.onSecondaryActionPressed());
+        // Bind Action Buttons
+        document.getElementById('sneak-pause-btn')?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this.togglePauseModal();
+        });
+        document.getElementById('sneak-btn-whistle')?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this._triggerWhistleDecoy();
+        });
+        document.getElementById('sneak-btn-cake')?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this._throwCreamCake();
+        });
+        document.getElementById('sneak-btn-dash')?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this._triggerSilentRoll();
+        });
+        document.getElementById('sneak-btn-burrow')?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            this._useNearestBurrowChute();
+        });
 
         this._refreshHud();
     }
 
     _unmountDomControls() {
-        if (this._onWinMouseMove) {
-            window.removeEventListener('mousemove', this._onWinMouseMove);
-            this._onWinMouseMove = null;
-        }
-        if (this._onWinMouseUp) {
-            window.removeEventListener('mouseup', this._onWinMouseUp);
-            this._onWinMouseUp = null;
-        }
         const existing = document.getElementById('sneak-touch-ui');
         if (existing) existing.remove();
-        this._domRoot = null;
-    }
-
-    _setupKeyboardAndMapTap() {
-        if (this.input.keyboard) {
-            this.cursors = this.input.keyboard.createCursorKeys();
-            this.wasd = this.input.keyboard.addKeys({
-                up: Phaser.Input.Keyboard.KeyCodes.W,
-                down: Phaser.Input.Keyboard.KeyCodes.S,
-                left: Phaser.Input.Keyboard.KeyCodes.A,
-                right: Phaser.Input.Keyboard.KeyCodes.D,
-                space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-                e: Phaser.Input.Keyboard.KeyCodes.E,
-                q: Phaser.Input.Keyboard.KeyCodes.Q,
-                esc: Phaser.Input.Keyboard.KeyCodes.ESC
-            });
-            this.wasd.space.on('down', () => this.onPrimaryActionPressed());
-            this.wasd.e.on('down', () => this.onPrimaryActionPressed());
-            this.wasd.q.on('down', () => this.onSecondaryActionPressed());
-            this.wasd.esc.on('down', () => this.togglePauseModal());
-        }
-
-        this.input.on('pointerdown', (pointer) => {
-            if (this.ended || this.isPaused) return;
-            const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            const nearH = this.nearestHoleAt(this.player.x, this.player.y);
-            if (nearH && nearH.dist <= HOLE_TRIGGER_RADIUS && Math.hypot(wp.x - nearH.mouth.x, wp.y - nearH.mouth.y) < 75) {
-                this.enterHole(nearH.hole);
-                return;
-            }
-            if (this.inBurrowPeek) {
-                this.popOutOfBurrow();
-                return;
-            }
-            if (this.piesLeft > 0) {
-                this.throwCakeAt(wp.x, wp.y);
-            }
-        });
+        this.touchUiEl = null;
     }
 
     _refreshHud() {
         const heartsEl = document.getElementById('sneak-hud-hearts');
-        const goalEl = document.getElementById('sneak-hud-goal');
-        const streakEl = document.getElementById('sneak-hud-streak');
-        const cheeseEl = document.getElementById('sneak-hud-cheese');
-
         if (heartsEl) {
             heartsEl.textContent = '❤️'.repeat(Math.max(0, this.hearts)) + '🖤'.repeat(Math.max(0, this.maxHearts - this.hearts));
         }
-        if (goalEl) {
-            if (this.rescuedPetsCount < this.totalPetsToRescue) {
-                goalEl.textContent = `🐾 СПАСЕНО ДРУЗЕЙ: ${this.rescuedPetsCount} / ${this.totalPetsToRescue}`;
-                goalEl.style.color = '#fef08a';
-            } else {
-                goalEl.textContent = '🌈 ВСЕ СПАСЕНЫ! ПРЫГАЙ В ПОРТАЛ!';
-                goalEl.style.color = '#6ee7b7';
-            }
+        const quotaEl = document.getElementById('sneak-hud-quota');
+        if (quotaEl) {
+            const keyStr = this.hasGoldenKey ? ' 🗝️' : '';
+            quotaEl.textContent = `🏠 В норке: ${this.deliveredCount}/${this.totalQuota}${keyStr}`;
         }
-        if (streakEl) {
-            const perkIcons = Object.keys(this.runPerks).map(k => {
-                const p = RUN_PERKS.find(r => r.id === k);
-                return p ? p.icon : '';
-            }).join('');
-            streakEl.textContent = `🔥 СЕРИЯ x${this.streak.toFixed(1)}${perkIcons ? ' • ' + perkIcons : ''}`;
-        }
+        const cheeseEl = document.getElementById('sneak-hud-cheese');
         if (cheeseEl) {
             cheeseEl.textContent = `🧀 ${this.carriedCheese}`;
         }
-
-        const prankIcon = document.getElementById('sneak-prank-icon');
-        const prankLabel = document.getElementById('sneak-prank-label');
-        const prankBadge = document.getElementById('sneak-prank-badge');
-        const prankBtn = document.getElementById('sneak-btn-prank');
-
-        if (prankIcon && prankLabel && prankBadge && prankBtn) {
-            if (this.inBurrowPeek) {
-                prankIcon.textContent = '📣';
-                prankLabel.textContent = 'СВИСТ!';
-                prankBadge.textContent = '🔊';
-                prankBtn.style.background = 'radial-gradient(circle at 38% 30%, #fde047 0%, #f97316 52%, #9a3412 100%)';
-                prankBtn.style.opacity = '1';
+        const cakeCountEl = document.getElementById('sneak-cake-count');
+        if (cakeCountEl) {
+            cakeCountEl.textContent = `${this.piesLeft}`;
+        }
+        const layerBadge = document.getElementById('sneak-hud-layer-badge');
+        if (layerBadge && this.player) {
+            if (this._isPlayerInBurrow()) {
+                layerBadge.textContent = '🏠 ПОД ЗЕМЛЁЙ В НОРКЕ (НЕВИДИМА!)';
+                layerBadge.style.borderColor = '#34d399';
+                layerBadge.style.color = '#a7f3d0';
+            } else if (this.carriedItem) {
+                layerBadge.textContent = `🏃‍♀️ НЕСЁТ: ${this.carriedItem.icon} — НЫРЯЙ В НОРКУ!`;
+                layerBadge.style.borderColor = '#facc15';
+                layerBadge.style.color = '#fef08a';
+            } else if (this._isInsideShadowCushion(this.player.x, this.player.y)) {
+                layerBadge.textContent = '🌙 В ТЕНИ (НЕВИДИМА)';
+                layerBadge.style.borderColor = '#c084fc';
+                layerBadge.style.color = '#e9d5ff';
             } else {
-                prankIcon.textContent = '🎂';
-                prankLabel.textContent = 'ТОРТ!';
-                prankBadge.textContent = String(this.piesLeft);
-                prankBtn.style.background = 'radial-gradient(circle at 38% 30%, #f9a8d4 0%, #ec4899 48%, #9d174d 88%, #500724 100%)';
-                prankBtn.style.opacity = this.piesLeft > 0 ? '1' : '0.5';
+                layerBadge.textContent = '👀 НАВЕРХУ В ЗАЛЕ (ОСТОРОЖНО!)';
+                layerBadge.style.borderColor = '#fb7185';
+                layerBadge.style.color = '#fecdd3';
             }
         }
     }
 
-    _showFloorIntroBanner() {
-        const bannerEl = document.getElementById('sneak-banner');
-        if (!bannerEl) return;
-        setTimeout(() => {
-            if (bannerEl) {
-                bannerEl.style.opacity = '0';
-                bannerEl.style.transform = 'translateX(-50%) translateY(-10px)';
-            }
-        }, 2400);
-    }
-
-    _showToast(msg, color = '#fef08a') {
-        const toastEl = document.getElementById('sneak-toast');
-        if (!toastEl) return;
-        toastEl.textContent = msg;
-        toastEl.style.color = color;
-        toastEl.style.opacity = '1';
+    _showToast(msg, borderColor = '#facc15') {
+        const el = document.getElementById('sneak-toast-banner');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.borderColor = borderColor;
+        el.style.opacity = '1';
         clearTimeout(this._toastTimer);
         this._toastTimer = setTimeout(() => {
-            if (toastEl) toastEl.style.opacity = '0';
-        }, 1900);
+            if (el) el.style.opacity = '0';
+        }, 2900);
     }
 
-    _spawnFloatingSticker(x, y, text, color = '#fef08a') {
-        const t = this.add.text(x, y - 14, text, {
-            fontFamily: FONT,
-            fontSize: '15px',
-            fontStyle: '900',
-            color,
-            stroke: '#090614',
-            strokeThickness: 4
-        }).setOrigin(0.5).setDepth(45);
-        this.tweens.add({
-            targets: t,
-            y: y - 54,
-            alpha: 0,
-            scaleX: 1.15,
-            scaleY: 1.15,
-            duration: 820,
-            ease: 'Cubic.easeOut',
-            onComplete: () => t.destroy()
+    _showFloorIntroBanner() {
+        this._showToast(`${this.mission.badge}: ${this.mission.title}`, '#38bdf8');
+    }
+
+    _setupKeyboardAndMapTap() {
+        this.keys = this.input.keyboard?.addKeys({
+            up: Phaser.Input.Keyboard.KeyCodes.W,
+            down: Phaser.Input.Keyboard.KeyCodes.S,
+            left: Phaser.Input.Keyboard.KeyCodes.A,
+            right: Phaser.Input.Keyboard.KeyCodes.D,
+            upArr: Phaser.Input.Keyboard.KeyCodes.UP,
+            downArr: Phaser.Input.Keyboard.KeyCodes.DOWN,
+            leftArr: Phaser.Input.Keyboard.KeyCodes.LEFT,
+            rightArr: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+            space: Phaser.Input.Keyboard.KeyCodes.SPACE,
+            e: Phaser.Input.Keyboard.KeyCodes.E,
+            q: Phaser.Input.Keyboard.KeyCodes.Q
         });
+
+        this.input.keyboard?.on('keydown-SPACE', () => this._useNearestBurrowChute());
+        this.input.keyboard?.on('keydown-E', () => this._throwCreamCake());
+        this.input.keyboard?.on('keydown-Q', () => this._triggerWhistleDecoy());
     }
 
     // =========================================================================
-    // PRIMARY & SECONDARY ACTIONS: BURROW TELEPORT, PEEK, WHISTLE & CAKE
+    // 9. BURROW CHUTE DIVE & "TOM AND JERRY" MONSTER WALL-BONK («БАМ! 💫»)
     // =========================================================================
 
-    nearestHoleAt(x, y) {
+    _isPlayerInBurrow() {
+        if (!this.player) return true;
+        return this.player.y >= (this.room.slabY1 + 0.5) * this.room.cell;
+    }
+
+    _findNearestChuteInteraction() {
+        if (!this.player) return null;
+        const px = this.player.x;
+        const py = this.player.y;
+        const inBurrow = this._isPlayerInBurrow();
+
         let best = null;
-        for (const hs of this.holeSprites) {
-            const dA = Math.hypot(x - hs.a.x, y - hs.a.y);
-            if (!best || dA < best.dist) {
-                best = { hole: hs.hole, mouth: hs.a, partner: hs.b, mouthKey: 'a', dist: dA };
-            }
-            const dB = Math.hypot(x - hs.b.x, y - hs.b.y);
-            if (!best || dB < best.dist) {
-                best = { hole: hs.hole, mouth: hs.b, partner: hs.a, mouthKey: 'b', dist: dB };
+        let bestDist = 72;
+
+        for (const ch of this.room.chutes) {
+            if (inBurrow) {
+                const d = Math.hypot(px - ch.botX, py - ch.botY);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = { chute: ch, dir: 'up', targetX: ch.topX, targetY: ch.topY - 8 };
+                }
+            } else {
+                const d = Math.hypot(px - ch.topX, py - ch.topY);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = { chute: ch, dir: 'down', targetX: ch.botX, targetY: ch.botY + 8 };
+                }
             }
         }
         return best;
     }
 
-    onPrimaryActionPressed() {
-        if (this.ended || this.isPaused || this.isTeleporting) return;
+    _useNearestBurrowChute(forcedInfo = null) {
+        if (this.ended || this.isPaused || this.isChuteSliding) return;
+        const info = forcedInfo || this._findNearestChuteInteraction();
+        if (!info) return;
 
-        if (this.inBurrowPeek) {
-            this.popOutOfBurrow();
-            return;
+        this.isChuteSliding = true;
+        const { chute, dir, targetX, targetY } = info;
+
+        bus.emit(SFX.DASH);
+        this._playMusicalChime(
+            dir === 'down' ? [783.99, 659.25, 523.25, 392.0] : [392.0, 523.25, 659.25, 783.99],
+            0.045,
+            'sine'
+        );
+
+        // If Pi dives DOWN into a mouse-hole from the upper room:
+        // 1. Trigger the "Tom & Jerry" Monster Wall-Bonk on any monster chasing or close to Pi!
+        if (dir === 'down') {
+            this._checkTomAndJerryMonsterBonk(chute);
         }
 
-        const nearH = this.nearestHoleAt(this.player.x, this.player.y);
-        if (nearH && nearH.dist <= HOLE_TRIGGER_RADIUS) {
-            this.enterHole(nearH.hole);
-            return;
-        }
-
-        const cd = Math.round(DASH_COOLDOWN_MS * (this.skinDashCdMul || 1));
-        if (this.time.now >= this.dashCooldownUntil) {
-            this.dashUntil = this.time.now + DASH_DURATION_MS;
-            this.dashCooldownUntil = this.time.now + cd;
-            bus.emit(SFX.THROW);
-            this._playMusicalChime([440, 659.25], 0.05, 'sine');
-            this._spawnFloatingSticker(this.player.x, this.player.y, '💨 КУВЫРОК!', '#38bdf8');
-        }
-    }
-
-    onSecondaryActionPressed() {
-        if (this.ended || this.isPaused || this.isTeleporting) return;
-
-        if (this.inBurrowPeek) {
-            this.triggerBurrowWhistleDecoy();
-            return;
-        }
-
-        if (this.piesLeft <= 0) {
-            this._showToast('🎂 Тортики закончились! Ищи их на островах!', '#f472b6');
-            return;
-        }
-
-        let targetX = this.player.x + this.playerFacing.x * 165;
-        let targetY = this.player.y + this.playerFacing.y * 165;
-        let bestDist = Infinity;
-
-        for (const m of this.monsters) {
-            const d = Math.hypot(m.x - this.player.x, m.y - this.player.y);
-            if (d < bestDist && d < 460) {
-                bestDist = d;
-                targetX = m.x;
-                targetY = m.y;
-            }
-        }
-
-        this.throwCakeAt(targetX, targetY);
-    }
-
-    enterHole(hole) {
-        if (this.ended || this.isTeleporting) return;
-
-        const C = this.room.cell;
-        const ax = (hole.a.x + 0.5) * C;
-        const ay = (hole.a.y + 0.5) * C;
-        const bx = (hole.b.x + 0.5) * C;
-        const by = (hole.b.y + 0.5) * C;
-
-        const distA = Math.hypot(this.player.x - ax, this.player.y - ay);
-        const distB = Math.hypot(this.player.x - bx, this.player.y - by);
-        const fromA = distA <= distB;
-
-        const startX = fromA ? ax : bx;
-        const startY = fromA ? ay : by;
-        const destX = fromA ? bx : ax;
-        const destY = fromA ? by : ay;
-        const destMouthKey = fromA ? 'b' : 'a';
-
-        this.isTeleporting = true;
-        this.inBurrowPeek = false;
-        this.invulnerableUntil = this.time.now + 1100;
-
-        let escapedMonster = false;
-        for (const m of this.monsters) {
-            if (m.suspicion > 0.15) {
-                escapedMonster = true;
-                m.suspicion = 0;
-                m.badge.setText('❓ В нору юркнула!').setVisible(true);
-            }
-        }
-        if (escapedMonster) {
-            const bonus = Math.round(6 * this.streak);
-            this.carriedCheese += bonus;
-            this.streak = Math.min(3.0, +(this.streak + 0.25).toFixed(2));
-            this._spawnFloatingSticker(startX, startY, `🕳️ ХИТРЫЙ ПОБЕГ! +${bonus} 🧀`, '#facc15');
-            this._refreshHud();
-        }
-
-        bus.emit(SFX.PICKUP);
-        this._playMusicalChime([392, 523.25, 659.25, 783.99], 0.06, 'sine');
-
-        const diveRing = this.add.circle(startX, startY, 16, hole.color.ringColor, 0.65).setDepth(25);
-        this.tweens.add({
-            targets: diveRing,
-            scaleX: 2.4,
-            scaleY: 2.4,
-            alpha: 0,
-            duration: 280,
-            onComplete: () => diveRing.destroy()
-        });
-
-        const comet = this.add.circle(startX, startY, 14, hole.color.ringColor, 0.95)
-            .setStrokeStyle(3, 0xffffff, 0.95)
-            .setDepth(24);
-
+        // Smooth animated zip through the vertical cutaway chute!
         this.tweens.add({
             targets: this.player,
-            x: startX,
-            y: startY,
-            scaleX: 0.08,
-            scaleY: 0.08,
-            angle: 180,
-            duration: 140,
+            x: targetX,
+            y: targetY,
+            scaleX: 0.22,
+            scaleY: 0.36,
+            duration: 240,
+            ease: 'Cubic.easeInOut',
+            onUpdate: () => {
+                this.playerHalo.setPosition(this.player.x, this.player.y + 10);
+                this.carriedVisual.setPosition(this.player.x, this.player.y - 34);
+            },
             onComplete: () => {
-                this.player.setPosition(destX, destY);
-                this.playerHalo.setPosition(destX, destY + 10);
-                this.playerTrail = [{ x: destX, y: destY }];
+                this.player.setScale(0.29);
+                this.isChuteSliding = false;
+                this.invulnerableUntil = Math.max(this.invulnerableUntil, this.time.now + 700);
 
+                // If Pi has the Burrow Turbo perk and popped UP into the hall, grant brief turbo & cloak!
+                if (dir === 'up' && this.runPerks.burrow_turbo) {
+                    this.activeBoosters.turbo = Math.max(this.activeBoosters.turbo, this.time.now + 3000);
+                    this.activeBoosters.cloak = Math.max(this.activeBoosters.cloak, this.time.now + 2500);
+                    this._showToast('🚀 Пружинный вылет из норки! Ускорение + Невидимость!', '#a855f7');
+                }
+
+                // If Pi dove DOWN into the burrow while carrying a Giant Prize or Pet Friend,
+                // deliver it straight along the burrow into her Cozy Home Sanctuary!
+                if (dir === 'down' && this.carriedItem) {
+                    this._deliverCarriedItemToHomeNest();
+                }
+
+                this._refreshHud();
+            }
+        });
+    }
+
+    /**
+     * Classic "Tom & Jerry" comedic payoff:
+     * When Pi dives into a baseboard Mouse-Hole while a monster is chasing or nearby,
+     * the monster lunges at the mouse-hole and SLAMS its forehead into the wall above ("БАМ! 💫")!
+     */
+    _checkTomAndJerryMonsterBonk(chute) {
+        this.monsters.forEach((m) => {
+            if (m.state === 'wall_bonk') return;
+            const dist = Math.hypot(m.x - chute.topX, m.y - chute.topY);
+            const isChasingInRoom = (m.state === 'chase' || m.state === 'alert') && dist < 260;
+            if (dist < 165 || isChasingInRoom) {
+                m.state = 'wall_bonk';
+                m.bonkUntil = this.time.now + 3800;
+
+                // Monster lunges at the mouse-hole and bounces off with stars!
                 this.tweens.add({
-                    targets: comet,
-                    x: destX,
-                    y: destY,
-                    duration: 210,
-                    ease: 'Sine.easeInOut',
+                    targets: m.sprite,
+                    x: chute.topX,
+                    y: chute.topY - 14,
+                    duration: 160,
+                    ease: 'Quad.easeIn',
                     onComplete: () => {
-                        comet.destroy();
-                        this.isTeleporting = false;
+                        this.cameras.main.shake(180, 0.008);
+                        bus.emit(SFX. ENEMY_HIT || SFX.PIE_HIT);
+                        this._playMusicalChime([220, 196, 146.83], 0.08, 'sawtooth');
 
-                        this.inBurrowPeek = true;
-                        this.burrowPeekHole = hole;
-                        this.burrowPeekMouth = destMouthKey;
-                        this.burrowPeekUntil = this.time.now + BURROW_PEEK_MAX_MS;
-
-                        this.player.setAngle(0).setScale(PLAYER_PEEK_SCALE).setAlpha(0.92);
-                        this.playerHalo.setStrokeStyle(3, 0x34d399, 1.0).setFillStyle(0x10b981, 0.35);
+                        // Bonus cheese for outsmarting the monster!
+                        this.carriedCheese += 10;
                         this._refreshHud();
+
+                        const bonkTxt = this.add.text(chute.topX, chute.topY - 46, '💥 БАМ! НЕ ДОГНАЛ! 💫 (+10🧀)', {
+                            fontFamily: 'Nunito, sans-serif',
+                            fontSize: '14px',
+                            fontStyle: '900',
+                            color: '#fef08a',
+                            stroke: '#be185d',
+                            strokeThickness: 4
+                        }).setOrigin(0.5).setDepth(35).setResolution(this.dpr);
+
+                        this.tweens.add({
+                            targets: bonkTxt,
+                            y: chute.topY - 78,
+                            alpha: 0,
+                            duration: 1500,
+                            onComplete: () => bonkTxt.destroy()
+                        });
+
+                        // Bounce monster slightly back
+                        m.x = chute.topX;
+                        m.y = Math.max((this.room.upperY1 + 1.5) * this.room.cell, chute.topY - 38);
+                        m.sprite.setPosition(m.x, m.y);
+                        m.statusBadge.setText('💫 БАМ! ⭐');
                     }
                 });
             }
         });
     }
 
-    popOutOfBurrow(dirX = 0, dirY = 0) {
-        if (!this.inBurrowPeek) return;
-        this.inBurrowPeek = false;
-        this.burrowPeekHole = null;
+    /**
+     * Delivers the currently carried Giant Treasure or Captive Pet Friend
+     * into Pi's Cozy Home Sanctuary in the underground burrow!
+     */
+    _deliverCarriedItemToHomeNest() {
+        if (!this.carriedItem) return;
+        const item = this.carriedItem;
+        this.carriedItem = null;
+        this.carriedVisual.setVisible(false);
+        this.burrowGuideArrow.setVisible(false);
 
-        this.player.setScale(PLAYER_SPRITE_SCALE).setAlpha(1);
-        this.dashUntil = this.time.now + 460;
-        this.invulnerableUntil = this.time.now + 750;
-
-        if (this.runPerks.ghost_cloak) {
-            this.activeBoosters.cloak = Math.max(this.activeBoosters.cloak, this.time.now + 2500);
+        this.deliveredCount++;
+        const bonusCheese = item.value || 25;
+        this.carriedCheese += bonusCheese;
+        if (item.kind === 'pet') {
+            this.totalRescuedInRun++;
         }
 
-        if (dirX !== 0 || dirY !== 0) {
-            this.playerFacing = { x: dirX, y: dirY };
-        }
+        bus.emit(SFX.KEY_PICKUP);
+        this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.07, 'triangle');
 
-        this._playMusicalChime([587.33, 880], 0.06, 'triangle');
-        this._spawnFloatingSticker(
-            this.player.x,
-            this.player.y,
-            this.runPerks.ghost_cloak ? '🧥 ПРЫЖОК-НЕВИДИМКА!' : '🚀 ПРЫГ ИЗ НОРЫ!',
-            '#4ade80'
-        );
-        this._refreshHud();
-    }
+        // Animate the prize flying along the burrow tunnel into Pi's Cozy Home Stash!
+        const flyIcon = this.add.text(this.player.x, this.player.y, item.icon, {
+            fontSize: '30px'
+        }).setOrigin(0.5).setDepth(32).setResolution(this.dpr);
 
-    triggerBurrowWhistleDecoy() {
-        if (this.time.now < this.whistleCooldownUntil) return;
-        this.whistleCooldownUntil = this.time.now + 1400;
-
-        const C = this.room.cell;
-        const playerIsland = this._findIslandAtWorld(this.player.x, this.player.y);
-
-        let decoyX = this.player.x;
-        let decoyY = this.player.y;
-
-        if (playerIsland) {
-            const cx1 = (playerIsland.x1 + 1) * C;
-            const cy1 = (playerIsland.y1 + 1) * C;
-            const cx2 = (playerIsland.x2) * C;
-            const cy2 = (playerIsland.y2) * C;
-            const corners = [
-                { x: cx1, y: cy1 },
-                { x: cx2, y: cy1 },
-                { x: cx2, y: cy2 },
-                { x: cx1, y: cy2 }
-            ];
-            corners.sort((a, b) =>
-                Math.hypot(b.x - this.player.x, b.y - this.player.y) -
-                Math.hypot(a.x - this.player.x, a.y - this.player.y)
-            );
-            decoyX = corners[0].x;
-            decoyY = corners[0].y;
-        }
-
-        for (let r = 0; r < 2; r++) {
-            const wave = this.add.circle(decoyX, decoyY, 18, 0xfacc15, 0.45)
-                .setStrokeStyle(3, 0xfef08a, 0.95)
-                .setDepth(28);
-            this.tweens.add({
-                targets: wave,
-                scaleX: 4.2,
-                scaleY: 4.2,
-                alpha: 0,
-                delay: r * 140,
-                duration: 540,
-                onComplete: () => wave.destroy()
-            });
-        }
-
-        this._spawnFloatingSticker(decoyX, decoyY, '📣 ПИ-ПИ-ПИ! СЮДА!', '#fde047');
-        this._playMusicalChime([783.99, 987.77, 783.99], 0.07, 'sine');
-
-        const isHypno = !!this.runPerks.hypno_whistle;
-        for (const m of this.monsters) {
-            const mIsl = this._findIslandAtWorld(m.x, m.y);
-            if (!playerIsland || (mIsl && mIsl.id === playerIsland.id)) {
-                m.suspicion = 0;
-                if (isHypno) {
-                    m.state = 'stunned';
-                    m.stateTimerMs = 3000;
-                    m.badge.setText('💤 УСНУЛ ОТ СВИСТА!').setVisible(true);
-                } else {
-                    m.state = 'distracted';
-                    m.stateTimerMs = WHISTLE_DISTRACT_MS;
-                    m.distractTarget = { x: decoyX, y: decoyY };
-                    m.badge.setText('🔔 Кто свистел?!').setVisible(true);
-                }
-            }
-        }
-    }
-
-    throwCakeAt(targetX, targetY) {
-        if (this.piesLeft <= 0 || this.ended) return;
-        this.piesLeft--;
-        this._refreshHud();
-        bus.emit(SFX.THROW);
-
-        const cake = this.add.image(this.player.x, this.player.y, 'heist_cake')
-            .setDisplaySize(38, 38)
-            .setDepth(30);
+        const targetX = this.room.homeNest.x + 15 + ((this.deliveredCount - 1) % 4) * 24;
+        const targetY = this.room.homeNest.y + 4 - Math.floor((this.deliveredCount - 1) / 4) * 20;
 
         this.tweens.add({
-            targets: cake,
+            targets: flyIcon,
             x: targetX,
             y: targetY,
-            angle: 360,
-            duration: CAKE_FLIGHT_MS,
-            ease: 'Quad.easeOut',
-            onComplete: () => {
-                cake.destroy();
-                this._onCakeSplat(targetX, targetY);
-            }
-        });
-    }
-
-    _onCakeSplat(x, y) {
-        bus.emit(SFX.DOOR_UNLOCK);
-        this._playMusicalChime([349.23, 440, 587.33], 0.08, 'triangle');
-
-        const splat = this.add.circle(x, y, 28, 0xf472b6, 0.78)
-            .setStrokeStyle(4, 0xffffff, 0.95)
-            .setDepth(5.8);
-        this.tweens.add({
-            targets: splat,
-            alpha: 0,
-            scaleX: 1.4,
-            scaleY: 1.4,
-            delay: 2400,
-            duration: 600,
-            onComplete: () => splat.destroy()
+            scale: 0.88,
+            duration: 460,
+            ease: 'Back.easeOut'
         });
 
-        let blindedAny = false;
-        for (const m of this.monsters) {
-            const d = Math.hypot(m.x - x, m.y - y);
-            if (d <= CAKE_BLIND_RADIUS) {
-                m.state = 'blinded';
-                m.stateTimerMs = CAKE_BLIND_MS;
-                m.suspicion = 0;
-                m.sprite.setTint(0xf9a8d4);
-                m.badge.setText('🎂 В ТОРТЕ! 💫').setVisible(true);
-                blindedAny = true;
-            } else if (d <= CAKE_HEAR_RADIUS && m.state !== 'blinded') {
-                m.state = 'distracted';
-                m.stateTimerMs = CAKE_DISTRACT_MS;
-                m.distractTarget = { x, y };
-                m.suspicion = 0;
-                m.badge.setText('🍰 Ой, тортик!').setVisible(true);
-            }
-        }
+        this._refreshHomeQuotaLabel();
+        this._refreshHud();
 
-        if (blindedAny) {
-            const bonus = 8;
-            this.carriedCheese += bonus;
-            this._spawnFloatingSticker(x, y, `💥 СЛАДКИЙ БАБАХ! +${bonus} 🧀`, '#f472b6');
-            this._refreshHud();
+        const left = Math.max(0, this.totalQuota - this.deliveredCount);
+        if (left > 0) {
+            this._showToast(`🏠 ${item.name} в норке! (+${bonusCheese}🧀) Осталось утащить: ${left}`, '#4ade80');
         } else {
-            this._spawnFloatingSticker(x, y, '🔔 ПЛЮХ!', '#fde047');
+            this._showToast('🎉 ВСЯ ДОБЫЧА В УЮТНОЙ НОРКЕ! Победа!', '#facc15');
+            this.time.delayedCall(650, () => this.onFloorCleared());
         }
     }
 
     // =========================================================================
-    // MAIN UPDATE LOOP
+    // 10. WHISTLE DECOY, CREAM CAKE THROW & SILENT ROLL
+    // =========================================================================
+
+    _triggerWhistleDecoy() {
+        if (this.ended || this.isPaused) return;
+        const now = this.time.now;
+        if (now < this.whistleCooldownUntil) return;
+        this.whistleCooldownUntil = now + 2600;
+
+        // If Pi is underground in the burrow, the whistle echoes out of the nearest upper mouse-hole!
+        let soundX = this.player.x;
+        let soundY = this.player.y;
+        if (this._isPlayerInBurrow()) {
+            let bestChute = this.room.chutes[0];
+            let bestD = Infinity;
+            for (const ch of this.room.chutes) {
+                const d = Math.abs(this.player.x - ch.botX);
+                if (d < bestD) {
+                    bestD = d;
+                    bestChute = ch;
+                }
+            }
+            if (bestChute) {
+                soundX = bestChute.topX;
+                soundY = bestChute.topY;
+            }
+        }
+
+        this._playMusicalChime([987.77, 1318.5, 1174.66], 0.06, 'sine');
+
+        const ring = this.add.circle(soundX, soundY, 14, 0xfacc15, 0.25)
+            .setStrokeStyle(3, 0xfef08a, 0.95)
+            .setDepth(28);
+        this.tweens.add({
+            targets: ring,
+            radius: 170,
+            alpha: 0,
+            duration: 620,
+            onComplete: () => ring.destroy()
+        });
+
+        const txt = this.add.text(soundX, soundY - 26, '🎵 ФЬЮТЬ-ФЬЮТЬ!', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '13px',
+            fontStyle: '900',
+            color: '#fef08a',
+            stroke: '#0f172a',
+            strokeThickness: 3.5
+        }).setOrigin(0.5).setDepth(29).setResolution(this.dpr);
+        this.tweens.add({
+            targets: txt,
+            y: soundY - 52,
+            alpha: 0,
+            duration: 900,
+            onComplete: () => txt.destroy()
+        });
+
+        // Attract nearest monster in the upper rooms to investigate the whistle!
+        let lured = 0;
+        this.monsters.forEach((m) => {
+            if (m.state === 'cake_blind' || m.state === 'wall_bonk') return;
+            if (Math.hypot(m.x - soundX, m.y - soundY) <= 320) {
+                m.state = 'alert';
+                m.investigateTarget = { x: soundX, y: soundY };
+                m.investigateUntil = now + WHISTLE_DISTRACT_MS;
+                m.statusBadge.setText('❓ Кто свистел?');
+                lured++;
+            }
+        });
+
+        if (lured > 0) {
+            this._showToast('📣 Свист из норки приманил стража к плинтусу!', '#facc15');
+        }
+    }
+
+    _throwCreamCake() {
+        if (this.ended || this.isPaused) return;
+        if (this.piesLeft <= 0) {
+            this._showToast('🎂 Тортики закончились!', '#fda4af');
+            return;
+        }
+        this.piesLeft--;
+        this._refreshHud();
+        bus.emit(SFX.PIE_THROW);
+
+        const dirLen = Math.hypot(this.playerFacing.x, this.playerFacing.y) || 1;
+        const dx = this.playerFacing.x / dirLen;
+        const dy = this.playerFacing.y / dirLen;
+
+        const cake = this.add.image(this.player.x, this.player.y, 'd_pie')
+            .setDisplaySize(30, 30)
+            .setDepth(25);
+
+        this.thrownCakes.push({
+            sprite: cake,
+            x: this.player.x,
+            y: this.player.y,
+            vx: dx * CAKE_SPEED,
+            vy: dy * CAKE_SPEED,
+            bornAt: this.time.now
+        });
+    }
+
+    _splatCakeAt(wx, wy, fromCeiling = false) {
+        bus.emit(SFX.PIE_HIT);
+
+        const splat = this.add.circle(wx, wy, 12, 0xf472b6, 0.55)
+            .setStrokeStyle(3, 0xffffff, 0.95)
+            .setDepth(17);
+        this.tweens.add({
+            targets: splat,
+            radius: CAKE_BLIND_RADIUS,
+            alpha: 0,
+            duration: 600,
+            onComplete: () => splat.destroy()
+        });
+
+        const now = this.time.now;
+        this.monsters.forEach((m) => {
+            const d = Math.hypot(m.x - wx, m.y - wy);
+            if (d <= CAKE_BLIND_RADIUS + (fromCeiling ? 45 : 0)) {
+                m.state = 'cake_blind';
+                m.blindUntil = now + CAKE_BLIND_MS;
+                m.statusBadge.setText('🎂 В КРЕМЕ! 😋');
+            } else if (d <= CAKE_HEAR_RADIUS && m.state !== 'cake_blind' && m.state !== 'wall_bonk') {
+                m.state = 'alert';
+                m.investigateTarget = { x: wx, y: wy };
+                m.investigateUntil = now + CAKE_DISTRACT_MS;
+                m.statusBadge.setText('🍰 Тортик?!');
+            }
+        });
+    }
+
+    _triggerSilentRoll() {
+        if (this.ended || this.isPaused || this.isChuteSliding) return;
+        const now = this.time.now;
+        if (now < this.dashCooldownUntil) return;
+
+        this.dashUntil = now + PLAYER_DASH_MS;
+        this.dashCooldownUntil = now + PLAYER_DASH_CD_MS * this.skinDashCdMul;
+        bus.emit(SFX.DASH);
+
+        this.tweens.add({
+            targets: this.player,
+            angle: 360,
+            duration: PLAYER_DASH_MS,
+            onComplete: () => this.player.setAngle(0)
+        });
+    }
+
+    // =========================================================================
+    // 11. MAIN UPDATE LOOP
     // =========================================================================
 
     update(time, delta) {
         if (this.ended || this.isPaused) return;
         const dt = Math.min(0.05, delta / 1000);
 
-        if (!this.isTeleporting) {
-            if (this.inBurrowPeek) {
-                this._updateBurrowPeek(time);
-            } else {
-                this._updatePlayerMovement(dt, time);
-            }
-        }
-
-        this._updateFollowers(time);
-        this._updateDynamicActionButton(time);
-        this._updatePickups(time);
-        this._updateMonsters(dt, time);
+        this._updatePlayerMovement(time, dt);
+        this._updateBurrowActionButton();
+        this._updateCollectiblesAndHaulables(time, dt);
+        this._updateThrownCakes(time, dt);
+        this._updateMonstersAndCeilingSteps(time, dt);
+        this._refreshHud();
     }
 
-    _updateBurrowPeek(time) {
-        const leftSec = Math.max(0, (this.burrowPeekUntil - time) / 1000);
-        this.playerStatusBadge
-            .setPosition(this.player.x, this.player.y - 38)
-            .setText(`👀 В НОРКЕ (${leftSec.toFixed(1)}с) — НЕВИДИМА!`)
-            .setVisible(true);
+    _updatePlayerMovement(time, dt) {
+        if (this.isChuteSliding) return;
 
-        if (this.cursors && this.wasd) {
-            let kx = 0;
-            let ky = 0;
-            if (this.cursors.left.isDown || this.wasd.left.isDown) kx -= 1;
-            if (this.cursors.right.isDown || this.wasd.right.isDown) kx += 1;
-            if (this.cursors.up.isDown || this.wasd.up.isDown) ky -= 1;
-            if (this.cursors.down.isDown || this.wasd.down.isDown) ky += 1;
-            if (kx !== 0 || ky !== 0) {
-                this.popOutOfBurrow(kx, ky);
-                return;
+        let ix = this.joyVec?.x || 0;
+        let iy = this.joyVec?.y || 0;
+
+        if (this.keys) {
+            if (this.keys.left.isDown || this.keys.leftArr.isDown) ix -= 1;
+            if (this.keys.right.isDown || this.keys.rightArr.isDown) ix += 1;
+            if (this.keys.up.isDown || this.keys.upArr.isDown) iy -= 1;
+            if (this.keys.down.isDown || this.keys.downArr.isDown) iy += 1;
+        }
+
+        const mag = Math.hypot(ix, iy);
+        if (mag > 0.06) {
+            const nx = ix / Math.max(1, mag);
+            const ny = iy / Math.max(1, mag);
+            this.playerFacing.x = nx;
+            this.playerFacing.y = ny;
+
+            const inBurrow = this._isPlayerInBurrow();
+            let spd = inBurrow ? PLAYER_BURROW_SPEED : PLAYER_BASE_SPEED;
+            if (time < this.dashUntil) spd = PLAYER_DASH_SPEED;
+            if (time < this.activeBoosters.turbo) spd *= 1.32;
+            if (this.runPerks.ninja_paws) spd *= 1.18;
+            if (!inBurrow && this.carriedItem) spd *= (this.carriedItem.weightMul || 0.88);
+            spd *= this.skinSpeedMul;
+
+            const nextX = this.player.x + nx * spd * dt;
+            const nextY = this.player.y + ny * spd * dt;
+            const r = 13;
+
+            if (this._canWalkAt(nextX, this.player.y, r)) {
+                this.player.x = nextX;
             }
-        }
-
-        if (time >= this.burrowPeekUntil) {
-            this.popOutOfBurrow();
-        }
-    }
-
-    _updatePlayerMovement(dt, time) {
-        let vx = this.joyVec ? this.joyVec.x : 0;
-        let vy = this.joyVec ? this.joyVec.y : 0;
-
-        if (this.cursors && this.wasd) {
-            let kx = 0;
-            let ky = 0;
-            if (this.cursors.left.isDown || this.wasd.left.isDown) kx -= 1;
-            if (this.cursors.right.isDown || this.wasd.right.isDown) kx += 1;
-            if (this.cursors.up.isDown || this.wasd.up.isDown) ky -= 1;
-            if (this.cursors.down.isDown || this.wasd.down.isDown) ky += 1;
-            if (kx !== 0 || ky !== 0) {
-                const len = Math.hypot(kx, ky);
-                vx = kx / len;
-                vy = ky / len;
+            if (this._canWalkAt(this.player.x, nextY, r)) {
+                this.player.y = nextY;
             }
-        }
 
-        let speed = PLAYER_BASE_SPEED * (this.skinSpeedMul || 1);
-        if (this.runPerks.speed_skates) speed *= 1.25;
-        if (time < this.activeBoosters.turbo) speed *= 1.42;
-        if (time < this.dashUntil) speed *= DASH_SPEED_MUL;
+            if (Math.abs(nx) > 0.08) {
+                this.player.setFlipX(nx < 0);
+            }
 
-        this.playerVel.x = vx * speed;
-        this.playerVel.y = vy * speed;
+            this.walkAnimTimer += dt * 11;
+            const frame = Math.floor(this.walkAnimTimer) % 2;
+            this.player.setTexture(frame === 0 ? this.playerWalk1 : this.playerWalk2);
 
-        if (Math.hypot(vx, vy) > 0.08) {
-            const len = Math.hypot(vx, vy);
-            this.playerFacing.x = vx / len;
-            this.playerFacing.y = vy / len;
-        }
-
-        const nx = this.player.x + this.playerVel.x * dt;
-        const ny = this.player.y + this.playerVel.y * dt;
-
-        if (this._canWalkAt(nx, this.player.y, PLAYER_RADIUS)) this.player.x = nx;
-        if (this._canWalkAt(this.player.x, ny, PLAYER_RADIUS)) this.player.y = ny;
-
-        const lastPt = this.playerTrail[this.playerTrail.length - 1];
-        if (!lastPt || Math.hypot(this.player.x - lastPt.x, this.player.y - lastPt.y) >= 4) {
-            this.playerTrail.push({ x: this.player.x, y: this.player.y });
-            if (this.playerTrail.length > 90) this.playerTrail.shift();
-        }
-
-        const moving = Math.hypot(this.playerVel.x, this.playerVel.y) > 12;
-        if (moving) {
-            if (this.playerVel.y < -45 && Math.abs(this.playerVel.y) > Math.abs(this.playerVel.x)) {
-                this.player.setTexture(this.playerTexBack);
+            // Seamless Auto-Dive into a baseboard Mouse-Hole when Pi runs into it while carrying loot or pushing down!
+            if (!inBurrow) {
+                const nearChute = this._findNearestChuteInteraction();
+                if (nearChute && nearChute.dir === 'down') {
+                    const distToHole = Math.hypot(this.player.x - nearChute.chute.topX, this.player.y - nearChute.chute.topY);
+                    if (distToHole < 26 && (this.carriedItem || ny > 0.35)) {
+                        this._useNearestBurrowChute(nearChute);
+                        return;
+                    }
+                }
             } else {
-                const frame = Math.floor(time / 110) % 2 === 0 ? this.playerTexWalk1 : this.playerTexWalk2;
-                this.player.setTexture(frame);
-            }
-            if (Math.abs(this.playerVel.x) > 8) {
-                this.player.setFlipX(this.playerVel.x < 0);
+                // In the burrow: if Pi pushes UP right at a chute landing, pop up to the room above!
+                const nearChute = this._findNearestChuteInteraction();
+                if (nearChute && nearChute.dir === 'up') {
+                    const distToLanding = Math.hypot(this.player.x - nearChute.chute.botX, this.player.y - nearChute.chute.botY);
+                    if (distToLanding < 24 && ny < -0.55) {
+                        this._useNearestBurrowChute(nearChute);
+                        return;
+                    }
+                }
             }
         } else {
-            this.player.setTexture(this.playerTexFront);
+            this.player.setTexture(this.playerSkinBase);
         }
 
-        this.inShadow = this._isInsideShadowCushion(this.player.x, this.player.y);
-        const hasCloak = time < this.activeBoosters.cloak;
-        const isHidden = this.inShadow || hasCloak;
-
-        this.player.setAlpha(isHidden ? 0.52 : 1.0);
         this.playerHalo.setPosition(this.player.x, this.player.y + 10);
-        this.playerHalo.setStrokeStyle(2.5, isHidden ? 0xc084fc : 0x38bdf8, 0.9);
+        this.carriedVisual.setPosition(this.player.x, this.player.y - 36);
 
-        if (hasCloak) {
-            const sec = ((this.activeBoosters.cloak - time) / 1000).toFixed(1);
-            this.playerStatusBadge.setPosition(this.player.x, this.player.y - 38)
-                .setText(`🧥 НЕВИДИМКА ${sec}с`)
-                .setVisible(true);
-        } else if (this.inShadow) {
-            this.playerStatusBadge.setPosition(this.player.x, this.player.y - 38)
-                .setText('🐾 В ТЕНИ')
-                .setVisible(true);
+        // Update Guide Arrow pointing to the nearest Mouse-Hole when carrying a prize in the upper hall
+        if (this.carriedItem && !this._isPlayerInBurrow()) {
+            this.burrowGuideArrow.setVisible(true);
+            this.burrowGuideArrow.clear();
+            let nearestChute = this.room.chutes[0];
+            let bestD = Infinity;
+            for (const ch of this.room.chutes) {
+                const d = Math.hypot(this.player.x - ch.topX, this.player.y - ch.topY);
+                if (d < bestD) {
+                    bestD = d;
+                    nearestChute = ch;
+                }
+            }
+            if (nearestChute) {
+                this.burrowGuideArrow.lineStyle(3.5, 0xfacc15, 0.85);
+                this.burrowGuideArrow.lineBetween(this.player.x, this.player.y, nearestChute.topX, nearestChute.topY);
+                this.burrowGuideArrow.fillStyle(0xfef08a, 0.9);
+                this.burrowGuideArrow.fillCircle(nearestChute.topX, nearestChute.topY, 8);
+            }
         } else {
-            this.playerStatusBadge.setVisible(false);
+            this.burrowGuideArrow.setVisible(false);
         }
 
-        if (this.exitUnlocked) {
-            const dExit = Math.hypot(this.player.x - this.exitPos.x, this.player.y - this.exitPos.y);
-            if (dExit <= this.exitPos.r) {
+        // Check if all quota is delivered and Pi is inside her Cozy Home Nest
+        if (this.deliveredCount >= this.totalQuota && this._isPlayerInBurrow()) {
+            const distHome = Math.hypot(this.player.x - this.room.homeNest.x, this.player.y - this.room.homeNest.y);
+            if (distHome < 85) {
                 this.onFloorCleared();
             }
         }
     }
 
-    _updateDynamicActionButton(time) {
+    _updateBurrowActionButton() {
+        const btn = document.getElementById('sneak-btn-burrow');
         const iconEl = document.getElementById('sneak-burrow-icon');
         const labelEl = document.getElementById('sneak-burrow-label');
-        const btnEl = document.getElementById('sneak-btn-burrow');
-        if (!iconEl || !labelEl || !btnEl) return;
+        if (!btn || !iconEl || !labelEl) return;
 
-        if (this.inBurrowPeek) {
-            iconEl.textContent = '🚀';
-            labelEl.textContent = 'ПРЫГ!';
-            btnEl.style.background = 'radial-gradient(circle at 38% 30%, #6ee7b7 0%, #10b981 48%, #047857 90%)';
+        const near = this._findNearestChuteInteraction();
+        if (!near) {
+            btn.style.display = 'none';
             return;
         }
-
-        const nearH = this.nearestHoleAt(this.player.x, this.player.y);
-        if (nearH && nearH.dist <= HOLE_TRIGGER_RADIUS) {
+        btn.style.display = 'flex';
+        if (near.dir === 'down') {
             iconEl.textContent = '🕳️';
-            labelEl.textContent = 'В НОРУ!';
-            btnEl.style.background = 'radial-gradient(circle at 38% 30%, #fde047 0%, #eab308 48%, #a16207 90%)';
+            labelEl.textContent = `В НОРКУ #${near.chute.label}`;
         } else {
-            const ready = time >= this.dashCooldownUntil;
-            iconEl.textContent = '💨';
-            labelEl.textContent = ready ? 'КУВЫРОК' : 'ЖДИ...';
-            btnEl.style.background = ready
-                ? 'radial-gradient(circle at 38% 30%, #7dd3fc 0%, #0ea5e9 48%, #0369a1 90%)'
-                : 'radial-gradient(circle at 38% 30%, #64748b 0%, #334155 85%)';
+            iconEl.textContent = '🔼';
+            labelEl.textContent = `НАВЕРХ #${near.chute.label}`;
         }
     }
 
-    _updatePickups(time) {
-        const magnetActive = time < this.activeBoosters.magnet || !!this.runPerks.cheese_magnet;
-        const magnetRange = magnetActive ? 220 : 0;
+    _updateCollectiblesAndHaulables(time, dt) {
+        const px = this.player.x;
+        const py = this.player.y;
+        const magnetR = (time < this.activeBoosters.magnet || this.runPerks.cheese_magnet) ? 125 : 30;
 
-        for (const c of this.crumbNodes) {
-            if (c.taken) continue;
-            const d = Math.hypot(this.player.x - c.wx, this.player.y - c.wy);
-            if (magnetRange > 0 && d < magnetRange && d > 26) {
-                c.wx += ((this.player.x - c.wx) / d) * 7.5;
-                c.wy += ((this.player.y - c.wy) / d) * 7.5;
-                c.sp.setPosition(c.wx, c.wy);
+        // 1. Small Cheese Crumbs
+        this.cheeseSprites.forEach((ch) => {
+            if (ch.collected) return;
+            const d = Math.hypot(px - ch.x, py - ch.y);
+            if (d < magnetR && d > 22) {
+                ch.x += ((px - ch.x) / d) * 260 * dt;
+                ch.y += ((py - ch.y) / d) * 260 * dt;
+                ch.sprite.setPosition(ch.x, ch.y);
             }
-            if (d <= 32) {
-                c.taken = true;
-                const gain = Math.max(1, Math.round(c.value * this.streak));
+            if (d <= 26) {
+                ch.collected = true;
+                ch.sprite.destroy();
+                const gain = Math.round(ch.value * (this.runPerks.cheese_magnet ? 1.3 : 1));
                 this.carriedCheese += gain;
                 bus.emit(SFX.CHEESE);
-                this._playMusicalChime([659.25, 880], 0.04, 'sine');
-                this._spawnFloatingSticker(c.wx, c.wy, `+${gain} 🧀`, '#fde047');
-                c.sp.destroy();
-                this._refreshHud();
+            }
+        });
+
+        // 2. Golden Key Pickup
+        if (this.goldenKeyObj && !this.goldenKeyObj.collected) {
+            if (Math.hypot(px - this.goldenKeyObj.x, py - this.goldenKeyObj.y) <= 32) {
+                this.goldenKeyObj.collected = true;
+                this.goldenKeyObj.container.destroy();
+                this.hasGoldenKey = true;
+                bus.emit(SFX.KEY_PICKUP);
+                this._playMusicalChime([659.25, 783.99, 1046.5], 0.07, 'triangle');
+                this._showToast('🗝️ Золотой Ключ Стража найден! Теперь можно открыть любую клетку!', '#facc15');
+
+                // Update locked pet badges
+                this.petNodes.forEach((pt) => {
+                    if (pt.locked && !pt.pickedUp) {
+                        pt.locked = false;
+                        pt.lockBadge.setText('🔓 ОТКРЫТО! СПАСИ В НОРКУ!');
+                        pt.lockBadge.setColor('#4ade80');
+                    }
+                });
             }
         }
 
-        for (const p of this.pieNodes) {
-            if (p.taken) continue;
-            if (Math.hypot(this.player.x - p.wx, this.player.y - p.wy) <= 34) {
-                p.taken = true;
-                this.piesLeft = Math.min(9, this.piesLeft + 1);
-                bus.emit(SFX.PICKUP);
-                this._playMusicalChime([523.25, 783.99], 0.06, 'triangle');
-                this._spawnFloatingSticker(p.wx, p.wy, '+1 🎂 ТОРТ!', '#f9a8d4');
-                p.glow.destroy();
-                p.sp.destroy();
-                this._refreshHud();
+        // 3. Underground Sabotage Levers
+        this.leverObjs.forEach((lv) => {
+            if (!lv.data.used && Math.hypot(px - lv.data.x, py - lv.data.y) <= 34) {
+                this._triggerSabotageLever(lv);
             }
-        }
+        });
 
-        for (const b of this.boosterNodes) {
-            if (b.taken) continue;
-            if (Math.hypot(this.player.x - b.wx, this.player.y - b.wy) <= 34) {
-                b.taken = true;
+        // 4. Boosters
+        this.boosterSprites.forEach((b) => {
+            if (b.collected) return;
+            if (Math.hypot(px - b.x, py - b.y) <= 30) {
+                b.collected = true;
+                b.container.destroy();
                 this.activeBoosters[b.type] = time + b.durationMs;
-                bus.emit(SFX.HEART);
-                this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.07, 'triangle');
-                this._spawnFloatingSticker(b.wx, b.wy, b.label, '#6ee7b7');
-                b.ring.destroy();
-                b.icon.destroy();
+                bus.emit(SFX.RELIC_PICKUP);
+                this._showToast(`${b.icon} ${b.name} активирован!`, '#a855f7');
+            }
+        });
+
+        // 5. Picking up a Giant Carryable Treasure or Captive Pet Friend (if hands are free!)
+        if (!this.carriedItem && !this._isPlayerInBurrow()) {
+            for (const pr of this.carryableObjs) {
+                if (pr.pickedUp) continue;
+                if (Math.hypot(px - pr.x, py - pr.y) <= 34) {
+                    pr.pickedUp = true;
+                    pr.container.destroy();
+                    this._equipCarriedItem({
+                        kind: 'treasure',
+                        name: pr.name,
+                        icon: pr.icon,
+                        value: pr.value,
+                        weightMul: pr.weightMul
+                    });
+                    break;
+                }
             }
         }
 
-        if (this.secretChest && !this.secretChest.opened) {
-            const sc = this.secretChest;
-            if (Math.hypot(this.player.x - sc.wx, this.player.y - sc.wy) <= 40) {
-                sc.opened = true;
-                const gain = Math.round(sc.value * this.streak);
-                this.carriedCheese += gain;
-                this.piesLeft = Math.min(9, this.piesLeft + 1);
-                this.streak = Math.min(3.0, +(this.streak + 0.35).toFixed(2));
-                if (this.textures.exists('chest_open')) sc.sp.setTexture('chest_open');
-                sc.badge.setText(`✨ +${gain} 🧀 & 🎂!`);
-                bus.emit(SFX.CHEST);
-                this._playMusicalChime([523.25, 659.25, 783.99, 1046.5, 1318.5], 0.08, 'triangle');
-                this._spawnFloatingSticker(sc.wx, sc.wy, `🎁 СУПЕР-ТАЙНИК! +${gain} 🧀`, '#facc15');
-                this._refreshHud();
-            }
-        }
-
-        for (const pet of this.petTargets) {
-            if (pet.taken) continue;
-            if (Math.hypot(this.player.x - pet.wx, this.player.y - pet.wy) <= 42) {
-                pet.taken = true;
-                this.rescuedPetsCount++;
-                this.totalRescuedInRun++;
-
-                const gain = Math.round(pet.value * this.streak);
-                this.carriedCheese += gain;
-                this.streak = Math.min(3.0, +(this.streak + 0.25).toFixed(2));
-
-                pet.padGlow.destroy();
-                pet.bubble.destroy();
-                pet.bubbleShine.destroy();
-                pet.petSprite.destroy();
-                pet.label.destroy();
-
-                this._addRescuedFollower(pet);
-
-                bus.emit(SFX.KEY);
-                this._playMusicalChime([587.33, 783.99, 987.77, 1174.66], 0.08, 'triangle');
-                this._spawnFloatingSticker(
-                    pet.wx,
-                    pet.wy,
-                    `${pet.petDef.badge} ${pet.petDef.thanksText} +${gain} 🧀`,
-                    '#f9a8d4'
-                );
-                this._refreshHud();
-
-                if (this.rescuedPetsCount >= this.totalPetsToRescue) {
-                    this._unlockEscapePortal();
+        if (!this.carriedItem && !this._isPlayerInBurrow()) {
+            for (const pt of this.petNodes) {
+                if (pt.pickedUp) continue;
+                if (Math.hypot(px - pt.x, py - pt.y) <= 36) {
+                    if (pt.locked && !this.hasGoldenKey) {
+                        this._showToast('🔒 Клетка заперта! Сначала найди Золотой Ключ 🗝️!', '#facc15');
+                        continue;
+                    }
+                    pt.pickedUp = true;
+                    pt.container.destroy();
+                    this._equipCarriedItem({
+                        kind: 'pet',
+                        name: pt.name,
+                        icon: pt.badge,
+                        value: 35,
+                        weightMul: 0.92
+                    });
+                    break;
                 }
             }
         }
     }
 
-    // =========================================================================
-    // MONSTER AI, VISION CONES & 3-HEART SMOKE-BOMB ESCAPE
-    // =========================================================================
+    _equipCarriedItem(item) {
+        this.carriedItem = item;
+        this.carriedIconText.setText(item.icon);
+        this.carriedLabelText.setText(`БЕГИ В НОРКУ! 🕳️`);
+        this.carriedVisual.setVisible(true);
 
-    _updateMonsters(dt, time) {
-        this.visionGraphics.clear();
+        bus.emit(SFX.CHEST_OPEN);
+        this._playMusicalChime([523.25, 659.25, 783.99], 0.06, 'triangle');
+        this._showToast(`🙌 Схватила: ${item.icon} ${item.name}! Ныряй с ней в ближайшую НОРКУ 🕳️!`, '#facc15');
+    }
 
-        const playerHidden =
-            this.inBurrowPeek ||
-            this.isTeleporting ||
-            this.inShadow ||
-            time < this.activeBoosters.cloak ||
-            time < this.invulnerableUntil;
+    _updateThrownCakes(time, dt) {
+        for (let i = this.thrownCakes.length - 1; i >= 0; i--) {
+            const c = this.thrownCakes[i];
+            c.x += c.vx * dt;
+            c.y += c.vy * dt;
+            c.sprite.setPosition(c.x, c.y);
+            c.sprite.rotation += 10 * dt;
 
-        for (const m of this.monsters) {
-            if (m.state === 'blinded' || m.state === 'stunned') {
-                m.stateTimerMs -= dt * 1000;
-                m.sprite.setAngle(Math.sin(time / 55) * 14);
-                if (m.stateTimerMs <= 0) {
-                    m.state = 'patrol';
-                    m.sprite.setAngle(0).clearTint();
-                    m.badge.setVisible(false);
-                }
-            } else if (m.state === 'distracted' && m.distractTarget) {
-                m.stateTimerMs -= dt * 1000;
-                this._stepMonsterToward(m, m.distractTarget.x, m.distractTarget.y, m.cfg.speed * 0.95, dt, time);
-                if (m.stateTimerMs <= 0) {
-                    m.state = 'patrol';
-                    m.distractTarget = null;
-                    m.badge.setVisible(false);
-                }
-            } else {
-                const wp = m.cfg.patrol[m.patrolIdx];
-                const tx = (wp.x + 0.5) * this.room.cell;
-                const ty = (wp.y + 0.5) * this.room.cell;
-
-                if (m.waitLeftMs > 0) {
-                    m.waitLeftMs -= dt * 1000;
-                } else {
-                    const arrived = this._stepMonsterToward(m, tx, ty, m.cfg.speed, dt, time);
-                    if (arrived) {
-                        m.waitLeftMs = wp.waitMs || 350;
-                        m.patrolIdx = (m.patrolIdx + 1) % m.cfg.patrol.length;
-                    }
-                }
-
-                if (m.suspicion === 0 && time >= m.nextQuipAt) {
-                    m.nextQuipAt = time + 4800 + Math.random() * 4000;
-                    const lines = m.cfg.def.idleLines || ['Хм-м...'];
-                    const line = lines[Math.floor(Math.random() * lines.length)];
-                    m.badge.setText(line).setColor('#e2e8f0').setVisible(true);
-                    this.time.delayedCall(1500, () => {
-                        if (m.state === 'patrol' && m.suspicion === 0) m.badge.setVisible(false);
-                    });
+            let hitMonster = false;
+            for (const m of this.monsters) {
+                if (Math.hypot(m.x - c.x, m.y - c.y) <= 28) {
+                    hitMonster = true;
+                    break;
                 }
             }
 
-            m.shadow.setPosition(m.x, m.y + 22);
-            m.badge.setPosition(m.x, m.y - 44);
+            if (hitMonster || !this._isWalkableCellAtWorld(c.x, c.y) || time - c.bornAt > 1100) {
+                c.sprite.destroy();
+                this.thrownCakes.splice(i, 1);
+                this._splatCakeAt(c.x, c.y, false);
+            }
+        }
+    }
 
-            if (m.state !== 'blinded' && m.state !== 'stunned') {
-                const seesPlayer = !playerHidden && this._canMonsterSeePlayer(m);
-                const coneCol = m.suspicion > 0.25 ? m.cfg.def.alertColor : m.cfg.def.coneColor;
-                const coneAlpha = 0.16 + m.suspicion * 0.22;
-                this._drawVisionCone(m.x, m.y, m.facing, m.cfg.coneAngle, m.cfg.coneRange, coneCol, coneAlpha);
+    // =========================================================================
+    // 12. MONSTER AI, VISION CONES & CEILING FOOTSTEP DUST («ШАГИ НАД ГОЛОВОЙ»)
+    // =========================================================================
 
-                if (seesPlayer) {
-                    const fillRate = (this.skinStealthMul || 1);
-                    m.suspicion = Math.min(1, m.suspicion + ((dt * 1000) / SUSPICION_FILL_MS) * fillRate);
-                    this.seenOnThisFloor = true;
-                    this.everSeenInRun = true;
-                    const stepTowardPlayer = m.cfg.speed * (0.65 + 0.5 * m.suspicion);
-                    this._stepMonsterToward(m, this.player.x, this.player.y, stepTowardPlayer, dt, time);
-                    m.badge.setText(m.suspicion > 0.65 ? '❗ ДЕРЖИ ЕЁ!' : '👀 Ага! Мышка!')
-                        .setColor('#fca5a5')
-                        .setVisible(true);
-                } else if (m.suspicion > 0) {
-                    m.suspicion = Math.max(0, m.suspicion - (dt * 1000) / SUSPICION_DECAY_MS);
-                    if (m.suspicion === 0 && m.state === 'patrol') {
-                        m.badge.setVisible(false);
-                    }
-                }
+    _updateMonstersAndCeilingSteps(time, dt) {
+        const playerInBurrow = this._isPlayerInBurrow();
+        const playerCloaked = (time < this.activeBoosters.cloak) || this._isInsideShadowCushion(this.player.x, this.player.y);
+        const playerInvisible = playerInBurrow || playerCloaked || this.isChuteSliding;
 
-                const distToPlayer = Math.hypot(m.x - this.player.x, m.y - this.player.y);
-                if (!playerHidden && (m.suspicion >= 1 || distToPlayer <= CATCH_DIST)) {
-                    this.onPlayerCaughtBy(m);
+        const floorSlabCeilingY = this.room.burrowY1 * this.room.cell;
+
+        this.monsters.forEach((m) => {
+            // 1. Handle Stunned / Blinded states
+            if (m.state === 'wall_bonk') {
+                if (time >= m.bonkUntil) {
+                    m.state = 'patrol';
+                    m.statusBadge.setText('');
+                } else {
+                    m.coneGfx.clear();
+                    m.statusBadge.setPosition(m.x, m.y - 44);
                     return;
                 }
             }
-        }
-    }
 
-    _stepMonsterToward(m, tx, ty, speed, dt, time) {
-        const dx = tx - m.x;
-        const dy = ty - m.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist <= 4) {
-            m.x = tx;
-            m.y = ty;
+            if (m.state === 'cake_blind') {
+                if (time >= m.blindUntil) {
+                    m.state = 'patrol';
+                    m.statusBadge.setText('');
+                } else {
+                    m.coneGfx.clear();
+                    m.statusBadge.setPosition(m.x, m.y - 44);
+                    return;
+                }
+            }
+
+            // 2. Check Vision Cone against Pi (ONLY if Pi is in the Upper Castle Rooms!)
+            const dx = this.player.x - m.x;
+            const dy = this.player.y - m.y;
+            const dist = Math.hypot(dx, dy);
+            let seesPlayer = false;
+
+            if (!playerInvisible && dist <= m.cfg.coneLen) {
+                const angleToPlayer = Math.atan2(dy, dx);
+                const diff = Math.abs(Phaser.Math.Angle.Wrap(angleToPlayer - m.facingRad));
+                if (diff <= m.cfg.coneHalfRad && this._hasLineOfSight(m.x, m.y, this.player.x, this.player.y)) {
+                    seesPlayer = true;
+                }
+            }
+
+            if (seesPlayer) {
+                m.suspicion = Math.min(1, m.suspicion + (dt * 1000) / SUSPICION_FILL_MS);
+                if (m.suspicion >= 1 || this.carriedItem) {
+                    if (m.state !== 'chase') {
+                        m.state = 'chase';
+                        this.seenOnThisFloor = true;
+                        this.everSeenInRun = true;
+                        m.statusBadge.setText('❗ ДЕРЖИ ЕЁ!');
+                        this._showToast(`🐾 ${m.cfg.name} заметил Пи! Ныряй в норку, чтобы он врезался в стену!`, '#fda4af');
+                    }
+                    m.investigateTarget = { x: this.player.x, y: this.player.y };
+                    m.investigateUntil = time + 2600;
+                } else {
+                    m.statusBadge.setText('👀 Кто там?');
+                }
+            } else {
+                m.suspicion = Math.max(0, m.suspicion - (dt * 1000) / SUSPICION_DECAY_MS);
+                if (m.state === 'chase' && (playerInBurrow || time > m.investigateUntil)) {
+                    m.state = 'patrol';
+                    m.statusBadge.setText('');
+                } else if (m.state === 'alert' && time > m.investigateUntil) {
+                    m.state = 'patrol';
+                    m.statusBadge.setText('');
+                }
+            }
+
+            // 3. Move Monster toward current waypoint or chase target
+            let targetX = m.x;
+            let targetY = m.y;
+            let moveSpd = m.cfg.speed;
+
+            if (m.state === 'chase' && !playerInvisible) {
+                targetX = this.player.x;
+                targetY = this.player.y;
+                moveSpd = m.cfg.chaseSpeed;
+            } else if ((m.state === 'alert' || m.state === 'chase') && m.investigateTarget) {
+                targetX = m.investigateTarget.x;
+                targetY = m.investigateTarget.y;
+                moveSpd = m.cfg.speed * 1.15;
+            } else {
+                const wp = m.cfg.waypoints[m.wpIndex] || m.cfg.waypoints[0];
+                targetX = wp.x;
+                targetY = wp.y;
+                if (Math.hypot(targetX - m.x, targetY - m.y) < 12) {
+                    m.wpIndex = (m.wpIndex + 1) % m.cfg.waypoints.length;
+                }
+            }
+
+            const tdx = targetX - m.x;
+            const tdy = targetY - m.y;
+            const tDist = Math.hypot(tdx, tdy);
+            if (tDist > 2) {
+                const ux = tdx / tDist;
+                const uy = tdy / tDist;
+                m.facingRad = Phaser.Math.Angle.RotateTo(m.facingRad, Math.atan2(uy, ux), 4.5 * dt);
+
+                const nx = m.x + ux * moveSpd * dt;
+                const ny = m.y + uy * moveSpd * dt;
+                // Monsters stay inside upper castle rooms
+                if (this._isUpperRoomWalkable(nx, m.y)) m.x = nx;
+                if (this._isUpperRoomWalkable(m.x, ny)) m.y = ny;
+
+                if (Math.abs(ux) > 0.08) {
+                    m.sprite.setFlipX(ux < 0);
+                }
+
+                // 4. CEILING FOOTSTEP RIPPLES («ТОП-ТОП НАД ГОЛОВОЙ В НОРКЕ!»)
+                m.stepTimer += dt;
+                if (m.stepTimer >= 0.68) {
+                    m.stepTimer = 0;
+                    this._spawnCeilingFootstepDust(m.x, floorSlabCeilingY, m.cfg.name);
+                }
+            }
+
             m.sprite.setPosition(m.x, m.y);
-            return true;
-        }
-        const step = Math.min(dist, speed * dt);
-        m.x += (dx / dist) * step;
-        m.y += (dy / dist) * step;
-        m.facing = Math.atan2(dy, dx);
+            m.statusBadge.setPosition(m.x, m.y - 44);
+            this._drawMonsterCone(m);
 
-        const bob = Math.sin(time / 105) * 3;
-        m.sprite.setPosition(m.x, m.y + bob);
-        if (Math.abs(dx) > 2) {
-            m.sprite.setFlipX(dx > 0);
-        }
-        return false;
+            // 5. Check Catch Collision (only in Upper Room!)
+            if (!playerInBurrow && !this.isChuteSliding && time >= this.invulnerableUntil) {
+                if (Math.hypot(this.player.x - m.x, this.player.y - m.y) <= CATCH_DIST) {
+                    this._onPlayerCaught(m);
+                }
+            }
+        });
     }
 
-    _canMonsterSeePlayer(m) {
-        const dx = this.player.x - m.x;
-        const dy = this.player.y - m.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > m.cfg.coneRange) return false;
+    /**
+     * Spawns visible dust motes & "ТОП!" vibration ripples on the ceiling of the
+     * underground burrow directly beneath a walking monster's feet!
+     */
+    _spawnCeilingFootstepDust(mx, ceilingY) {
+        const dust = this.add.circle(mx, ceilingY + 2, 6, 0xfde68a, 0.45).setDepth(15);
+        this.tweens.add({
+            targets: dust,
+            y: ceilingY + 26,
+            scale: 2.1,
+            alpha: 0,
+            duration: 520,
+            onComplete: () => dust.destroy()
+        });
 
-        const halfRad = (m.cfg.coneAngle * Math.PI) / 360;
-        const angleToPlayer = Math.atan2(dy, dx);
-        const diff = Math.atan2(Math.sin(angleToPlayer - m.facing), Math.cos(angleToPlayer - m.facing));
-        if (Math.abs(diff) > halfRad) return false;
+        if (this._isPlayerInBurrow() && Math.abs(this.player.x - mx) < 220) {
+            const thudTxt = this.add.text(mx, ceilingY + 8, 'ТОП!', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '9.5px',
+                fontStyle: '900',
+                color: '#fde68a',
+                stroke: '#451a03',
+                strokeThickness: 2.5
+            }).setOrigin(0.5).setDepth(16).setResolution(this.dpr);
 
-        const steps = Math.max(4, Math.ceil(dist / 22));
+            this.tweens.add({
+                targets: thudTxt,
+                y: ceilingY + 24,
+                alpha: 0,
+                duration: 480,
+                onComplete: () => thudTxt.destroy()
+            });
+        }
+    }
+
+    _drawMonsterCone(m) {
+        const g = m.coneGfx;
+        g.clear();
+        const color = m.state === 'chase' ? 0xf43f5e : (m.suspicion > 0.15 ? 0xfacc15 : 0x38bdf8);
+        const alpha = m.state === 'chase' ? 0.30 : 0.17;
+
+        g.fillStyle(color, alpha);
+        g.beginPath();
+        g.moveTo(m.x, m.y);
+        const steps = 10;
+        const startA = m.facingRad - m.cfg.coneHalfRad;
+        const endA = m.facingRad + m.cfg.coneHalfRad;
+        for (let i = 0; i <= steps; i++) {
+            const a = startA + (endA - startA) * (i / steps);
+            g.lineTo(m.x + Math.cos(a) * m.cfg.coneLen, m.y + Math.sin(a) * m.cfg.coneLen);
+        }
+        g.closePath();
+        g.fillPath();
+    }
+
+    _hasLineOfSight(x1, y1, x2, y2) {
+        const steps = 10;
         for (let i = 1; i < steps; i++) {
-            const sx = m.x + (dx * i) / steps;
-            const sy = m.y + (dy * i) / steps;
-            if (!this._isWalkableCellAtWorld(sx, sy)) return false;
+            const t = i / steps;
+            const sx = x1 + (x2 - x1) * t;
+            const sy = y1 + (y2 - y1) * t;
+            if (!this._isUpperRoomWalkable(sx, sy)) return false;
         }
         return true;
     }
 
-    _drawVisionCone(ox, oy, facing, coneAngleDeg, range, color, alpha) {
-        const halfRad = (coneAngleDeg * Math.PI) / 360;
-        const rays = 20;
-        this.visionGraphics.fillStyle(color, alpha);
-        this.visionGraphics.lineStyle(1.5, color, Math.min(0.85, alpha + 0.25));
-        this.visionGraphics.beginPath();
-        this.visionGraphics.moveTo(ox, oy);
-
-        for (let i = 0; i <= rays; i++) {
-            const a = facing - halfRad + (2 * halfRad * i) / rays;
-            const cos = Math.cos(a);
-            const sin = Math.sin(a);
-            let r = range;
-            for (let d = 20; d <= range; d += 18) {
-                if (!this._isWalkableCellAtWorld(ox + cos * d, oy + sin * d)) {
-                    r = d;
-                    break;
-                }
-            }
-            this.visionGraphics.lineTo(ox + cos * r, oy + sin * r);
-        }
-        this.visionGraphics.closePath();
-        this.visionGraphics.fillPath();
-        this.visionGraphics.strokePath();
-    }
-
-    onPlayerCaughtBy(monster) {
+    _onPlayerCaught(monster) {
         if (this.ended) return;
-        this.hearts = Math.max(0, this.hearts - 1);
-        this.streak = 1.0;
         bus.emit(SFX.CAUGHT);
-        this.cameras.main.shake(240, 0.012);
+        this.cameras.main.shake(220, 0.012);
+
+        this.hearts = Math.max(0, this.hearts - 1);
         this._refreshHud();
 
         if (this.hearts > 0) {
+            // Smoke-bomb escape straight down into Pi's Cozy Underground Home Nest!
             this.invulnerableUntil = this.time.now + 2400;
-            this._spawnFloatingSticker(this.player.x, this.player.y, '💨 ДЫМОВАЯ БОМБА!', '#cbd5e1');
-
-            for (const m of this.monsters) {
-                m.suspicion = 0;
-                m.state = 'stunned';
-                m.stateTimerMs = 2400;
-                m.badge.setText('💨 Апчхи! Где мышка?!').setVisible(true);
-            }
-
-            const sx = (this.room.entry.x + 0.5) * this.room.cell;
-            const sy = (this.room.entry.y + 0.5) * this.room.cell;
+            const sx = this.room.homeNest.x;
+            const sy = this.room.homeNest.y;
             this.player.setPosition(sx, sy);
             this.playerHalo.setPosition(sx, sy + 10);
-            this.playerTrail = [{ x: sx, y: sy }];
-            this._showToast(`💨 Спаслась дымовой шашкой! Осталось сердечек: ${this.hearts}`, '#fca5a5');
+            this.carriedVisual.setPosition(sx, sy - 36);
+            this._showToast(`💨 Успела юркнуть в свою норку! Осталось сердечек: ${this.hearts}`, '#fca5a5');
             return;
         }
 
@@ -2470,15 +2231,15 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // CRISP HTML MODALS: FLOOR CLEARED PERK PICKER, PAUSE & GAME OVER
+    // 13. MODALS: FLOOR CLEARED PERK PICKER, PAUSE & GAME OVER
     // =========================================================================
 
     onFloorCleared() {
         if (this.ended) return;
         this.ended = true;
 
-        const floorBonus = 15 + this.floor * 5;
-        const stealthBonus = this.seenOnThisFloor ? 0 : 12;
+        const floorBonus = 18 + this.floor * 6;
+        const stealthBonus = this.seenOnThisFloor ? 0 : 15;
         const earned = floorBonus + stealthBonus;
         this.carriedCheese += earned;
         this._refreshHud();
@@ -2502,10 +2263,10 @@ export class SneakScene extends Phaser.Scene {
         modalRoot.innerHTML = `
             <div class="sneak-modal-card">
                 <div style="font-weight:900;font-size:min(5vw, 22px);color:#fef08a;">
-                    🌈 ЭТАЖ ${this.floor} ПРОЙДЕН! +${earned} 🧀
+                    🏠 ВСЯ ДОБЫЧА В НОРКЕ! ЭТАЖ ${this.floor} ПРОЙДЕН! +${earned} 🧀
                 </div>
                 <div style="font-weight:800;font-size:min(3.4vw, 14px);color:#e2e8f0;margin-top:4px;">
-                    🎁 Выбери 1 Супер-Способность на Этаж ${this.floor + 1}:
+                    🎁 Выбери 1 Супер-Способность для Норки на Этаж ${this.floor + 1}:
                 </div>
                 <div class="sneak-perk-grid">
                     ${shuffled.map((p, idx) => `
@@ -2532,13 +2293,10 @@ export class SneakScene extends Phaser.Scene {
             });
         });
 
-        const exitBtn = document.getElementById('sneak-bank-exit-btn');
-        if (exitBtn) {
-            exitBtn.addEventListener('click', () => {
-                bus.emit(SFX.CLICK);
-                this._exitToCastleMenu();
-            });
-        }
+        document.getElementById('sneak-bank-exit-btn')?.addEventListener('click', () => {
+            bus.emit(SFX.CLICK);
+            this._exitToCastleMenu();
+        });
     }
 
     _applyChosenPerkAndAdvance(perk) {
@@ -2550,9 +2308,9 @@ export class SneakScene extends Phaser.Scene {
 
         if (perk.id === 'extra_heart') {
             nextHearts = this.maxHearts;
-            nextCheese += 15;
-            nextBanked += 15;
-            Progress.addCheese?.(15);
+            nextCheese += 20;
+            nextBanked += 20;
+            Progress.addCheese?.(20);
         } else if (perk.id === 'cake_factory') {
             nextPies = Math.min(9, nextPies + 2);
         }
@@ -2578,12 +2336,12 @@ export class SneakScene extends Phaser.Scene {
         modalRoot.innerHTML = `
             <div class="sneak-modal-card" style="border-color:#f43f5e;max-width:440px;">
                 <div style="font-weight:900;font-size:min(5vw, 21px);color:#fda4af;">
-                    🐾 ${monster.cfg.name} поймал Пи!
+                    🐾 ${monster.cfg.name} поймал Пи наверху!
                 </div>
                 <div style="font-weight:800;font-size:14.5px;color:#f8fafc;margin:14px 0;line-height:1.5;">
                     Достигнут этаж: <b>${this.floor}</b><br>
-                    Спасено пушистиков: <b>${this.totalRescuedInRun} 🐾</b><br>
-                    Сохранено в банк (80%): <b style="color:#facc15;">+${keptCheese} 🧀</b>
+                    Спасено друзей в норку: <b>${this.totalRescuedInRun} 🐾</b><br>
+                    Сохранено в норке: <b style="color:#facc15;">+${keptCheese} 🧀</b>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     <button class="sneak-action-btn" id="sneak-retry-btn" style="background:linear-gradient(180deg,#10b981,#059669);">
@@ -2651,25 +2409,32 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // GEOMETRY & AUDIO HELPERS
+    // 14. WALKABILITY & AUDIO HELPERS
     // =========================================================================
 
-    _findIslandAtWorld(wx, wy) {
+    _isUpperRoomWalkable(wx, wy) {
         const gx = Math.floor(wx / this.room.cell);
         const gy = Math.floor(wy / this.room.cell);
-        for (const isl of this.room.islands) {
-            if (gx >= isl.x1 && gx <= isl.x2 && gy >= isl.y1 && gy <= isl.y2) {
-                return isl;
-            }
-        }
-        return null;
+        if (gy < 0 || gy >= this.room.H || gx < 0 || gx >= this.room.W) return false;
+        return this.room.grid[gy][gx] === '.';
     }
 
     _isWalkableCellAtWorld(wx, wy) {
         const gx = Math.floor(wx / this.room.cell);
         const gy = Math.floor(wy / this.room.cell);
         if (gy < 0 || gy >= this.room.H || gx < 0 || gx >= this.room.W) return false;
-        return this.room.grid[gy][gx] !== '#';
+        const tile = this.room.grid[gy][gx];
+        if (tile === '#') return false;
+
+        // Check active laser gates in the upper room
+        if (tile === '.' && this.laserGateObjs) {
+            for (const lg of this.laserGateObjs) {
+                if (lg.data.active && Math.abs(wx - lg.data.x) < 16 && wy >= lg.data.y1 && wy <= lg.data.y2) {
+                    return false;
+                }
+            }
+        }
+        return tile === '.' || tile === 'U';
     }
 
     _canWalkAt(wx, wy, r) {
