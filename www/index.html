@@ -14,7 +14,7 @@
     <link rel="icon" sizes="32x32" href="assets/icons/favicon-32-v3.png">
     <link rel="icon" sizes="256x256" href="assets/icons/icon-256-v3.png">
     <link rel="stylesheet" href="assets/fonts/nunito.css">
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js" async></script>
     <script src="js/storage/FavoritesManager.js"></script>
     <!-- Phaser is loaded in game-phaser.html iframe -->
     <style>
@@ -8254,6 +8254,7 @@
 
         function initSnowballNetwork() {
             // Auto-register with PeerJS using persistent code so friends can reach us
+            if (typeof Peer === 'undefined') return;
             const myCode = FavoritesManager.getPlayerId();
             if (peer) return; // Already connected
 
@@ -11270,6 +11271,9 @@
     </script>
     <!-- ===== Install as an app (browser only) ===== -->
     <style>
+      #installCard[hidden] {
+        display: none !important;
+      }
       #installCard {
         position: fixed; z-index: 1200; box-sizing: border-box;
         left: 50%; transform: translateX(-50%);
@@ -11278,6 +11282,7 @@
         border: 2px solid #e8b54a; background: #241338; color: #f4ecff;
         font: 400 14px 'Nunito', system-ui, sans-serif;
         box-shadow: 0 10px 30px rgba(0,0,0,.5);
+        pointer-events: auto;
       }
       #installCard .ic-row { display: flex; align-items: center; gap: 12px; }
       #installCard img { width: 44px; height: 44px; border-radius: 11px; flex: none; }
@@ -11568,9 +11573,6 @@
             // before any other script — nothing about it depends on timing or user agent.
             if (window.__NATIVE_SHELL__) return true;
             if (window.Capacitor || window.cordova || window.Ionic) return true;
-            var ua = navigator.userAgent || '';
-            if (/\bwv\b/.test(ua)) return true;                            // Android WebView marker
-            if (/Version\/[\d.]+ Chrome\/[\d.]+/.test(ua)) return true;     // WebView UA shape
             var proto = location.protocol, host = location.hostname;
             if (proto === 'capacitor:' || proto === 'ionic:' || proto === 'file:') return true;
             // Capacitor Android serves from https://localhost with no port. A real site is
@@ -11594,9 +11596,25 @@
             return !!(st && st.classList.contains('visible'));
         }
 
-        function hide() { if (card) card.hidden = true; shown = false; }
+        function hide() {
+            if (card) {
+                card.hidden = true;
+                card.style.display = 'none';
+            }
+            shown = false;
+        }
+        function showCard() {
+            if (card) {
+                card.hidden = false;
+                card.style.display = '';
+            }
+            shown = true;
+        }
         function snooze() { set(K_SNOOZE, String(Date.now() + SNOOZE_MS)); hide(); }
         function stopAsking() { set(K_NEVER, '1'); hide(); }
+
+        // Ensure card starts hidden even on landscape mobile media queries
+        hide();
 
         // iOS Safari never fires beforeinstallprompt — there the install is a manual menu
         // action, so offer the instruction instead of a button that cannot work.
@@ -11606,7 +11624,7 @@
         if (iosManual) {
             why.textContent = 'Нажми «Поделиться» внизу Safari, затем «На экран «Домой»» — ' +
                               'игра появится на экране телефона.';
-            yes.textContent = 'Понятно';
+            yes.textContent = 'Как установить';
         }
 
         function maybeShow() {
@@ -11616,8 +11634,7 @@
             if (!ready || shown || card.hidden === false) return;
             if (!deferred && !iosManual) return;      // nothing we could actually do
             if (launchedAsApp() || inApp() || silenced() || !atMenu()) return;
-            card.hidden = false;
-            shown = true;
+            showCard();
         }
 
         // Chrome can report the installed PWA back to the tab it was installed from.
@@ -11636,16 +11653,29 @@
             maybeShow();
         });
 
-        // Every button on this page listens for click AND touchend — 23 of them do it
-        // already. A tap that only fires touchend would otherwise do nothing at all.
+        // Clean tap helper with debounce so click + touchend never double-fire or lose user activation
         function onTap(el, fn) {
-            el.addEventListener('click', fn);
-            el.addEventListener('touchend', function (e) { e.preventDefault(); fn(); });
+            if (!el) return;
+            var lastTap = 0;
+            function handler(e) {
+                var now = Date.now();
+                if (now - lastTap < 320) return;
+                lastTap = now;
+                if (e && e.stopPropagation) e.stopPropagation();
+                fn(e);
+            }
+            el.addEventListener('click', handler);
+            el.addEventListener('touchend', function (e) {
+                handler(e);
+            }, { passive: true });
         }
 
         onTap(yes, function () {
-            if (iosManual) { snooze(); return; }
-            if (!deferred) { hide(); return; }        // event lost — offer again next time, do not silence
+            if (!deferred) {
+                snooze();
+                if (typeof openPwaModal === 'function') openPwaModal();
+                return;
+            }
             var d = deferred;
             deferred = null;
             hide();
@@ -11657,9 +11687,6 @@
                 if (!r || r.outcome !== 'accepted') snooze();
             }
             try {
-                // prompt() rejects when the event is stale — the app was installed in the
-                // meantime, or Chrome dropped it. Unhandled, that is an uncaught rejection
-                // in the console and no decision recorded.
                 Promise.resolve(d.prompt()).catch(function () { decide(null); });
                 Promise.resolve(d.userChoice).then(decide).catch(function () { decide(null); });
             } catch (e) { decide(null); }
