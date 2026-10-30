@@ -30,57 +30,79 @@
             user-select: none;
         }
 
+        :root {
+            --sal: env(safe-area-inset-left, 0px);
+            --sar: env(safe-area-inset-right, 0px);
+            --sat: env(safe-area-inset-top, 0px);
+            --sab: env(safe-area-inset-bottom, 0px);
+        }
+
         html {
             width: 100vw !important;
             height: 100vh !important;
+            height: 100dvh !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
-            background: #1a1a2e !important;
+            background: #0d102b !important;
         }
 
         body {
             width: 100vw !important;
             height: 100vh !important;
+            height: 100dvh !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: hidden !important;
-            position: relative !important;
+            position: fixed !important;
+            inset: 0 !important;
             font-family: 'Comfortaa', sans-serif;
-            background: #1a1a2e !important;
+            background: #0d102b !important;
         }
 
         #gameCanvas {
             display: block !important;
             position: fixed !important;
-            top: env(safe-area-inset-top, 0px) !important;
-            left: env(safe-area-inset-left, 0px) !important;
-            width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) !important;
-            height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
-            height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+            inset: 0 !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            height: 100dvh !important;
             touch-action: none;
-            background: #1a1a2e;
+            background: #0d102b;
         }
 
         .overlay {
             position: fixed;
-            top: env(safe-area-inset-top, 0px);
-            left: env(safe-area-inset-left, 0px);
-            right: env(safe-area-inset-right, 0px);
-            bottom: env(safe-area-inset-bottom, 0px);
+            inset: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
             background:
-                radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.25) 0%, transparent 45%),
-                radial-gradient(circle at 82% 22%, rgba(236, 72, 153, 0.22) 0%, transparent 45%),
-                radial-gradient(circle at 50% 85%, rgba(250, 204, 21, 0.18) 0%, transparent 50%),
+                radial-gradient(circle at 18% 20%, rgba(56, 189, 248, 0.28) 0%, transparent 45%),
+                radial-gradient(circle at 82% 22%, rgba(236, 72, 153, 0.24) 0%, transparent 45%),
+                radial-gradient(circle at 50% 85%, rgba(250, 204, 21, 0.2) 0%, transparent 50%),
                 linear-gradient(160deg, #0d102b 0%, #171b42 52%, #0c1938 100%);
             display: none;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             z-index: 100;
-            padding: 14px;
+            padding: max(12px, env(safe-area-inset-top, 12px))
+                     max(20px, calc(env(safe-area-inset-right, 0px) + 14px))
+                     max(12px, env(safe-area-inset-bottom, 12px))
+                     max(20px, calc(env(safe-area-inset-left, 0px) + 14px));
             box-sizing: border-box;
             overflow: hidden;
+        }
+
+        #startScreen {
+            padding: 0 !important;
         }
 
         /* Animated arcade stars/sparkles in menu background */
@@ -171,6 +193,25 @@
                 inset 0 2px 0 rgba(255, 255, 255, 0.22);
             box-sizing: border-box;
             backdrop-filter: blur(14px);
+        }
+
+        /* Full-screen edge-to-edge layout for the main menu */
+        #startScreen .overlay-content {
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            border-radius: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
+            justify-content: space-between;
+            padding:
+                max(12px, calc(env(safe-area-inset-top, 0px) + 8px))
+                max(22px, calc(env(safe-area-inset-right, 0px) + 18px))
+                max(14px, calc(env(safe-area-inset-bottom, 0px) + 10px))
+                max(22px, calc(env(safe-area-inset-left, 0px) + 18px)) !important;
         }
 
         /* Header bar with logo + sound button */
@@ -366,6 +407,8 @@
         }
 
         .diff-btn {
+            flex: 1 1 140px;
+            max-width: 260px;
             padding: 1.3vh 3.2vw;
             font-size: min(3.6vw, 15px);
             font-family: 'Nunito', 'Comfortaa', sans-serif;
@@ -539,7 +582,7 @@
             border-radius: 16px;
             padding: 1vh 2.5vw;
             width: 100%;
-            max-width: 680px;
+            max-width: 100%;
         }
 
         .world-step {
@@ -754,7 +797,7 @@
 
         #adventureOptions .play-btn,
         #newyearOptions .play-btn {
-            margin-top: auto !important;
+            margin-top: 0.6vh !important;
         }
 
         .network-selector {
@@ -866,15 +909,27 @@
 
         /* Landscape phone adjustments — compact spacing so everything fits without scrolling */
         @media (orientation: landscape) and (max-height: 600px) {
-            #startScreen { padding: 6px; }
+            #startScreen { padding: 0 !important; }
             .overlay-content { padding: 1.5vh 3vw max(1.5vh, 10px); max-height: calc(100vh - 12px); height: auto; gap: 5px; }
-            .arcade-header { margin: 0 0 0.3vh !important; }
-            .mode-selector { margin: 0.4vh 0 !important; gap: 1.2vw; }
+            #startScreen .overlay-content {
+                width: 100% !important;
+                height: 100% !important;
+                max-width: none !important;
+                max-height: none !important;
+                padding:
+                    max(8px, calc(env(safe-area-inset-top, 0px) + 6px))
+                    max(18px, calc(env(safe-area-inset-right, 0px) + 16px))
+                    max(10px, calc(env(safe-area-inset-bottom, 0px) + 8px))
+                    max(18px, calc(env(safe-area-inset-left, 0px) + 16px)) !important;
+                gap: 4px;
+            }
+            .arcade-header { margin: 0 0 0.2vh !important; }
+            .mode-selector { margin: 0.3vh 0 !important; gap: 1.2vw; }
             .overlay .small { margin: 0.2vh 0 !important; }
-            .difficulty-selector { margin: 0.6vh 0 !important; }
+            .difficulty-selector { margin: 0.4vh 0 !important; }
             #snowballMainChoice { gap: min(1.5vh, 8px); }
             .snowball-mode-btn { min-height: 82px; padding: 1.2vh 1.2vw !important; }
-            .play-btn { margin-top: 1vh !important; padding: 1.4vh 7vw; }
+            .play-btn { margin-top: 0.6vh !important; padding: 1.4vh 7vw; }
         }
         @media (max-width: 640px) {
             .snowball-cards-grid { grid-template-columns: 1fr; }
@@ -1683,10 +1738,14 @@
             joystick.baseRadius = Math.min(h * 0.12, 70);
             joystick.stickRadius = joystick.baseRadius * 0.45;
 
-            // Base in bottom-left corner
+            // Base in bottom-left corner (respecting camera notch / safe area)
+            const rootStyles = getComputedStyle(document.documentElement);
+            const safeLeft = parseFloat(rootStyles.getPropertyValue('--sal')) || 0;
+            const safeRight = parseFloat(rootStyles.getPropertyValue('--sar')) || 0;
+            const safeBottom = parseFloat(rootStyles.getPropertyValue('--sab')) || 0;
             const padding = 20;
-            joystick.baseX = joystick.baseRadius + padding;
-            joystick.baseY = h - joystick.baseRadius - padding;
+            joystick.baseX = joystick.baseRadius + padding + safeLeft;
+            joystick.baseY = h - joystick.baseRadius - padding - safeBottom;
 
             // Reset stick to center when not active
             if (!joystick.active) {
@@ -1696,8 +1755,8 @@
 
             // Action button on right (jump)
             jumpButton.radius = Math.min(h * 0.09, 50);
-            jumpButton.x = w - jumpButton.radius - padding;
-            jumpButton.y = h - jumpButton.radius - padding;
+            jumpButton.x = w - jumpButton.radius - padding - safeRight;
+            jumpButton.y = h - jumpButton.radius - padding - safeBottom;
 
             // For snowball mode - bigger buttons
             const btnSize = Math.min(h * 0.08, 45);
