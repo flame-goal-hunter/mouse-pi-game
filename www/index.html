@@ -5468,6 +5468,17 @@
             }
             ctx.translate(-w/2, -h/2);
 
+            if (typeof window.getPlayerSkinSprite === 'function' && window.PlayerProfile && window.PlayerProfile.equippedSkinId !== 'blue') {
+                const skinSpr = window.getPlayerSkinSprite();
+                const moving = Math.abs(nyPlayer.vx || 0) > 0.2;
+                const img = moving ? (Math.floor(nyPlayer.legPhase * 2) % 2 === 0 ? skinSpr.walk1 : skinSpr.walk2) : skinSpr.idle;
+                if (img && img.complete && img.naturalWidth > 0) {
+                    ctx.drawImage(img, -10, -18, w + 20, h + 24);
+                    ctx.restore();
+                    return;
+                }
+            }
+
             const legSwing = Math.sin(nyPlayer.legPhase) * 12;
             const armSwing = Math.sin(nyPlayer.armPhase) * 8;
             const cx = w / 2;
@@ -6178,6 +6189,17 @@
                 ctx.scale(-1, 1);
             }
             ctx.translate(-player.width/2, -player.height/2);
+
+            if (typeof window.getPlayerSkinSprite === 'function' && window.PlayerProfile && window.PlayerProfile.equippedSkinId !== 'blue') {
+                const skinSpr = window.getPlayerSkinSprite();
+                const moving = Math.abs(player.vx || 0) > 0.2;
+                const img = moving ? (Math.floor(player.legPhase * 2) % 2 === 0 ? skinSpr.walk1 : skinSpr.walk2) : skinSpr.idle;
+                if (img && img.complete && img.naturalWidth > 0) {
+                    ctx.drawImage(img, -10, -16, player.width + 20, player.height + 22);
+                    ctx.restore();
+                    return;
+                }
+            }
 
             // Now draw at base size (40x55) - will be scaled by transform
             const baseW = player.width;
@@ -11222,7 +11244,8 @@
             const seed = Math.floor(Math.random() * 1000000);
 
             // Build URL for solo mode with bots and character selection
-            let url = `game-phaser.html?mode=solo&botCount=${botCount}&character=${character}&seed=${seed}&_v=${Date.now()}`;
+            const eqSkin = (window.PlayerProfile && window.PlayerProfile.equippedSkinId) || 'blue';
+            let url = `game-phaser.html?mode=solo&botCount=${botCount}&character=${character}&skin=${encodeURIComponent(eqSkin)}&seed=${seed}&_v=${Date.now()}`;
 
             // Small delay to let the old iframe fully unload before loading new game
             const launchGame = () => {

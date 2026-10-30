@@ -79,3 +79,4 @@ export class SpaceBackground {
         ctx.globalAlpha = 1;
     }
 }
+

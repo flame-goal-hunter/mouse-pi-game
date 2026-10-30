@@ -1,8 +1,10 @@
 // ============================================================================
-// RocketController.js — Физика ракеты Мышонка Пи, звёздный шлейф и камера
+// RocketController.js — Свободный аркадный полёт ракеты Мышонка Пи,
+// скин в иллюминаторе, отскок от астероидов, шлейф звёздочек и камера (lerp + Zoom-In)
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
+import { getPlayerSkinSprite } from '../core/PlayerProfile.js';
 
 export class RocketController {
     constructor() {
@@ -11,155 +13,187 @@ export class RocketController {
         this.y = cfg.startY;
         this.vx = 0;
         this.vy = 0;
-        this.angle = -Math.PI / 2;
-        this.thrustPower = 0;
-        this.particles = [];
-        this.trailTimer = 0;
+        this.angle = cfg.startAngle;
         this.camX = this.x;
         this.camY = this.y;
         this.camZoom = 1;
+        this.particles = [];
+        this.exhaustAccum = 0;
         this.zoomTargetPlanet = null;
-        this.zoomProgress = 0;
-        this.pilotImage = new Image();
-        this.pilotImage.src = cfg.pilotImg;
+        this.zoomElapsedMs = 0;
     }
 
     startPlanetZoom(planet) {
         this.zoomTargetPlanet = planet;
-        this.zoomProgress = 0;
+        this.zoomElapsedMs = 0;
+        this.vx = 0;
+        this.vy = 0;
+    }
+
+    bounceOff(nx, ny, minBounce = 270) {
+        const dot = this.vx * nx + this.vy * ny;
+        this.vx = (this.vx - 2 * dot * nx) * 0.85 + nx * minBounce;
+        this.vy = (this.vy - 2 * dot * ny) * 0.85 + ny * minBounce;
     }
 
     update(dt, input) {
-        const rCfg = SPACE_CONFIG.rocket;
-        const cCfg = SPACE_CONFIG.camera;
-        const wCfg = SPACE_CONFIG.world;
-
+        const cfg = SPACE_CONFIG.rocket;
         if (this.zoomTargetPlanet) {
-            this.zoomProgress = Math.min(1, this.zoomProgress + (dt * 1000) / cCfg.dockZoomDurationMs);
-            const ease = 1 - Math.pow(1 - this.zoomProgress, 3);
-            this.camX += (this.zoomTargetPlanet.x - this.camX) * 0.22;
-            this.camY += (this.zoomTargetPlanet.y - this.camY) * 0.22;
-            this.camZoom = 1 + (cCfg.dockZoomTarget - 1) * ease;
+            this.zoomElapsedMs += dt * 1000;
+            const t = Math.min(1, this.zoomElapsedMs / cfg.zoomDurationMs);
+            const ease = 1 - Math.pow(1 - t, 3);
+            this.camX += (this.zoomTargetPlanet.x - this.camX) * Math.min(1, dt * 12);
+            this.camY += (this.zoomTargetPlanet.y - this.camY) * Math.min(1, dt * 12);
+            this.camZoom = 1 + (cfg.zoomTargetScale - 1) * ease;
+            this.x += (this.zoomTargetPlanet.x - this.x) * Math.min(1, dt * 8);
+            this.y += (this.zoomTargetPlanet.y - this.y) * Math.min(1, dt * 8);
             this._updateParticles(dt);
-            return this.zoomProgress >= 1;
+            return t >= 1;
         }
 
-        if (input.angle !== null) {
-            let diff = input.angle - this.angle;
+        const mag = Math.hypot(input.moveX, input.moveY);
+        const moving = mag > 0.01;
+        if (moving) {
+            const targetAngle = Math.atan2(input.moveY, input.moveX);
+            let diff = targetAngle - this.angle;
             while (diff > Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
-            this.angle += diff * Math.min(1, rCfg.turnSpeed * dt);
+            this.angle += diff * Math.min(1, cfg.turnLerp * dt);
+
+            const acc = input.turboHeld ? cfg.turboAccel : cfg.accel;
+            const thrust = Math.min(1, mag) * acc;
+            this.vx += Math.cos(this.angle) * thrust * dt;
+            this.vy += Math.sin(this.angle) * thrust * dt;
         }
 
-        const isThrusting = input.mag > 0.06 || input.turbo;
-        const mult = input.turbo ? rCfg.turboMultiplier : 1;
-        this.thrustPower = isThrusting ? Math.max(input.mag, input.turbo ? 1 : 0) * mult : 0;
+        const drag = Math.pow(cfg.friction, dt * 60);
+        this.vx *= drag;
+        this.vy *= drag;
 
-        if (this.thrustPower > 0) {
-            const accel = rCfg.thrust * this.thrustPower;
-            this.vx += Math.cos(this.angle) * accel * dt;
-            this.vy += Math.sin(this.angle) * accel * dt;
+        const maxSpd = input.turboHeld ? cfg.turboMaxSpeed : cfg.maxSpeed;
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > maxSpd) {
+            this.vx = (this.vx / speed) * maxSpd;
+            this.vy = (this.vy / speed) * maxSpd;
         }
 
-        const frameDrag = Math.pow(rCfg.drag, dt * 60);
-        this.vx *= frameDrag;
-        this.vy *= frameDrag;
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
 
-        const maxSpd = input.turbo ? rCfg.maxTurboSpeed : rCfg.maxSpeed;
-        const spd = Math.hypot(this.vx, this.vy);
-        if (spd > maxSpd) {
-            this.vx = (this.vx / spd) * maxSpd;
-            this.vy = (this.vy / spd) * maxSpd;
-        }
+        const { halfWidth, halfHeight } = SPACE_CONFIG.world;
+        this.x = Math.max(-halfWidth, Math.min(halfWidth, this.x));
+        this.y = Math.max(-halfHeight, Math.min(halfHeight, this.y));
 
-        this.x = Math.max(-wCfg.width / 2, Math.min(wCfg.width / 2, this.x + this.vx * dt));
-        this.y = Math.max(-wCfg.height / 2, Math.min(wCfg.height / 2, this.y + this.vy * dt));
-
-        this.trailTimer += dt * 1000;
-        if ((this.thrustPower > 0.08 || spd > 45) && this.trailTimer >= rCfg.trailIntervalMs) {
-            this.trailTimer = 0;
-            const count = input.turbo ? 2 : 1;
-            for (let i = 0; i < count; i++) {
-                const ejAngle = this.angle + Math.PI + (Math.random() - 0.5) * 0.7;
-                const ejSpd = 60 + Math.random() * 90 + (input.turbo ? 70 : 0);
-                const colors = rCfg.trailColors;
-                this.particles.push({
-                    x: this.x - Math.cos(this.angle) * 26 + (Math.random() - 0.5) * 8,
-                    y: this.y - Math.sin(this.angle) * 26 + (Math.random() - 0.5) * 8,
-                    vx: Math.cos(ejAngle) * ejSpd + this.vx * 0.2,
-                    vy: Math.sin(ejAngle) * ejSpd + this.vy * 0.2,
-                    size: (input.turbo ? 8 : 6) + Math.random() * 4,
-                    color: colors[Math.floor(Math.random() * colors.length)],
-                    life: 0,
-                    maxLife: rCfg.trailLifeMs * (0.75 + Math.random() * 0.4),
-                    rot: Math.random() * Math.PI * 2
-                });
+        if (moving || input.turboHeld || speed > 55) {
+            this.exhaustAccum += dt * 1000 * (input.turboHeld ? 2.2 : 1);
+            while (this.exhaustAccum >= cfg.exhaustRateMs) {
+                this.exhaustAccum -= cfg.exhaustRateMs;
+                this._spawnStarParticle(input.turboHeld);
             }
         }
 
         this._updateParticles(dt);
-        const lerp = 1 - Math.pow(1 - cCfg.lerp, dt * 60);
-        this.camX += (this.x - this.camX) * lerp;
-        this.camY += (this.y - this.camY) * lerp;
+        const lerpF = Math.min(1, cfg.cameraLerp * dt);
+        this.camX += (this.x - this.camX) * lerpF;
+        this.camY += (this.y - this.camY) * lerpF;
         return false;
+    }
+
+    _spawnStarParticle(isTurbo) {
+        const colors = SPACE_CONFIG.rocket.exhaustColors;
+        const backX = this.x - Math.cos(this.angle) * 24;
+        const backY = this.y - Math.sin(this.angle) * 24;
+        const spread = (Math.random() - 0.5) * 0.7;
+        const spd = (isTurbo ? 175 : 95) + Math.random() * 65;
+        this.particles.push({
+            x: backX + (Math.random() - 0.5) * 8,
+            y: backY + (Math.random() - 0.5) * 8,
+            vx: -Math.cos(this.angle + spread) * spd,
+            vy: -Math.sin(this.angle + spread) * spd,
+            size: (isTurbo ? 9 : 6.5) + Math.random() * 4,
+            life: 1,
+            decay: 1.5 + Math.random() * 0.9,
+            rot: Math.random() * Math.PI * 2,
+            color: colors[Math.floor(Math.random() * colors.length)]
+        });
     }
 
     _updateParticles(dt) {
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
-            p.life += dt * 1000;
-            if (p.life >= p.maxLife) { this.particles.splice(i, 1); continue; }
-            p.x += p.vx * dt; p.y += p.vy * dt; p.rot += 4 * dt;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.rot += 3.5 * dt;
+            p.life -= p.decay * dt;
+            if (p.life <= 0) this.particles.splice(i, 1);
         }
     }
 
     draw(ctx) {
         for (const p of this.particles) {
-            const t = 1 - p.life / p.maxLife;
-            const r = p.size * t;
             ctx.save();
-            ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-            ctx.globalAlpha = t * 0.92; ctx.fillStyle = p.color;
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.color;
+            const r = p.size * p.life;
             ctx.beginPath();
-            for (let s = 0; s < 5; s++) {
-                const a1 = (s * Math.PI * 2) / 5, a2 = a1 + Math.PI / 5;
-                ctx.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
-                ctx.lineTo(Math.cos(a2) * (r * 0.45), Math.sin(a2) * (r * 0.45));
+            for (let i = 0; i < 10; i++) {
+                const rad = i % 2 === 0 ? r : r * 0.44;
+                const a = (i * Math.PI) / 5;
+                if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
             }
-            ctx.closePath(); ctx.fill();
+            ctx.closePath();
+            ctx.fill();
             ctx.restore();
         }
 
         ctx.save();
-        ctx.translate(this.x, this.y); ctx.rotate(this.angle);
-        if (this.thrustPower > 0.05) {
-            const fl = 16 + this.thrustPower * 16 + Math.random() * 6;
-            ctx.fillStyle = '#38bdf8';
-            ctx.beginPath(); ctx.moveTo(-20, -8); ctx.lineTo(-20 - fl, 0); ctx.lineTo(-20, 8); ctx.fill();
-            ctx.fillStyle = '#fef08a';
-            ctx.beginPath(); ctx.moveTo(-20, -4); ctx.lineTo(-20 - fl * 0.65, 0); ctx.lineTo(-20, 4); ctx.fill();
-        }
-        ctx.fillStyle = '#e11d48';
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+
+        ctx.fillStyle = '#ef4444';
         ctx.beginPath();
-        ctx.moveTo(-8, -14); ctx.lineTo(-24, -24); ctx.lineTo(-20, -10); ctx.closePath();
-        ctx.moveTo(-8, 14);  ctx.lineTo(-24, 24);  ctx.lineTo(-20, 10);  ctx.closePath();
+        ctx.moveTo(-10, -14); ctx.lineTo(-24, -24); ctx.lineTo(-18, -8); ctx.closePath();
+        ctx.moveTo(-10, 14);  ctx.lineTo(-24, 24);  ctx.lineTo(-18, 8);  ctx.closePath();
         ctx.fill();
 
-        ctx.fillStyle = '#f8fafc'; ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.ellipse(2, 0, 26, 15, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#f8fafc';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(2, 0, 25, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-        ctx.fillStyle = '#f43f5e';
-        ctx.beginPath(); ctx.arc(14, 0, 14, -Math.PI * 0.42, Math.PI * 0.42); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(17, 0, 10, -Math.PI / 2.2, Math.PI / 2.2);
+        ctx.fill();
 
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2.5; ctx.stroke();
-        if (this.pilotImage.complete && this.pilotImage.naturalWidth > 0) {
+        const skin = getPlayerSkinSprite();
+        ctx.fillStyle = '#0ea5e9';
+        ctx.strokeStyle = skin.bodyColor || '#fde047';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(3, 0, 9.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        if (skin.idle && skin.idle.complete && skin.idle.naturalWidth > 0) {
             ctx.save();
-            ctx.beginPath(); ctx.arc(0, 0, 8.5, 0, Math.PI * 2); ctx.clip();
-            ctx.rotate(-Math.PI / 2);
-            ctx.drawImage(this.pilotImage, -10, -10, 20, 22);
+            ctx.beginPath();
+            ctx.arc(3, 0, 8.2, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(skin.idle, -9, -11, 18, 18);
             ctx.restore();
+        } else {
+            ctx.fillStyle = skin.bodyColor || '#cbd5e1';
+            ctx.beginPath();
+            ctx.arc(3, 1, 5, 0, Math.PI * 2);
+            ctx.fill();
         }
         ctx.restore();
     }

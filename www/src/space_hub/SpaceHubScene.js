@@ -1,56 +1,68 @@
 // ============================================================================
-// SpaceHubScene.js — Главная сцена Космического Хаба, стыковка и тугл меню
+// SpaceHubScene.js — Главная сцена Интерактивного Космоса Мышонка Пи:
+// радар планет, живой космос (астероиды, кометы, сыр), посадка ДОМОЙ и в игры
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
-import { TouchControls } from './TouchControls.js';
-import { RocketController } from './RocketController.js';
 import { SpaceBackground } from './SpaceBackground.js';
 import { PlanetRenderer } from './PlanetRenderer.js';
+import { RocketController } from './RocketController.js';
+import { TouchControls } from './TouchControls.js';
+import { SpaceEnvironment } from './SpaceEnvironment.js';
+import { SpaceRadar } from './SpaceRadar.js';
+import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
+import { PlayerProfile } from '../core/PlayerProfile.js';
 
 export class SpaceHubScene {
-    constructor(options = {}) {
-        this.onSelectPlanet = options.onSelectPlanet || (() => {});
-        this.onToggleMenu = options.onToggleMenu || (() => {});
+    constructor({ onSelectPlanet, onToggleMenu } = {}) {
+        this.onSelectPlanet = onSelectPlanet || (() => {});
+        this.onToggleMenu = onToggleMenu || (() => {});
+        this.running = false;
         this.activePlanet = null;
         this.dockingPlanet = null;
-        this.running = false;
         this.lastTime = 0;
 
-        this._mountUi();
+        this._buildDOM();
         this.bg = new SpaceBackground();
+        this.env = new SpaceEnvironment();
         this.planets = new PlanetRenderer();
         this.rocket = new RocketController();
+        this.radar = new SpaceRadar();
         this.controls = new TouchControls(this.overlay, () => this._handleLandTap());
+        this.homeScene = new HomePlanetScene({
+            onTakeOff: () => {
+                Object.assign(this.rocket, { x: 0, y: -155, vx: 0, vy: -140, angle: -Math.PI / 2 });
+                this.start();
+            }
+        });
         this._resize();
         window.addEventListener('resize', () => this._resize());
     }
 
-    _mountUi() {
+    _buildDOM() {
         const el = document.createElement('div');
         el.id = 'spaceHubOverlay';
         el.innerHTML = `
             <style>
                 #spaceHubOverlay {
-                    position: fixed; inset: 0; width: 100vw; height: 100dvh;
-                    background: #050614; z-index: 9985; overflow: hidden;
-                    touch-action: none; user-select: none; -webkit-user-select: none;
-                    font-family: 'Comfortaa', 'Nunito', sans-serif;
+                    position: fixed; inset: 0; width: 100vw; height: 100vh;
+                    z-index: 9990; overflow: hidden; touch-action: none;
+                    user-select: none; -webkit-user-select: none; font-family: 'Nunito', sans-serif;
                 }
                 #spaceHubCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
                 .sh-top-bar {
                     position: fixed; top: max(12px, env(safe-area-inset-top, 12px));
                     left: max(16px, env(safe-area-inset-left, 16px)); right: max(16px, env(safe-area-inset-right, 16px));
-                    display: flex; align-items: center; justify-content: space-between; z-index: 9994; pointer-events: none;
+                    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+                    z-index: 9994; pointer-events: none; flex-wrap: wrap;
                 }
                 .sh-title-pill, .sh-toggle-btn {
                     pointer-events: auto; background: rgba(15, 23, 42, 0.86);
                     border: 2px solid rgba(125, 211, 252, 0.55); border-radius: 999px;
-                    padding: 7px 15px; color: #f8fafc; font-weight: 900; font-size: clamp(12px, 2.5vw, 14px);
-                    display: flex; align-items: center; gap: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+                    padding: 7px 14px; color: #f8fafc; font-weight: 900; font-size: clamp(11.5px, 2.4vw, 13.5px);
+                    display: flex; align-items: center; gap: 7px; box-shadow: 0 6px 18px rgba(0,0,0,0.5);
                 }
                 .sh-toggle-btn { border-color: #facc15; color: #fef08a; cursor: pointer; background: linear-gradient(180deg, #312e81, #1e1b4b); }
-                .sh-toggle-btn:active { transform: scale(0.95); }
                 .sh-planet-banner {
                     position: fixed; bottom: max(22px, env(safe-area-inset-bottom, 22px)); left: 50%; transform: translate(-50%, 130%);
                     background: rgba(15, 23, 42, 0.92); border: 2.5px solid #4ade80; border-radius: 20px; padding: 10px 20px;
@@ -62,7 +74,7 @@ export class SpaceHubScene {
             </style>
             <canvas id="spaceHubCanvas"></canvas>
             <div class="sh-top-bar">
-                <div class="sh-title-pill">🚀 Космос Мышонка Пи</div>
+                <div class="sh-title-pill">🚀 Космос Пи · <span id="shCheeseCounter" style="color:#fde047;">🧀 0</span></div>
                 <button type="button" class="sh-toggle-btn" id="shMenuSwitchBtn">🏰 Классическое меню ⇄</button>
             </div>
             <div class="sh-planet-banner" id="shPlanetBanner">
@@ -77,7 +89,12 @@ export class SpaceHubScene {
         this.banner = el.querySelector('#shPlanetBanner');
         this.bannerTitle = el.querySelector('#shBannerTitle');
         this.bannerSub = el.querySelector('#shBannerSub');
+        this.cheeseCounter = el.querySelector('#shCheeseCounter');
         el.querySelector('#shMenuSwitchBtn').addEventListener('click', () => this.onToggleMenu('classic'));
+    }
+
+    _updateCheeseHUD() {
+        this.cheeseCounter.textContent = `🧀 Багажник: ${PlayerProfile.pocketCheese} (Склад: ${PlayerProfile.storedCheese})`;
     }
 
     _resize() {
@@ -95,11 +112,6 @@ export class SpaceHubScene {
             this.bannerSub.textContent = '🔒 Секретная планета откроется совсем скоро!';
             return;
         }
-        if (this.activePlanet.id === 'home_base') {
-            this.planets.triggerSquash('home_base');
-            this.bannerSub.textContent = '🧀 Лети по пунктирным линиям к любой планете-игре!';
-            return;
-        }
         this.dockingPlanet = this.activePlanet;
         try { navigator.vibrate?.(25); } catch (_) {}
         this.rocket.startPlanetZoom(this.dockingPlanet);
@@ -107,6 +119,8 @@ export class SpaceHubScene {
 
     start() {
         if (this.running) return;
+        PlayerProfile._syncFromStorage();
+        this._updateCheeseHUD();
         document.getElementById('startScreen')?.classList.remove('visible');
         this.overlay.style.display = 'block';
         this.dockingPlanet = null;
@@ -131,12 +145,19 @@ export class SpaceHubScene {
 
     _step(dt, timeSec) {
         const zoomDone = this.rocket.update(dt, this.controls.getInput());
+        this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
+
         if (zoomDone && this.dockingPlanet) {
-            const targetId = this.dockingPlanet.id;
+            const target = this.dockingPlanet;
             this.dockingPlanet = null;
             this.rocket.zoomTargetPlanet = null;
             this.rocket.camZoom = 1;
-            this.onSelectPlanet(targetId);
+            if (target.isHomePlanet) {
+                this.stop();
+                this.homeScene.start();
+            } else {
+                this.onSelectPlanet(target.id);
+            }
             return;
         }
 
@@ -149,7 +170,9 @@ export class SpaceHubScene {
                 this.bannerTitle.textContent = `${nearest.badge} ${nearest.name}`;
                 this.bannerSub.textContent = nearest.subtitle;
                 this.banner.classList.add('visible');
-                this.controls.setDockMode(!nearest.locked && nearest.id !== 'home_base');
+                const label = nearest.actionLabel || 'СЕСТЬ!';
+                const icon = nearest.isHomePlanet ? '🏠' : '🪐';
+                this.controls.setDockMode(!nearest.locked, label, icon);
             } else {
                 this.banner.classList.remove('visible');
                 this.controls.setDockMode(false);
@@ -161,11 +184,15 @@ export class SpaceHubScene {
         ctx.save();
         ctx.scale(this.dpr, this.dpr);
         this.bg.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec);
+        ctx.save();
         ctx.translate(this.viewW / 2, this.viewH / 2);
         ctx.scale(this.rocket.camZoom, this.rocket.camZoom);
         ctx.translate(-this.rocket.camX, -this.rocket.camY);
+        this.env.draw(ctx, timeSec);
         this.planets.draw(ctx, timeSec);
         this.rocket.draw(ctx);
+        ctx.restore();
+        this.radar.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec);
         ctx.restore();
     }
 }
