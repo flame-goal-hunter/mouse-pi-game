@@ -974,7 +974,10 @@
                     <span>Мышонок Пи</span>
                     <span class="arcade-badge-pill">⚡ АРКАДА</span>
                 </h2>
-                <button class="sound-toggle-btn" id="menuSoundToggle" title="Звук и музыка" aria-label="Звук">🔊</button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button id="classicToSpaceHubBtn" type="button" title="Переключить в Интерактивный Космос" style="padding:7px 12px;border-radius:999px;border:1.5px solid rgba(56,189,248,0.65);background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,58,138,0.85));color:#e0f2fe;font-family:'Nunito',sans-serif;font-weight:900;font-size:12px;cursor:pointer;box-shadow:0 4px 12px rgba(56,189,248,0.28);white-space:nowrap;">🪐 Космо-Хаб ⇄</button>
+                    <button class="sound-toggle-btn" id="menuSoundToggle" title="Звук и музыка" aria-label="Звук">🔊</button>
+                </div>
             </div>
             <div class="mode-selector">
                 <button class="mode-btn selected" data-mode="adventure">
@@ -11904,6 +11907,70 @@
             });
         }
     })();
+    </script>
+    <script type="module">
+        import { SpaceHubScene } from './src/space_hub/SpaceHubScene.js';
+
+        const HUB_MODE_KEY = 'mousie_hub_mode';
+        const getHubMode = () => localStorage.getItem(HUB_MODE_KEY) || 'space';
+        const setHubMode = (m) => localStorage.setItem(HUB_MODE_KEY, m);
+
+        const spaceHub = new SpaceHubScene({
+            onToggleMenu: (targetMode) => {
+                setHubMode(targetMode);
+                spaceHub.stop();
+                const startScreen = document.getElementById('startScreen');
+                if (startScreen) {
+                    startScreen.style.display = '';
+                    startScreen.classList.add('visible');
+                }
+            },
+            onSelectPlanet: (planetId) => {
+                spaceHub.stop();
+                if (planetId === 'transylvania') {
+                    if (typeof startTransylvaniaPreview === 'function') startTransylvaniaPreview();
+                } else if (planetId === 'snowball') {
+                    if (typeof startSoloSnowball === 'function') startSoloSnowball(1, 1);
+                } else if (planetId === 'adventure') {
+                    currentGameMode = 'adventure';
+                    if (typeof startGame === 'function') startGame();
+                } else if (planetId === 'newyear') {
+                    currentGameMode = 'newyear';
+                    if (typeof startGame === 'function') startGame();
+                }
+            }
+        });
+        window.__spaceHub = spaceHub;
+
+        const toSpaceBtn = document.getElementById('classicToSpaceHubBtn');
+        if (toSpaceBtn) {
+            toSpaceBtn.addEventListener('click', () => {
+                setHubMode('space');
+                spaceHub.start();
+            });
+        }
+
+        // Default to Space Hub on initial boot unless classic menu was chosen
+        if (getHubMode() === 'space') {
+            spaceHub.start();
+        }
+
+        // Automatically reopen Space Hub when returning to menu from any game if mode is 'space'
+        const startScreenEl = document.getElementById('startScreen');
+        if (startScreenEl) {
+            const obs = new MutationObserver(() => {
+                if (
+                    startScreenEl.classList.contains('visible') &&
+                    getHubMode() === 'space' &&
+                    !spaceHub.running &&
+                    !gameRunning &&
+                    !phaserRunning
+                ) {
+                    spaceHub.start();
+                }
+            });
+            obs.observe(startScreenEl, { attributes: true, attributeFilter: ['class'] });
+        }
     </script>
 </body>
 </html>
