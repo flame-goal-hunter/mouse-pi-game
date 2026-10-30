@@ -5,42 +5,45 @@ import { SFX } from '../audio/SoundKeys.js';
 import { preloadAudio } from '../audio/AudioManager.js';
 
 // ============================================================================
-// SneakScene.js — «Тихая Лапка: Том и Джерри в Замке Теней!»
+// SneakScene.js — «Тихая лапка» (Silent Paw)
 //
-// Two-Layer Cutaway («Двухуровневый мир в разрезе: Над полом + Подземная Норка»)
+// 1. HD 3/4 Castle Canvas2D Renderer (Snowball ArenaRenderer style):
+//    - 3D bevelled castle walls with top caps, front masonry cliff faces,
+//      wooden baseboards, and soft drop shadows (`shadowBlur`).
+//    - Elevated 3D Balconies ('B') with stone balustrades & cliff drop-offs.
+//    - Iron-Barred Treasury Vaults ('V' & 'G') with metallic 3D grate bars.
+//    - Real SVG world props from `assets/world/*.svg` (`bookshelf`, `cage`,
+//      `candelabra_lit`, `torch_sconce`, `chest_closed`, `chest_open`,
+//      `glowpod`, `moonflower`, `relic_urn`, `lock`, `unlock`, `stairs`).
 //
-// Core Loop for a 10-year-old:
-// 1. Cutaway Dollhouse / Ant-Farm View:
-//    - TOP LAYER: Castle Rooms where the daughter's hand-drawn monsters patrol
-//      around Giant Treasures, Locked Cages, Golden Keys, and Laser Gates.
-//    - MIDDLE SLAB: Cross-section floor beam with floorboards, stone bricks,
-//      and numbered Vertical Burrow Chutes (#1, #2, #3...). Monsters walking
-//      above shake dust & footstep rings ("ТОП-ТОП!") down through the ceiling!
-//    - BOTTOM LAYER: Cozy Underground Burrow Network where Pi is 100% safe!
-//      Features Pi's Cozy Home Sanctuary (sofa, lamp, growing treasure hoard,
-//      rescued pet friends cheering) + Underground Sabotage Levers that disable
-//      lasers & drop ceiling cream-cakes on monsters above!
-// 2. "Tom & Jerry" Haul-to-Burrow Mechanic:
-//    - Grab a Giant Cheese / Crown / Pet Friend in the upper room and carry it
-//      to ANY baseboard Mouse-Hole!
-//    - Diving into a Mouse-Hole delivers the haul straight to your Cozy Home
-//      Nest AND makes any chasing monster SLAM into the wall above the hole
-//      ("💥 БАМ! НЕ ДОГНАЛ! 💫") with spinning stars and bonus cheese!
+// 2. Signature Hold-to-Burrow Mechanic («Нажать у норки, задержать — и попасть!»):
+//    - Stand near any Burrow and HOLD the glossy «ДЕРЖИ: НОРА» button (or Space).
+//    - While holding (0.55s):
+//      * A golden progress ring fills around the burrow (0% -> 100%).
+//      * Pi tucks into the burrow mouth (safe from monster vision!) while a
+//        glowing underground preview line shows where you will emerge
+//        (up on the 3D Balcony, inside the Iron Vault, into the Secret Room,
+//        or across the hall!). Tilt the joystick while holding to switch branches!
+//    - When the ring completes:
+//      * Pi zips underground with an animated floor-ripple wave & pops out
+//        at the destination! Chasing monsters lose track of Pi ("?").
 // ============================================================================
 
-const PLAYER_BASE_SPEED = 178;
-const PLAYER_BURROW_SPEED = 205;
-const PLAYER_DASH_SPEED = 350;
+const HOLD_BURROW_MS = 540;
+const SQUEEZE_TRAVEL_MS = 380;
+
+const PLAYER_BASE_SPEED = 182;
+const PLAYER_DASH_SPEED = 355;
 const PLAYER_DASH_MS = 250;
-const PLAYER_DASH_CD_MS = 1600;
+const PLAYER_DASH_CD_MS = 1550;
 
-const CAKE_SPEED = 420;
-const CAKE_HEAR_RADIUS = 380;
-const CAKE_BLIND_RADIUS = 100;
-const CAKE_DISTRACT_MS = 3600;
-const CAKE_BLIND_MS = 4200;
+const PIE_SPEED = 430;
+const PIE_BLIND_RADIUS = 95;
+const PIE_HEAR_RADIUS = 360;
+const PIE_BLIND_MS = 4200;
+const PIE_DISTRACT_MS = 3600;
 
-const WHISTLE_DISTRACT_MS = 4500;
+const WHISTLE_DISTRACT_MS = 4400;
 const CATCH_DIST = 34;
 const SUSPICION_FILL_MS = 520;
 const SUSPICION_DECAY_MS = 900;
@@ -53,38 +56,38 @@ const SKIN_KEYS = [
 
 const RUN_PERKS = [
     {
+        id: 'fast_burrow',
+        icon: '🕳️',
+        title: 'Мастер Норок',
+        desc: 'Кольцо входа в норку заполняется в 2 раза быстрее + 3 сек. ускорения после выхода!',
+        color: '#10b981'
+    },
+    {
         id: 'ninja_paws',
         icon: '🐾',
         title: 'Бархатные Лапки',
-        desc: '+18% к скорости бега в зале и под землёй',
+        desc: '+18% к скорости бега и тихий шаг',
         color: '#38bdf8'
     },
     {
         id: 'cake_factory',
-        icon: '🎂',
-        title: 'Сладкий Кондитер',
-        desc: '+2 кремовых тортика на каждом этаже',
+        icon: '🥧',
+        title: 'Запас Пирогов',
+        desc: '+2 сырных пирога на каждом этаже для ослепления монстров',
         color: '#f472b6'
-    },
-    {
-        id: 'burrow_turbo',
-        icon: '🚀',
-        title: 'Пружинный Лаз',
-        desc: 'Выпрыгивание из норки даёт 3 сек. супер-ускорения и невидимости!',
-        color: '#a855f7'
     },
     {
         id: 'cheese_magnet',
         icon: '🧲',
         title: 'Сырный Магнит',
-        desc: 'Сыр сам летит в лапки издалека (+30% бонусного сыра)',
+        desc: 'Сыр сам притягивается к Пи издалека (+30% к ценности сыра)',
         color: '#facc15'
     },
     {
         id: 'extra_heart',
         icon: '💖',
-        title: 'Уютный Плед в Норке',
-        desc: 'Полное лечение сердечек + 20 бонусного сыра в копилку',
+        title: 'Тёплое Сердечко',
+        desc: 'Полное исцеление сердечек + 20 бонусного сыра в копилку',
         color: '#fb7185'
     }
 ];
@@ -102,6 +105,7 @@ export class SneakScene extends Phaser.Scene {
         this.carriedCheese = data?.carriedCheese ?? 0;
         this.bankedInRun = data?.bankedInRun ?? 0;
         this.totalRescuedInRun = data?.totalRescuedInRun ?? 0;
+        this.rescuedFollowers = data?.rescuedFollowers ? [...data.rescuedFollowers] : [];
         this.streak = data?.streak ?? 1.0;
         this.hearts = data?.hearts ?? 3;
         this.maxHearts = data?.maxHearts ?? 3;
@@ -132,6 +136,7 @@ export class SneakScene extends Phaser.Scene {
             this.load.svg('skin_' + safeId + '_b',  backBase + k + '.svg',       { width: 150, height: 172 });
         }
 
+        // Daughter's hand-drawn monsters
         this.load.svg('d_zombie',   base + 'zombie.svg',   { width: 180, height: 210 });
         this.load.svg('d_count',    base + 'count.svg',    { width: 200, height: 234 });
         this.load.svg('d_cat',      base + 'cat.svg',      { width: 165, height: 150 });
@@ -145,10 +150,20 @@ export class SneakScene extends Phaser.Scene {
         this.load.svg('d_ghost',    base + 'ghost.svg',    { width: 150, height: 180 });
         this.load.svg('d_mimic',    base + 'mimic.svg',    { width: 150, height: 150 });
 
+        // Handcrafted SVG World Props & Badges from `assets/world/`
         const dpr = window.__GAME_DPR || 1;
-        this.load.svg('stairs',       'assets/world/stairs.svg',       { width: Math.round(72 * dpr), height: Math.round(80 * dpr) });
-        this.load.svg('chest_closed', 'assets/world/chest_closed.svg', { width: Math.round(48 * dpr), height: Math.round(44 * dpr) });
-        this.load.svg('chest_open',   'assets/world/chest_open.svg',   { width: Math.round(48 * dpr), height: Math.round(44 * dpr) });
+        const propScale = Math.round(64 * dpr);
+        const worldProps = [
+            'bookshelf', 'cage', 'candelabra_lit', 'chest_closed', 'chest_open',
+            'cobweb', 'glowpod', 'goblet', 'lock', 'moonflower', 'mushroom',
+            'pot', 'redCarpet', 'relic_urn', 'stairs', 'torch_sconce', 'unlock',
+            'badge_alert', 'badge_anger', 'badge_ear', 'badge_sleep', 'badge_sparkle'
+        ];
+        for (const p of worldProps) {
+            this.load.svg('w_' + p, `assets/world/${p}.svg`, { width: propScale, height: propScale });
+        }
+        this.load.svg('relic_crown', 'assets/relics/crown.svg', { width: propScale, height: propScale });
+        this.load.svg('relic_gift',  'assets/relics/gift.svg',  { width: propScale, height: propScale });
     }
 
     create() {
@@ -172,65 +187,67 @@ export class SneakScene extends Phaser.Scene {
             this.piesLeft = Math.min(9, this.piesLeft + 2);
         }
 
-        // 1. Generate Two-Layer Cutaway Level («Над полом + Подземная Норка в разрезе»)
+        // 1. Generate Infinite Procedural 3/4 Castle Floor
         this.room = generateHeistFloor(this.floor);
-        this.theme = this.room.theme;
-        this.mission = this.room.mission;
+        this.biome = this.room.biome;
 
         const mapPxW = this.room.W * this.room.cell;
         const mapPxH = this.room.H * this.room.cell;
 
-        this.cameras.main.setBackgroundColor('#0c0717');
+        this.cameras.main.setBackgroundColor('#090514');
 
-        // 2. Render Two-Layer Cutaway Dollhouse / Ant-Farm World
-        this._ensureCustomTextures();
-        this._renderCutawayWorld(mapPxW, mapPxH);
-        this._buildCozyHomeSanctuary();
-        this._buildBurrowChutes();
-        this._buildLaserGatesAndSabotageLevers();
-        this._buildShadowCushions();
-        this._buildLootAndHaulables();
+        // 2. Render HD 3/4 Castle CanvasTexture (Snowball ArenaRenderer style!)
+        this._render3D4CastleCanvas(mapPxW, mapPxH);
+        this._placeSvgWorldProps();
+        this._buildBurrowNetworkVisuals();
+        this._buildShadowFlowers();
+        this._buildObjectivesAndLoot();
 
-        // 3. Player (Pi) + Overhead Carried Loot + Home Nest Stash
+        // 3. Player (Pi) + Follower Train + Burrow Hold Ring & Preview Line
         this._buildPlayer();
 
-        // 4. Daughter's Hand-Drawn Monsters + Vision Cones + Ceiling Footstep Ripples
+        // 4. Daughter's Hand-Drawn Monsters + Patrol Trail + Vision Cones
+        this._buildPatrolTrails();
         this._buildMonsters();
 
-        // 5. Camera setup — framed so you see both the Castle Room above AND the Underground Burrow below!
+        // 5. Camera setup — framed cleanly in CSS pixels * DPR
         const cssW = this.scale.width / this.dpr;
         const cssH = this.scale.height / this.dpr;
-        const fitCssZoom = Math.min(cssW / (mapPxW + 60), cssH / (mapPxH + 100));
-        const worldCssZoom = Math.max(0.60, Math.min(0.92, fitCssZoom * 1.16));
-        this.cameras.main.setZoom(worldCssZoom * this.dpr);
-        this.cameras.main.setBounds(-90, -80, mapPxW + 180, mapPxH + 180);
-        this.cameras.main.startFollow(this.player, false, 0.14, 0.14);
+        const fitZoom = Math.min(cssW / (mapPxW + 60), cssH / (mapPxH + 80));
+        const targetZoom = Math.max(0.68, Math.min(1.08, fitZoom * 1.22));
+        this.cameras.main.setZoom(targetZoom * this.dpr);
+        this.cameras.main.setBounds(-100, -90, mapPxW + 200, mapPxH + 180);
+        this.cameras.main.startFollow(this.player, true, 0.14, 0.14);
 
-        // 6. State flags
-        this.floorStartedAt = this.time.now;
+        // 6. State flags for Hold-to-Burrow mechanic
         this.seenOnThisFloor = false;
         this.ended = false;
         this.isPaused = false;
-        this.isChuteSliding = false;
-        this.hasGoldenKey = false;
-        this.carriedItem = null; // Currently carried Giant Cheese / Crown / Pet Friend
-        this.deliveredCount = 0;
-        this.totalQuota = this.room.totalHaulables;
-        this.whistleCooldownUntil = 0;
+        this.state = 'play'; // 'play' | 'squeeze'
+        this.hasKey = false;
+        this.friendRescued = false;
+        this.exitUnlocked = false;
+
+        this.holeHoldDown = false;
+        this.holeHoldMs = 0;
+        this.holeHoldArmed = true;
+        this.activeNearHole = null;
+        this.selectedTargetIdx = 0;
+        this.branchSwitchCooldown = 0;
 
         this.invulnerableUntil = this.time.now + 1200;
         this.dashUntil = 0;
         this.dashCooldownUntil = 0;
-        this.activeBoosters = { cloak: 0, magnet: 0, turbo: 0 };
+        this.turboUntil = 0;
+        this.whistleCooldownUntil = 0;
 
-        // 7. Mount Crisp HTML/CSS HUD + Glossy 3D Controls
+        // 7. Mount Glossy 3D Touch Controls & HUD
         this._mountDomControlsAndHud();
-        this._setupKeyboardAndMapTap();
-        this._showFloorIntroBanner();
+        this._setupKeyboard();
+        this._showToast(`🏰 Этаж ${this.floor}: ${this.biome.name} — Ныряй в норки за Ключом и Другом!`, '#facc15');
 
-        // 8. Audio
-        if (this.theme?.bgm) {
-            bus.emit(this.theme.bgm);
+        if (this.biome?.bgm) {
+            bus.emit(this.biome.bgm);
         }
         this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.08, 'triangle');
 
@@ -239,592 +256,470 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // 1. TWO-LAYER CUTAWAY WORLD («ЗАЛ СВЕРХУ + РАЗРЕЗ ПОЛА + НОРКА ВНИЗУ»)
+    // 1. HD 3/4 CASTLE CANVAS2D RENDERER (Rich 3D Walls, Balconies, Iron Vaults)
     // =========================================================================
 
-    _ensureCustomTextures() {
-        if (!this.textures.exists('sneak_spark')) {
-            const g = this.make.graphics({ x: 0, y: 0, add: false });
-            g.fillStyle(0xffffff, 1);
-            g.fillCircle(8, 8, 7);
-            g.generateTexture('sneak_spark', 16, 16);
-            g.destroy();
-        }
-    }
+    _render3D4CastleCanvas(mapPxW, mapPxH) {
+        const { W, H, cell, grid, biome, balconyBounds, vaultBounds, secretRoom } = this.room;
+        const texKey = `sneak_castle_canvas_${this.floor}_${this.room.seed}`;
+        if (this.textures.exists(texKey)) this.textures.remove(texKey);
 
-    _renderCutawayWorld(mapPxW, mapPxH) {
-        const { W, H, cell, grid, rooms, theme, slabY1, slabY2, burrowY1 } = this.room;
+        const pad = cell * 2;
+        const canvasW = mapPxW + pad * 2;
+        const canvasH = mapPxH + pad * 2;
 
-        const bg = this.add.graphics().setDepth(-30);
-        // Deep night backdrop above, warm subterranean earth below
-        const slabMidY = (slabY1 + 0.5) * cell;
-        bg.fillGradientStyle(0x120924, 0x120924, 0x261242, 0x261242, 1);
-        bg.fillRect(-200, -160, mapPxW + 400, slabMidY + 160);
+        const canvasTex = this.textures.createCanvas(texKey, canvasW, canvasH);
+        const ctx = canvasTex.getContext();
 
-        bg.fillGradientStyle(theme.earthTop, theme.earthTop, theme.earthBot, theme.earthBot, 1);
-        bg.fillRect(-200, slabMidY, mapPxW + 400, mapPxH - slabMidY + 220);
+        ctx.save();
+        ctx.translate(pad, pad);
 
-        const worldGfx = this.add.graphics().setDepth(-15);
+        // 1. Deep Atmospheric Outer Backdrop
+        const bgGrad = ctx.createRadialGradient(
+            mapPxW * 0.5, mapPxH * 0.5, cell * 2,
+            mapPxW * 0.5, mapPxH * 0.5, Math.max(mapPxW, mapPxH) * 0.75
+        );
+        bgGrad.addColorStop(0, biome.wallFace);
+        bgGrad.addColorStop(1, '#07040e');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(-pad, -pad, canvasW, canvasH);
 
-        // --- A. RENDER UPPER CASTLE ROOMS (Cutaway Dollhouse Rooms) ---
-        rooms.forEach((r, idx) => {
-            const rx = r.x1 * cell;
-            const ry = r.y1 * cell;
-            const rw = (r.x2 - r.x1 + 1) * cell;
-            const rh = (r.y2 - r.y1 + 1) * cell;
+        // 2. Render Walkable Floors (Main Hall '.', Elevated Balcony 'B', Iron Vault 'V', Secret Room 'S')
+        for (let gy = 0; gy < H; gy++) {
+            for (let gx = 0; gx < W; gx++) {
+                const t = grid[gy][gx];
+                if (t === '#') continue;
 
-            // Back Wall Band at the top of each room (Gothic windows + wainscoting)
-            const wallH = cell * 1.45;
-            worldGfx.fillGradientStyle(theme.wallTop, theme.wallTop, theme.wallBot, theme.wallBot, 1);
-            worldGfx.fillRoundedRect(rx, ry - wallH * 0.65, rw, wallH, { tl: 14, tr: 14, bl: 0, br: 0 });
-            worldGfx.lineStyle(3, 0xfef08a, 0.35);
-            worldGfx.strokeRoundedRect(rx, ry - wallH * 0.65, rw, wallH, { tl: 14, tr: 14, bl: 0, br: 0 });
+                const px = gx * cell;
+                const py = gy * cell;
 
-            // Arched Moonlit Windows along the back wall
-            const winCount = Math.max(1, Math.floor(rw / (cell * 3.5)));
-            for (let w = 0; w < winCount; w++) {
-                const wx = rx + (w + 0.5) * (rw / winCount);
-                const wy = ry - wallH * 0.18;
-                worldGfx.fillStyle(0x38bdf8, 0.22);
-                worldGfx.fillRoundedRect(wx - 22, wy - 20, 44, 34, { tl: 20, tr: 20, bl: 4, br: 4 });
-                worldGfx.lineStyle(2, 0xbae6fd, 0.5);
-                worldGfx.strokeRoundedRect(wx - 22, wy - 20, 44, 34, { tl: 20, tr: 20, bl: 4, br: 4 });
+                // Base stone flagstone fill
+                if (t === 'B') {
+                    ctx.fillStyle = biome.balconyTop;
+                } else if (t === 'V' || t === 'G') {
+                    ctx.fillStyle = biome.vaultFloor;
+                } else if (t === 'S') {
+                    ctx.fillStyle = '#3b2110';
+                } else {
+                    ctx.fillStyle = ((gx + gy) % 2 === 0) ? biome.floorA : biome.floorB;
+                }
+                ctx.fillRect(px, py, cell, cell);
+
+                // Recessed flagstone bevel & grout lines
+                ctx.strokeStyle = biome.floorGrouts;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(px + 1, py + 1, cell - 2, cell - 2);
+
+                // Subtle inner highlight on each stone slab
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(px + 4, py + 4, cell - 8, cell - 8);
+
+                // Secret Room golden floor shimmer
+                if (t === 'S') {
+                    ctx.fillStyle = 'rgba(250, 204, 21, 0.12)';
+                    ctx.fillRect(px + 3, py + 3, cell - 6, cell - 6);
+                }
             }
+        }
 
-            // Room Floor Tiles
-            worldGfx.fillStyle(theme.floorMain, 1);
-            worldGfx.fillRect(rx, ry + cell * 0.5, rw, rh - cell * 0.5);
+        // 3. Royal Plush Carpet Runner down the center of the Main Hall
+        const carpetY = Math.floor(H * 0.52) * cell;
+        const carpetX1 = 3 * cell;
+        const carpetW = (W - 6) * cell;
+        ctx.save();
+        ctx.fillStyle = biome.carpetColor;
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.roundRect(carpetX1, carpetY - cell * 0.45, carpetW, cell * 0.9, 12);
+        ctx.fill();
+        ctx.strokeStyle = biome.carpetGold;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
 
-            for (let gy = r.y1 + 1; gy <= r.y2; gy++) {
-                for (let gx = r.x1; gx <= r.x2; gx++) {
-                    if ((gx + gy) % 2 === 0) {
-                        worldGfx.fillStyle(theme.floorChecker, 0.55);
-                        worldGfx.fillRect(gx * cell + 2, gy * cell + 2, cell - 4, cell - 4);
+        // 4. Cast Soft Ambient Occlusion Shadows from all 3D Walls onto Walkable Floors
+        ctx.save();
+        for (let gy = 0; gy < H; gy++) {
+            for (let gx = 0; gx < W; gx++) {
+                if (grid[gy][gx] !== '#') continue;
+                const px = gx * cell;
+                const py = gy * cell;
+                // If tile below is walkable, cast a rich 3/4 drop shadow downward
+                if (gy + 1 < H && grid[gy + 1][gx] !== '#') {
+                    const shGrad = ctx.createLinearGradient(0, py + cell, 0, py + cell + 26);
+                    shGrad.addColorStop(0, 'rgba(0, 0, 0, 0.62)');
+                    shGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = shGrad;
+                    ctx.fillRect(px, py + cell, cell, 26);
+                }
+            }
+        }
+        ctx.restore();
+
+        // 5. Render 3/4 Perspective 3D Castle Walls ('#')
+        // Each wall block has:
+        // - Raised Roof Cap (upper 65% of cell or full cell if wall continues below)
+        // - Vertical 3D Front Cliff Face with carved stone bricks & baseboard when exposed to floor below!
+        const faceH = 24; // Height of the 3/4 front wall face
+        for (let gy = 0; gy < H; gy++) {
+            for (let gx = 0; gx < W; gx++) {
+                if (grid[gy][gx] !== '#') continue;
+                const px = gx * cell;
+                const py = gy * cell;
+                const exposedBelow = (gy + 1 < H && grid[gy + 1][gx] !== '#');
+                const isBalconyCliff = (gy === 3 && gx >= balconyBounds.x1 && gx <= balconyBounds.x2);
+
+                const capH = exposedBelow ? (cell - faceH) : cell;
+
+                // Wall Top Roof Cap
+                const capGrad = ctx.createLinearGradient(px, py, px, py + capH);
+                capGrad.addColorStop(0, biome.wallTopHi);
+                capGrad.addColorStop(1, biome.wallTop);
+                ctx.fillStyle = capGrad;
+                ctx.fillRect(px, py, cell, capH);
+
+                // Stone block seams on top cap
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.28)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(px + 0.5, py + 0.5, cell - 1, capH - 1);
+
+                // Top bevel highlight when air/floor is above
+                if (gy > 0 && grid[gy - 1][gx] !== '#') {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+                    ctx.fillRect(px, py, cell, 4);
+                }
+
+                // 3/4 Vertical Front Cliff Face (when exposed to a room below)
+                if (exposedBelow) {
+                    const fy = py + capH;
+                    const faceGrad = ctx.createLinearGradient(px, fy, px, fy + faceH);
+                    faceGrad.addColorStop(0, isBalconyCliff ? '#6d28d9' : biome.wallFace);
+                    faceGrad.addColorStop(1, biome.wallFaceDark);
+                    ctx.fillStyle = faceGrad;
+                    ctx.fillRect(px, fy, cell, faceH);
+
+                    // Carved stone courses on the front wall face
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(px + 3, fy + 3, cell * 0.45, faceH * 0.42);
+                    ctx.strokeRect(px + cell * 0.5, fy + 3, cell * 0.45, faceH * 0.42);
+                    ctx.strokeRect(px + 8, fy + faceH * 0.5, cell * 0.7, faceH * 0.35);
+
+                    // Golden Balustrade Posts if this is the Elevated 3D Balcony Edge!
+                    if (isBalconyCliff) {
+                        ctx.fillStyle = '#fbbf24';
+                        ctx.fillRect(px, py + capH - 5, cell, 5);
+                        for (let bx = px + 8; bx < px + cell - 4; bx += 16) {
+                            ctx.fillStyle = '#fde68a';
+                            ctx.fillRect(bx, fy + 2, 6, faceH - 6);
+                        }
+                    } else {
+                        // Classic wooden baseboard trim along bottom of wall face
+                        ctx.fillStyle = '#451a03';
+                        ctx.fillRect(px, fy + faceH - 5, cell, 5);
+                        ctx.fillStyle = '#b45309';
+                        ctx.fillRect(px, fy + faceH - 5, cell, 1.5);
                     }
                 }
             }
+        }
 
-            // Royal Plush Carpet Runner inside each room
-            if (rw >= cell * 4) {
-                const padX = cell * 0.9;
-                const padY = cell * 1.4;
-                worldGfx.fillStyle(theme.carpetColor, 0.72);
-                worldGfx.fillRoundedRect(rx + padX, ry + padY, rw - padX * 2, rh - padY * 1.6, 10);
-                worldGfx.lineStyle(2, theme.carpetTrim, 0.75);
-                worldGfx.strokeRoundedRect(rx + padX + 4, ry + padY + 4, rw - padX * 2 - 8, rh - padY * 1.6 - 8, 8);
-            }
+        // 6. Render 3D Iron Grate Bars ('G') in front of the Locked Treasury Vault ('V')
+        for (let gy = 0; gy < H; gy++) {
+            for (let gx = 0; gx < W; gx++) {
+                if (grid[gy][gx] !== 'G') continue;
+                const px = gx * cell;
+                const py = gy * cell;
 
-            // Room Title Tag on the back wall
-            const roomLabels = ['🍽️ ЗАЛ №1', '👑 ЗАЛ №2', '🗝️ ЗАЛ №3'];
-            this.add.text(rx + rw / 2, ry - 14, roomLabels[idx % roomLabels.length], {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '12px',
-                fontStyle: '900',
-                color: '#fef08a',
-                stroke: '#0f172a',
-                strokeThickness: 3
-            }).setOrigin(0.5).setDepth(-10).setResolution(this.dpr);
-        });
+                // Shadow beneath the iron gate
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+                ctx.fillRect(px, py + cell * 0.65, cell, 14);
 
-        // Render Doorways between adjacent rooms
-        for (let gy = this.room.upperY1; gy <= this.room.upperY2; gy++) {
-            for (let gx = 1; gx < W - 1; gx++) {
-                if (grid[gy][gx] === '.') {
-                    worldGfx.fillStyle(theme.floorMain, 1);
-                    worldGfx.fillRect(gx * cell, gy * cell, cell, cell);
+                // Horizontal iron crossbars
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(px, py + 14, cell, 6);
+                ctx.fillRect(px, py + cell - 14, cell, 6);
+
+                // Vertical 3D metallic bars with specular shine
+                for (let bx = px + 7; bx < px + cell; bx += 12) {
+                    ctx.fillStyle = '#1e293b';
+                    ctx.fillRect(bx - 1, py + 6, 6, cell - 12);
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(bx, py + 6, 3, cell - 12);
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(bx, py + 6, 1, cell - 12);
                 }
             }
         }
 
-        // Render Decorative Pillars / Tables inside rooms
-        this.room.pillars.forEach((p) => {
-            const px = p.gx * cell;
-            const py = p.gy * cell;
-            worldGfx.fillStyle(0x1e1b4b, 1);
-            worldGfx.fillRoundedRect(px + 4, py + 4, cell - 8, cell - 8, 8);
-            worldGfx.lineStyle(3, 0xfbbf24, 0.8);
-            worldGfx.strokeRoundedRect(px + 4, py + 4, cell - 8, cell - 8, 8);
+        // 7. Bake Warm Torch & Burrow Glow Pools into the CanvasTexture
+        this.room.props.forEach((p) => {
+            if (p.type === 'torch_sconce' || p.type === 'candelabra_lit') {
+                const rad = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, cell * 1.85);
+                rad.addColorStop(0, 'rgba(251, 191, 36, 0.28)');
+                rad.addColorStop(0.5, 'rgba(245, 158, 11, 0.10)');
+                rad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+                ctx.fillStyle = rad;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, cell * 1.85, 0, Math.PI * 2);
+                ctx.fill();
+            }
         });
 
-        // --- B. RENDER THE CROSS-SECTION FLOOR SLAB («ТОЛЩА ПОЛА В РАЗРЕЗЕ») ---
-        const slabTopPx = slabY1 * cell;
-        const slabH = (slabY2 - slabY1 + 1) * cell;
+        ctx.restore();
+        canvasTex.refresh();
 
-        // Wooden baseboard & floorboards at the top of the slab
-        worldGfx.fillStyle(theme.beamColor, 1);
-        worldGfx.fillRect(cell, slabTopPx, (W - 2) * cell, 18);
-        worldGfx.lineStyle(2.5, 0xfde68a, 0.55);
-        worldGfx.strokeRect(cell, slabTopPx, (W - 2) * cell, 18);
+        this.add.image(-pad, -pad, texKey).setOrigin(0, 0).setDepth(1);
 
-        // Cross-section masonry bricks & earth layers between floor and underground burrow
-        worldGfx.fillStyle(0x3b1f0e, 1);
-        worldGfx.fillRect(cell, slabTopPx + 18, (W - 2) * cell, slabH - 18);
-
-        for (let bx = cell + 12; bx < (W - 2) * cell; bx += 48) {
-            worldGfx.fillStyle(0x572f18, 0.85);
-            worldGfx.fillRoundedRect(bx, slabTopPx + 24, 40, 18, 4);
-            worldGfx.fillRoundedRect(bx + 18, slabTopPx + 48, 40, 18, 4);
-        }
-
-        // --- C. RENDER THE UNDERGROUND BURROW NETWORK («ПОДЗЕМНАЯ НОРКА В РАЗРЕЗЕ») ---
-        for (let gy = burrowY1; gy < H; gy++) {
-            for (let gx = 1; gx < W - 1; gx++) {
-                if (grid[gy][gx] === 'U') {
-                    const tx = gx * cell;
-                    const ty = gy * cell;
-                    worldGfx.fillStyle(theme.tunnelFloor, 1);
-                    worldGfx.fillRoundedRect(tx - 2, ty - 2, cell + 4, cell + 4, 8);
-
-                    if ((gx + gy) % 2 === 0) {
-                        worldGfx.fillStyle(0x9a4e1c, 0.28);
-                        worldGfx.fillCircle(tx + cell * 0.5, ty + cell * 0.5, cell * 0.28);
-                    }
-                }
-            }
-        }
-
-        // Warm subterranean root archways & fairy lights along the burrow ceiling
-        const burrowCeilingY = burrowY1 * cell;
-        worldGfx.lineStyle(4, 0x451a03, 0.95);
-        worldGfx.beginPath();
-        worldGfx.moveTo(2 * cell, burrowCeilingY);
-        worldGfx.lineTo((W - 2) * cell, burrowCeilingY);
-        worldGfx.strokePath();
-
-        for (let gx = 3; gx <= W - 4; gx += 3) {
-            const lx = (gx + 0.5) * cell;
-            const ly = burrowCeilingY + 8;
-            // Glowing subterranean lantern bulb
-            worldGfx.fillStyle(0xfef08a, 0.22);
-            worldGfx.fillCircle(lx, ly + 8, 22);
-            worldGfx.fillStyle(0xfacc15, 0.95);
-            worldGfx.fillCircle(lx, ly + 4, 5);
-        }
-
-        // Layer Indicator Banner along the Floor Slab
-        this.add.text(mapPxW / 2, slabTopPx + slabH / 2, '⬇️ ПОДЗЕМНАЯ СЕТЬ НОРОК (МОНСТРЫ СЮДА НЕ ПРОЛЕЗУТ!) ⬇️', {
+        // Zone Callout Banners (so the player immediately sees the Elevated Balcony & Iron Vault!)
+        const balcCenterX = ((balconyBounds.x1 + balconyBounds.x2 + 1) * 0.5) * cell;
+        const balcTopY = balconyBounds.y1 * cell - 12;
+        this.add.text(balcCenterX, balcTopY, '👑 ВЫСОКИЙ 3D-БАЛКОН (ТОЛЬКО ЧЕРЕЗ НОРКУ!)', {
             fontFamily: 'Nunito, sans-serif',
             fontSize: '12px',
-            fontStyle: '900',
-            color: '#fde68a',
-            backgroundColor: 'rgba(30, 15, 6, 0.85)',
-            padding: { x: 10, y: 3 }
-        }).setOrigin(0.5).setDepth(-5).setResolution(this.dpr);
-    }
-
-    // =========================================================================
-    // 2. COZY HOME SANCTUARY («УЮТНЫЙ ДОМИК-НОРКА ПИ ВНИЗУ СЛЕВА»)
-    // =========================================================================
-
-    _buildCozyHomeSanctuary() {
-        const nest = this.room.homeNest;
-        this.homeNestVisual = this.add.container(nest.x, nest.y).setDepth(12);
-
-        const bg = this.add.graphics();
-        // Warm arched subterranean living room
-        bg.fillStyle(0x9a3412, 0.45);
-        bg.fillRoundedRect(-96, -54, 192, 104, 22);
-        bg.lineStyle(3.5, 0xfbbf24, 0.9);
-        bg.strokeRoundedRect(-96, -54, 192, 104, 22);
-
-        // Cozy braided rug on the burrow floor
-        bg.fillStyle(0xe11d48, 0.75);
-        bg.fillEllipse(0, 22, 145, 36);
-        bg.lineStyle(2, 0xfde047, 0.85);
-        bg.strokeEllipse(0, 22, 130, 28);
-
-        // Cute mini-sofa & warm floor lamp inside Pi's home burrow
-        bg.fillStyle(0x10b981, 1);
-        bg.fillRoundedRect(-76, -12, 48, 26, 8);
-        bg.fillStyle(0x34d399, 1);
-        bg.fillRoundedRect(-72, -22, 40, 14, 6);
-
-        const title = this.add.text(0, -40, '🏠 УЮТНАЯ НОРКА ПИ (СКЛАД ДОБЫЧИ)', {
-            fontFamily: 'Nunito, sans-serif',
-            fontSize: '11px',
             fontStyle: '900',
             color: '#fef08a',
-            stroke: '#451a03',
-            strokeThickness: 3.5
-        }).setOrigin(0.5).setResolution(this.dpr);
+            stroke: '#1e1b4b',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(25).setResolution(this.dpr);
 
-        this.homeQuotaLabel = this.add.text(0, 34, '', {
+        const vaultCenterX = ((vaultBounds.x1 + vaultBounds.x2 + 1) * 0.5) * cell;
+        const vaultTopY = vaultBounds.y1 * cell - 12;
+        this.add.text(vaultCenterX, vaultTopY, '🔒 СОКРОВИЩНИЦА ЗА РЕШЁТКОЙ (НЫРЯЙ В НОРКУ!)', {
             fontFamily: 'Nunito, sans-serif',
             fontSize: '12px',
             fontStyle: '900',
-            color: '#86efac',
-            stroke: '#052e16',
-            strokeThickness: 3.5
-        }).setOrigin(0.5).setResolution(this.dpr);
+            color: '#6ee7b7',
+            stroke: '#064e3b',
+            strokeThickness: 4
+        }).setOrigin(0.5).setDepth(25).setResolution(this.dpr);
 
-        // Container where delivered Giant Cheeses, Crowns, and Rescued Friends visibly pile up!
-        this.homeStashContainer = this.add.container(28, 4);
-
-        this.homeNestVisual.add([bg, title, this.homeStashContainer, this.homeQuotaLabel]);
-        this._refreshHomeQuotaLabel();
-    }
-
-    _refreshHomeQuotaLabel() {
-        if (!this.homeQuotaLabel) return;
-        const left = Math.max(0, (this.room.totalHaulables || 1) - (this.deliveredCount || 0));
-        if (left > 0) {
-            this.homeQuotaLabel.setText(`Утащи в норку ещё: ${left} шт.`);
-            this.homeQuotaLabel.setColor('#fde047');
-        } else {
-            this.homeQuotaLabel.setText('🎉 ВСЁ В НОРКЕ! ЗАБЕГАЙ СЮДА НА СЛЕД. ЭТАЖ!');
-            this.homeQuotaLabel.setColor('#4ade80');
+        if (secretRoom) {
+            const secCenterX = ((secretRoom.x1 + secretRoom.x2 + 1) * 0.5) * cell;
+            const secBotY = (secretRoom.y + 1) * cell + 10;
+            this.add.text(secCenterX, secBotY, '✨ ТАЙНАЯ КОМНАТА В СТЕНЕ', {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '11.5px',
+                fontStyle: '900',
+                color: '#bae6fd',
+                stroke: '#0f172a',
+                strokeThickness: 4
+            }).setOrigin(0.5).setDepth(25).setResolution(this.dpr);
         }
     }
 
-    // =========================================================================
-    // 3. VERTICAL BURROW CHUTES («АРОЧНЫЕ НОРКИ В ПЛИНТУСЕ И ЛАЗЫ ВНИЗ»)
-    // =========================================================================
+    _placeSvgWorldProps() {
+        (this.room.props || []).forEach((p) => {
+            const key = 'w_' + p.type;
+            if (!this.textures.exists(key)) return;
+            const spr = this.add.image(p.x, p.y, key)
+                .setDisplaySize(44, 44)
+                .setDepth(12 + (p.depthOffset || 0));
 
-    _buildBurrowChutes() {
-        this.chuteSprites = [];
-
-        this.room.chutes.forEach((ch) => {
-            const g = this.add.graphics().setDepth(-4);
-
-            // Vertical tunnel pipe cutting through the floor slab
-            const pipeW = 38;
-            const pipeH = ch.botY - ch.topY;
-            g.fillStyle(0x1c0d06, 0.92);
-            g.fillRoundedRect(ch.topX - pipeW / 2, ch.topY, pipeW, pipeH, 12);
-            g.lineStyle(3, ch.colorHex, 0.85);
-            g.strokeRoundedRect(ch.topX - pipeW / 2, ch.topY, pipeW, pipeH, 12);
-
-            // Cute wooden ladder rungs inside the vertical burrow chute
-            g.lineStyle(2.5, 0xd97706, 0.75);
-            for (let ry = ch.topY + 18; ry < ch.botY - 12; ry += 18) {
-                g.beginPath();
-                g.moveTo(ch.topX - 12, ry);
-                g.lineTo(ch.topX + 12, ry);
-                g.strokePath();
+            if (p.type === 'torch_sconce' || p.type === 'candelabra_lit') {
+                this.tweens.add({
+                    targets: spr,
+                    scaleX: spr.scaleX * 1.05,
+                    scaleY: spr.scaleY * 1.05,
+                    duration: 550 + Math.random() * 250,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
             }
-
-            // UPPER ENTRANCE: Classic "Tom & Jerry" Arched Baseboard Mouse-Hole!
-            const topArch = this.add.container(ch.topX, ch.topY).setDepth(9);
-            const archGfx = this.add.graphics();
-            archGfx.fillStyle(ch.colorHex, 0.22);
-            archGfx.fillCircle(0, 0, 28);
-            archGfx.fillStyle(0x140904, 1);
-            archGfx.fillRoundedRect(-18, -22, 36, 34, { tl: 18, tr: 18, bl: 4, br: 4 });
-            archGfx.lineStyle(3.5, ch.colorHex, 1);
-            archGfx.strokeRoundedRect(-18, -22, 36, 34, { tl: 18, tr: 18, bl: 4, br: 4 });
-
-            const topBadge = this.add.text(0, -28, `🕳️ НОРКА #${ch.label}`, {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10.5px',
-                fontStyle: '900',
-                color: '#ffffff',
-                backgroundColor: ch.colorCss,
-                padding: { x: 5, y: 1 }
-            }).setOrigin(0.5).setResolution(this.dpr);
-            topArch.add([archGfx, topBadge]);
-
-            // LOWER EXIT: Subterranean Chute Landing inside the burrow
-            const botLanding = this.add.container(ch.botX, ch.botY).setDepth(9);
-            const botGfx = this.add.graphics();
-            botGfx.fillStyle(ch.colorHex, 0.25);
-            botGfx.fillEllipse(0, 6, 44, 22);
-            botGfx.lineStyle(2.5, ch.colorHex, 0.9);
-            botGfx.strokeEllipse(0, 6, 44, 22);
-
-            const botBadge = this.add.text(0, 18, `🔼 ЛАЗ #${ch.label}`, {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10px',
-                fontStyle: '900',
-                color: '#fef08a',
-                stroke: '#1e1b4b',
-                strokeThickness: 3
-            }).setOrigin(0.5).setResolution(this.dpr);
-            botLanding.add([botGfx, botBadge]);
-
-            this.chuteSprites.push({ chute: ch, topArch, botLanding });
         });
     }
 
     // =========================================================================
-    // 4. LASER GATES & UNDERGROUND SABOTAGE LEVERS («ПОДЗЕМНЫЙ САБОТАЖ ⚡»)
+    // 2. BURROW NETWORK VISUALS + HOLD RING & UNDERGROUND PREVIEW TRAIL
     // =========================================================================
 
-    _buildLaserGatesAndSabotageLevers() {
-        this.laserGateObjs = [];
-        (this.room.laserGates || []).forEach((lg) => {
-            const g = this.add.graphics().setDepth(14);
-            const label = this.add.text(lg.x, lg.y1 - 10, '⚡ ЛУЧ', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10px',
-                fontStyle: '900',
-                color: '#fda4af',
-                stroke: '#0f172a',
-                strokeThickness: 3
-            }).setOrigin(0.5).setDepth(15).setResolution(this.dpr);
-
-            const obj = { data: lg, gfx: g, label };
-            this._redrawLaserGate(obj);
-            this.laserGateObjs.push(obj);
+    _buildBurrowNetworkVisuals() {
+        // Subtle permanent floor connection lines between paired burrows
+        const connGfx = this.add.graphics().setDepth(4);
+        this.room.burrowPairs.forEach((bp) => {
+            connGfx.lineStyle(2.5, bp.palette.hex, 0.22);
+            const steps = 16;
+            for (let i = 0; i < steps; i += 2) {
+                const t1 = i / steps;
+                const t2 = (i + 1) / steps;
+                connGfx.lineBetween(
+                    Phaser.Math.Linear(bp.a.x, bp.b.x, t1),
+                    Phaser.Math.Linear(bp.a.y, bp.b.y, t1),
+                    Phaser.Math.Linear(bp.a.x, bp.b.x, t2),
+                    Phaser.Math.Linear(bp.a.y, bp.b.y, t2)
+                );
+            }
         });
 
-        this.leverObjs = [];
-        (this.room.sabotageLevers || []).forEach((lv) => {
-            const c = this.add.container(lv.x, lv.y).setDepth(14);
-            const base = this.add.graphics();
-            base.fillStyle(0x334155, 1);
-            base.fillRoundedRect(-18, 2, 36, 12, 5);
-            base.lineStyle(2.5, 0x38bdf8, 1);
-            base.strokeRoundedRect(-18, 2, 36, 12, 5);
+        this.holeVisuals = this.room.holes.map((h) => {
+            const c = this.add.container(h.x, h.y).setDepth(14);
 
-            const handle = this.add.text(0, -10, '🕹️', {
-                fontSize: '24px'
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            const tag = this.add.text(0, -28, '⚡ РЫЧАГ ТОРТА!', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10px',
-                fontStyle: '900',
-                color: '#38bdf8',
-                stroke: '#0f172a',
-                strokeThickness: 3
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            c.add([base, handle, tag]);
-
-            // Also draw the hanging Ceiling Cake Trap in the upper room above this lever!
-            const trapIcon = this.add.text(lv.trapTargetX, this.room.upperY1 * this.room.cell + 6, '🎂⛓️', {
-                fontSize: '22px'
-            }).setOrigin(0.5).setDepth(18).setResolution(this.dpr);
-
-            this.leverObjs.push({ data: lv, container: c, handle, tag, trapIcon });
-        });
-    }
-
-    _redrawLaserGate(obj) {
-        const { data, gfx, label } = obj;
-        gfx.clear();
-        if (!data.active) {
-            label.setText('🔓 ОТКРЫТО');
-            label.setColor('#86efac');
-            return;
-        }
-        gfx.lineStyle(6, data.color, 0.35);
-        gfx.lineBetween(data.x, data.y1, data.x, data.y2);
-        gfx.lineStyle(2.5, 0xffffff, 0.95);
-        gfx.lineBetween(data.x, data.y1, data.x, data.y2);
-    }
-
-    _triggerSabotageLever(leverObj) {
-        if (leverObj.data.used) return;
-        leverObj.data.used = true;
-        leverObj.tag.setText('✅ СРАБОТАЛО!');
-        leverObj.tag.setColor('#4ade80');
-        leverObj.handle.setAngle(35);
-
-        bus.emit(SFX.CHEST_OPEN);
-        this._playMusicalChime([440, 554.37, 659.25, 880], 0.06, 'square');
-
-        // 1. Disable all laser gates!
-        this.laserGateObjs.forEach((lg) => {
-            lg.data.active = false;
-            this._redrawLaserGate(lg);
-        });
-
-        // 2. Drop the giant Ceiling Cream Cake in the upper room!
-        const tx = leverObj.data.trapTargetX;
-        const ty = leverObj.data.trapTargetY;
-        if (leverObj.trapIcon) {
+            // Outer pulsing magic aura
+            const glow = this.add.circle(0, 0, 26, h.colorHex, 0.24);
             this.tweens.add({
-                targets: leverObj.trapIcon,
-                y: ty,
-                scale: 1.5,
-                duration: 340,
-                ease: 'Cubic.easeIn',
-                onComplete: () => {
-                    leverObj.trapIcon.setText('💥🎂');
-                    this._splatCakeAt(tx, ty, true);
-                    this.time.delayedCall(900, () => leverObj.trapIcon?.destroy());
-                }
-            });
-        }
-        this._showToast('⚡ Подземный рычаг отключил лучи и уронил торт сверху!', '#38bdf8');
-    }
-
-    // =========================================================================
-    // 5. SHADOW CUSHIONS, CARRYABLE PRIZES, GOLDEN KEY & CAPTIVE PETS
-    // =========================================================================
-
-    _buildShadowCushions() {
-        this.shadowRects = [];
-        (this.room.shadowZones || []).forEach((sz) => {
-            const g = this.add.graphics().setDepth(2);
-            g.fillStyle(0x311042, 0.72);
-            g.fillCircle(sz.x, sz.y, sz.r);
-            g.lineStyle(2.5, 0xc084fc, 0.7);
-            g.strokeCircle(sz.x, sz.y, sz.r);
-
-            this.add.text(sz.x, sz.y, '🌙 ТЕНЬ', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10px',
-                fontStyle: '900',
-                color: '#e9d5ff'
-            }).setOrigin(0.5).setDepth(3).setResolution(this.dpr);
-
-            this.shadowRects.push(sz);
-        });
-    }
-
-    _buildLootAndHaulables() {
-        // Small instant cheese crumbs
-        this.cheeseSprites = this.room.cheeses.map((ch) => {
-            const img = this.add.image(ch.x, ch.y, 'd_cheese')
-                .setDisplaySize(26, 22)
-                .setDepth(10);
-            this.tweens.add({
-                targets: img,
-                y: ch.y - 4,
-                duration: 850 + Math.random() * 250,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-            return { ...ch, sprite: img, collected: false };
-        });
-
-        // Golden Key (if present on this floor)
-        this.goldenKeyObj = null;
-        if (this.room.goldenKey) {
-            const gk = this.room.goldenKey;
-            const c = this.add.container(gk.x, gk.y).setDepth(16);
-            const glow = this.add.graphics();
-            glow.fillStyle(0xfacc15, 0.32);
-            glow.fillCircle(0, 0, 24);
-            const img = this.add.image(0, 0, 'd_key').setDisplaySize(44, 24);
-            const lbl = this.add.text(0, -24, '🗝️ КЛЮЧ СТРАЖА', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10.5px',
-                fontStyle: '900',
-                color: '#fef08a',
-                stroke: '#0f172a',
-                strokeThickness: 3.5
-            }).setOrigin(0.5).setResolution(this.dpr);
-            c.add([glow, img, lbl]);
-            this.tweens.add({
-                targets: c,
-                y: gk.y - 6,
-                duration: 750,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-            this.goldenKeyObj = { ...gk, container: c };
-        }
-
-        // Giant Carryable Prizes («Утащи в норку!»)
-        this.carryableObjs = (this.room.carryables || []).map((pr) => {
-            const c = this.add.container(pr.x, pr.y).setDepth(15);
-            const pedestal = this.add.graphics();
-            pedestal.fillStyle(0xfacc15, 0.22);
-            pedestal.fillCircle(0, 4, 26);
-            pedestal.lineStyle(2.5, 0xfde047, 0.85);
-            pedestal.strokeCircle(0, 4, 26);
-
-            const icon = this.add.text(0, -2, pr.icon, {
-                fontSize: '30px'
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            const tag = this.add.text(0, -28, `${pr.name} (+${pr.value}🧀)`, {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '10.5px',
-                fontStyle: '900',
-                color: '#fef08a',
-                stroke: '#0f172a',
-                strokeThickness: 3.5
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            const sub = this.add.text(0, 24, '🏃‍♀️ УТАЩИ В НОРКУ!', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '9.5px',
-                fontStyle: '900',
-                color: '#fde68a',
-                backgroundColor: 'rgba(15, 23, 42, 0.82)',
-                padding: { x: 4, y: 1 }
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            c.add([pedestal, icon, tag, sub]);
-            this.tweens.add({
-                targets: icon,
-                y: -7,
-                duration: 850,
+                targets: glow,
+                scale: 1.22,
+                alpha: 0.42,
+                duration: 880,
                 yoyo: true,
                 repeat: -1,
                 ease: 'Sine.easeInOut'
             });
 
-            return { ...pr, container: c, pickedUp: false };
-        });
+            // 3D Stone-Rimmed Archway Burrow Mouth
+            const rim = this.add.graphics();
+            rim.fillStyle(0x09040e, 1);
+            rim.fillEllipse(0, 2, 38, 28);
+            rim.lineStyle(4, h.colorHex, 1);
+            rim.strokeEllipse(0, 2, 38, 28);
+            rim.lineStyle(1.5, 0xffffff, 0.65);
+            rim.strokeEllipse(0, 0, 32, 22);
 
-        // Captive Pet Friends («Спаси и уведи в норку!»)
-        this.petNodes = (this.room.captivePets || []).map((pet) => {
-            const c = this.add.container(pet.x, pet.y).setDepth(16);
-            const bubble = this.add.graphics();
-            bubble.fillStyle(pet.color, 0.24);
-            bubble.fillCircle(0, 0, 27);
-            bubble.lineStyle(3, pet.locked ? 0xfacc15 : 0xffffff, 0.9);
-            bubble.strokeCircle(0, 0, 27);
-
-            const texKey = this.textures.exists(pet.spriteKey) ? pet.spriteKey : 'd_pi';
-            const spr = this.add.image(0, 2, texKey).setScale(0.24);
-
-            const tag = this.add.text(0, -33, `${pet.badge} ${pet.name}`, {
+            const badge = this.add.text(0, -22, `🕳️ #${h.pairNum}`, {
                 fontFamily: 'Nunito, sans-serif',
                 fontSize: '11px',
                 fontStyle: '900',
                 color: '#ffffff',
-                stroke: '#0f172a',
-                strokeThickness: 3.5
+                backgroundColor: h.colorCss,
+                padding: { x: 5, y: 1 }
             }).setOrigin(0.5).setResolution(this.dpr);
 
-            const lockBadge = this.add.text(0, 25, pet.locked ? '🔒 НУЖЕН КЛЮЧ 🗝️' : '🆘 СПАСИ В НОРКУ!', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '9.5px',
-                fontStyle: '900',
-                color: pet.locked ? '#fde047' : '#a7f3d0',
-                backgroundColor: 'rgba(15,23,42,0.85)',
-                padding: { x: 4, y: 1 }
-            }).setOrigin(0.5).setResolution(this.dpr);
-
-            c.add([bubble, spr, tag, lockBadge]);
-            this.tweens.add({
-                targets: spr,
-                y: -3,
-                duration: 680,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
-
-            return { ...pet, container: c, bubble, lockBadge, pickedUp: false };
+            c.add([glow, rim, badge]);
+            return { data: h, container: c, glow, rim, badge };
         });
 
-        // Boosters
-        this.boosterSprites = (this.room.boosters || []).map((b) => {
-            const c = this.add.container(b.x, b.y).setDepth(14);
-            const g = this.add.graphics();
-            g.fillStyle(b.color, 0.28);
-            g.fillCircle(0, 0, 18);
-            g.lineStyle(2, 0xffffff, 0.85);
-            g.strokeCircle(0, 0, 18);
-            const t = this.add.text(0, 0, b.icon, { fontSize: '19px' }).setOrigin(0.5).setResolution(this.dpr);
-            c.add([g, t]);
-            return { ...b, container: c, collected: false };
-        });
+        // Dynamic graphics for Hold-at-Burrow progress ring & destination preview beam
+        this.burrowPreviewGfx = this.add.graphics().setDepth(45);
+        this.burrowHoldRingGfx = this.add.graphics().setDepth(46);
+        this.burrowTargetLabel = this.add.text(0, 0, '', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '12.5px',
+            fontStyle: '900',
+            color: '#fef08a',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            padding: { x: 8, y: 3 }
+        }).setOrigin(0.5).setDepth(47).setVisible(false).setResolution(this.dpr);
+    }
 
-        this.thrownCakes = [];
+    _buildShadowFlowers() {
+        this.shadowZones = (this.room.shadowZones || []).map((sz) => {
+            const c = this.add.container(sz.x, sz.y).setDepth(8);
+            const pool = this.add.circle(0, 0, sz.r, 0x3b0764, 0.55)
+                .setStrokeStyle(2, 0xc084fc, 0.65);
+            const flower = this.add.image(0, -2, 'w_moonflower').setDisplaySize(38, 38);
+            c.add([pool, flower]);
+            return { ...sz, container: c };
+        });
     }
 
     // =========================================================================
-    // 6. PLAYER (PI) + OVERHEAD CARRIED ITEM + NEAREST BURROW GUIDE ARROW
+    // 3. OBJECTIVES: GOLDEN KEY, CAGED FRIEND (`cage.svg`), CHESTS & STAIRS
+    // =========================================================================
+
+    _buildObjectivesAndLoot() {
+        // 1. Golden Key on the Elevated 3D Balcony
+        const gk = this.room.goldenKey;
+        const keyContainer = this.add.container(gk.x, gk.y).setDepth(18);
+        const keyGlow = this.add.circle(0, 0, 24, 0xfacc15, 0.3);
+        const keySpr = this.add.image(0, 0, 'd_key').setDisplaySize(46, 26);
+        const keyLbl = this.add.text(0, -24, 'КЛЮЧ', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '11px',
+            fontStyle: '900',
+            color: '#fef08a',
+            stroke: '#0f172a',
+            strokeThickness: 3.5
+        }).setOrigin(0.5).setResolution(this.dpr);
+        keyContainer.add([keyGlow, keySpr, keyLbl]);
+        this.tweens.add({
+            targets: keyContainer,
+            y: gk.y - 6,
+            duration: 760,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+        this.keyObj = { ...gk, container: keyContainer, collected: false };
+
+        // 2. Captive Pet Friend inside a real `w_cage` SVG inside the Iron-Barred Vault!
+        this.petObjs = (this.room.captivePets || []).map((pet) => {
+            const c = this.add.container(pet.x, pet.y).setDepth(18);
+            const aura = this.add.circle(0, 0, 28, 0x10b981, 0.25);
+            const friendTex = this.textures.exists(pet.spriteKey) ? pet.spriteKey : 'd_pi';
+            const friendSpr = this.add.image(0, 2, friendTex).setScale(0.24);
+            const cageSpr = this.add.image(0, 0, 'w_cage').setDisplaySize(54, 54);
+            const lockSpr = this.add.image(16, 14, 'w_lock').setDisplaySize(22, 22);
+            const nameLbl = this.add.text(0, -34, pet.name, {
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '11.5px',
+                fontStyle: '900',
+                color: '#a7f3d0',
+                stroke: '#064e3b',
+                strokeThickness: 4
+            }).setOrigin(0.5).setResolution(this.dpr);
+
+            c.add([aura, friendSpr, cageSpr, lockSpr, nameLbl]);
+            return { ...pet, container: c, cageSpr, lockSpr, friendSpr, rescued: false };
+        });
+
+        // 3. Treasure Chests (`w_chest_closed` -> `w_chest_open`)
+        this.chestObjs = (this.room.chests || []).map((ch) => {
+            const spr = this.add.image(ch.x, ch.y, 'w_chest_closed')
+                .setDisplaySize(44, 40)
+                .setDepth(16);
+            return { ...ch, sprite: spr, opened: false };
+        });
+
+        // 4. Cheese Wedges (`d_cheese`)
+        this.cheeseObjs = (this.room.cheeses || []).map((ch) => {
+            const spr = this.add.image(ch.x, ch.y, 'd_cheese')
+                .setDisplaySize(26, 22)
+                .setDepth(15);
+            return { ...ch, sprite: spr, collected: false };
+        });
+
+        // 5. Exit Stairs (`w_stairs`) — locked until the Captive Friend is rescued!
+        const ex = this.room.exit;
+        this.exitContainer = this.add.container(ex.x, ex.y).setDepth(16);
+        this.exitGlow = this.add.circle(0, 0, 30, 0xf43f5e, 0.25)
+            .setStrokeStyle(3, 0xf43f5e, 0.85);
+        this.exitStairsSpr = this.add.image(0, 0, 'w_stairs').setDisplaySize(54, 58);
+        this.exitLockSpr = this.add.image(0, 0, 'w_lock').setDisplaySize(26, 26);
+        this.exitBadge = this.add.text(0, -36, 'ВЫХОД ЗАКРЫТ', {
+            fontFamily: 'Nunito, sans-serif',
+            fontSize: '11px',
+            fontStyle: '900',
+            color: '#fda4af',
+            stroke: '#0f172a',
+            strokeThickness: 3.5
+        }).setOrigin(0.5).setResolution(this.dpr);
+        this.exitContainer.add([this.exitGlow, this.exitStairsSpr, this.exitLockSpr, this.exitBadge]);
+
+        this.thrownPies = [];
+    }
+
+    _unlockExitStairs() {
+        if (this.exitUnlocked) return;
+        this.exitUnlocked = true;
+        this.exitGlow.setFillStyle(0x10b981, 0.35);
+        this.exitGlow.setStrokeStyle(3.5, 0x34d399, 1);
+        if (this.exitLockSpr) {
+            this.exitLockSpr.setTexture('w_unlock');
+            this.tweens.add({
+                targets: this.exitLockSpr,
+                y: -25,
+                alpha: 0,
+                duration: 600
+            });
+        }
+        this.exitBadge.setText('ВЫХОД ОТКРЫТ!');
+        this.exitBadge.setColor('#4ade80');
+    }
+
+    // =========================================================================
+    // 4. PLAYER (PI) & FOLLOWER TRAIN
     // =========================================================================
 
     _buildPlayer() {
@@ -839,96 +734,296 @@ export class SneakScene extends Phaser.Scene {
         const sx = this.room.spawn.x;
         const sy = this.room.spawn.y;
 
-        this.playerHalo = this.add.graphics().setDepth(21);
-        this._redrawPlayerHalo(0x38bdf8);
+        this.playerHalo = this.add.circle(sx, sy + 10, 18, 0x38bdf8, 0.25)
+            .setStrokeStyle(2, 0x38bdf8, 0.85)
+            .setDepth(28);
 
         this.player = this.add.image(sx, sy, this.playerSkinBase)
             .setScale(0.29)
-            .setDepth(22);
-
-        // Visual indicator for the Giant Treasure or Pet Friend currently being hauled to the burrow!
-        this.carriedVisual = this.add.container(sx, sy - 34).setDepth(25).setVisible(false);
-        this.carriedIconText = this.add.text(0, 0, '🧀', { fontSize: '26px' }).setOrigin(0.5).setResolution(this.dpr);
-        this.carriedLabelText = this.add.text(0, -20, 'БЕГИ В НОРКУ! 🕳️', {
-            fontFamily: 'Nunito, sans-serif',
-            fontSize: '10.5px',
-            fontStyle: '900',
-            color: '#fef08a',
-            backgroundColor: '#be185d',
-            padding: { x: 6, y: 2 }
-        }).setOrigin(0.5).setResolution(this.dpr);
-        this.carriedVisual.add([this.carriedIconText, this.carriedLabelText]);
-
-        // Dynamic guide arrow pointing to the nearest Mouse-Hole when Pi is carrying loot!
-        this.burrowGuideArrow = this.add.graphics().setDepth(24).setVisible(false);
+            .setDepth(30);
 
         this.playerFacing = { x: 1, y: 0 };
         this.walkAnimTimer = 0;
-    }
+        this.playerTrail = [{ x: sx, y: sy }];
 
-    _redrawPlayerHalo(colorHex) {
-        this.playerHalo.clear();
-        this.playerHalo.fillStyle(colorHex, 0.25);
-        this.playerHalo.fillEllipse(0, 0, 44, 22);
-        this.playerHalo.lineStyle(2, colorHex, 0.8);
-        this.playerHalo.strokeEllipse(0, 0, 44, 22);
+        // Follower sprites for friends rescued in this run
+        this.followerSprites = this.rescuedFollowers.slice(-4).map((fKey) => {
+            const tex = this.textures.exists(fKey) ? fKey : 'd_pi';
+            return this.add.image(sx, sy, tex).setScale(0.21).setDepth(29);
+        });
     }
 
     // =========================================================================
-    // 7. DAUGHTER'S HAND-DRAWN MONSTERS + CEILING FOOTSTEP RIPPLES («ТОП-ТОП»)
+    // 5. DAUGHTER'S HAND-DRAWN MONSTERS & DOTTED PATROL ROUTES
     // =========================================================================
+
+    _buildPatrolTrails() {
+        const g = this.add.graphics().setDepth(5);
+        this.room.monsters.forEach((m) => {
+            const pts = m.waypoints;
+            if (!pts || pts.length < 2) return;
+            for (let i = 0; i < pts.length; i++) {
+                const a = pts[i];
+                const b = pts[(i + 1) % pts.length];
+                const dist = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+                const steps = Math.max(2, Math.floor(dist / 22));
+                for (let s = 0; s < steps; s++) {
+                    const t = s / steps;
+                    g.fillStyle(0xfacc15, 0.22);
+                    g.fillCircle(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, 2.2);
+                }
+            }
+        });
+    }
 
     _buildMonsters() {
         this.monsters = this.room.monsters.map((m) => {
-            const coneGfx = this.add.graphics().setDepth(13);
-            const sprKey = this.textures.exists(m.spriteKey) ? m.spriteKey : 'd_zombie';
-            const sprite = this.add.image(m.x, m.y, sprKey)
-                .setScale(m.scale || 0.31)
-                .setDepth(19);
+            const coneGfx = this.add.graphics().setDepth(20);
+            const shadow = this.add.ellipse(m.x, m.y + 18, 38, 14, 0x000000, 0.38).setDepth(29);
+            const tex = this.textures.exists(m.spriteKey) ? m.spriteKey : 'd_cat';
+            const sprite = this.add.image(m.x, m.y, tex)
+                .setScale(m.scale || 0.33)
+                .setDepth(31);
 
-            const statusBadge = this.add.text(m.x, m.y - 44, '', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '15px',
-                fontStyle: '900',
-                color: '#fef08a',
-                stroke: '#000000',
-                strokeThickness: 4
-            }).setOrigin(0.5).setDepth(26).setResolution(this.dpr);
+            const badgeSpr = this.add.image(m.x, m.y - 42, 'w_badge_alert')
+                .setDisplaySize(28, 28)
+                .setDepth(36)
+                .setVisible(false);
 
             return {
                 cfg: m,
                 x: m.x,
                 y: m.y,
-                vx: 0,
-                vy: 0,
                 facingRad: 0,
                 wpIndex: 1 % m.waypoints.length,
-                state: 'patrol', // 'patrol' | 'alert' | 'chase' | 'cake_blind' | 'wall_bonk'
+                state: 'patrol', // 'patrol' | 'alert' | 'chase' | 'blind' | 'confused'
                 suspicion: 0,
                 investigateTarget: null,
                 investigateUntil: 0,
                 blindUntil: 0,
-                bonkUntil: 0,
-                stepTimer: 0,
+                confusedUntil: 0,
                 sprite,
+                shadow,
                 coneGfx,
-                statusBadge
+                badgeSpr
             };
         });
     }
 
+    _setMonsterBadge(m, badgeKey) {
+        if (!badgeKey) {
+            m.badgeSpr.setVisible(false);
+            return;
+        }
+        const tex = 'w_' + badgeKey;
+        if (this.textures.exists(tex)) {
+            m.badgeSpr.setTexture(tex).setDisplaySize(28, 28).setVisible(true);
+        }
+    }
+
     // =========================================================================
-    // 8. GLOSSY 3D TOUCH CONTROLS & HUD
+    // 6. HOLD-AT-BURROW MECHANIC («НАЖАТЬ В НОРКЕ, ЗАДЕРЖАТЬ — И ПОПАСТЬ!»)
+    // =========================================================================
+
+    _findNearestBurrowHole() {
+        if (!this.player) return null;
+        let best = null;
+        let bestD = this.room.cell * 0.92;
+        for (const h of this.room.holes) {
+            const d = Math.hypot(this.player.x - h.x, this.player.y - h.y);
+            if (d < bestD) {
+                bestD = d;
+                best = h;
+            }
+        }
+        return best;
+    }
+
+    _updateBurrowHoldMechanic(time, dt) {
+        if (this.state !== 'play') return;
+
+        const nearHole = this._findNearestBurrowHole();
+        if (nearHole !== this.activeNearHole) {
+            this.activeNearHole = nearHole;
+            this.selectedTargetIdx = 0;
+        }
+
+        const isHolding = this.holeHoldDown || (this.keys?.space?.isDown ?? false);
+        if (!isHolding) {
+            this.holeHoldArmed = true;
+        }
+
+        this._updateBurrowDomButton(nearHole, isHolding);
+
+        if (!nearHole || !isHolding || !this.holeHoldArmed) {
+            if (this.holeHoldMs > 0) {
+                this.holeHoldMs = 0;
+                this.player.setScale(0.29).setAlpha(1);
+            }
+            this.burrowHoldRingGfx.clear();
+            this.burrowPreviewGfx.clear();
+            this.burrowTargetLabel.setVisible(false);
+
+            // Even when not holding yet, if standing right by a burrow, show a faint preview line to its primary exit
+            if (nearHole && nearHole.targets?.length) {
+                const dest = nearHole.targets[this.selectedTargetIdx % nearHole.targets.length];
+                this.burrowPreviewGfx.lineStyle(3, nearHole.colorHex, 0.45);
+                this.burrowPreviewGfx.lineBetween(nearHole.x, nearHole.y, dest.x, dest.y);
+                this.burrowPreviewGfx.strokeCircle(dest.x, dest.y, 22);
+            }
+            return;
+        }
+
+        // Allow switching between burrow branches with the joystick while holding!
+        if (nearHole.targets.length > 1 && time > this.branchSwitchCooldown) {
+            const jx = this.joyVec?.x || 0;
+            const jy = this.joyVec?.y || 0;
+            if (Math.hypot(jx, jy) > 0.55) {
+                // Pick the target most aligned with the joystick direction
+                let bestIdx = 0;
+                let bestDot = -Infinity;
+                nearHole.targets.forEach((t, idx) => {
+                    const dx = t.x - nearHole.x;
+                    const dy = t.y - nearHole.y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    const dot = (dx / len) * jx + (dy / len) * jy;
+                    if (dot > bestDot) {
+                        bestDot = dot;
+                        bestIdx = idx;
+                    }
+                });
+                if (bestIdx !== this.selectedTargetIdx) {
+                    this.selectedTargetIdx = bestIdx;
+                    this.branchSwitchCooldown = time + 220;
+                    this._playMusicalChime([659.25], 0.04, 'sine');
+                }
+            }
+        }
+
+        // Accumulate Hold Progress Ring (faster if fast_burrow perk or Cloud friend is rescued!)
+        const holdRequiredMs = this.runPerks.fast_burrow ? HOLD_BURROW_MS * 0.58 : HOLD_BURROW_MS;
+        this.holeHoldMs += dt * 1000;
+        const progress = Math.min(1, this.holeHoldMs / holdRequiredMs);
+
+        // Tuck Pi into the mouth of the burrow while holding (safe from monsters after 15% hold!)
+        this.player.x = Phaser.Math.Linear(this.player.x, nearHole.x, 0.25);
+        this.player.y = Phaser.Math.Linear(this.player.y, nearHole.y, 0.25);
+        this.player.setScale(0.29 * (1 - progress * 0.35));
+
+        const targetHole = nearHole.targets[this.selectedTargetIdx % nearHole.targets.length];
+
+        // 1. Draw the Glowing Progress Ring around the Burrow Mouth
+        this.burrowHoldRingGfx.clear();
+        this.burrowHoldRingGfx.lineStyle(6, 0x0f172a, 0.85);
+        this.burrowHoldRingGfx.strokeCircle(nearHole.x, nearHole.y, 32);
+
+        this.burrowHoldRingGfx.lineStyle(5, 0xfef08a, 1);
+        this.burrowHoldRingGfx.beginPath();
+        this.burrowHoldRingGfx.arc(
+            nearHole.x,
+            nearHole.y,
+            32,
+            -Math.PI / 2,
+            -Math.PI / 2 + Math.PI * 2 * progress
+        );
+        this.burrowHoldRingGfx.strokePath();
+
+        // 2. Draw the Glowing Underground Path & Target Highlight
+        this.burrowPreviewGfx.clear();
+        if (targetHole) {
+            this.burrowPreviewGfx.lineStyle(4, nearHole.colorHex, 0.88);
+            const steps = 14;
+            for (let i = 0; i < steps; i += 2) {
+                const t1 = i / steps;
+                const t2 = (i + 1) / steps;
+                this.burrowPreviewGfx.lineBetween(
+                    Phaser.Math.Linear(nearHole.x, targetHole.x, t1),
+                    Phaser.Math.Linear(nearHole.y, targetHole.y, t1),
+                    Phaser.Math.Linear(nearHole.x, targetHole.x, t2),
+                    Phaser.Math.Linear(nearHole.y, targetHole.y, t2)
+                );
+            }
+            this.burrowPreviewGfx.fillStyle(nearHole.colorHex, 0.32);
+            this.burrowPreviewGfx.fillCircle(targetHole.x, targetHole.y, 28 + Math.sin(time * 0.015) * 4);
+            this.burrowPreviewGfx.lineStyle(3.5, 0xfef08a, 1);
+            this.burrowPreviewGfx.strokeCircle(targetHole.x, targetHole.y, 28);
+
+            this.burrowTargetLabel
+                .setPosition(targetHole.x, targetHole.y - 36)
+                .setText(`🎯 ВЫХОД: ${targetHole.hint}`)
+                .setVisible(true);
+        }
+
+        // 3. Complete Hold -> Squeeze through the Burrow!
+        if (progress >= 1 && targetHole) {
+            this._enterBurrowAndTravel(nearHole, targetHole);
+        }
+    }
+
+    _enterBurrowAndTravel(fromHole, toHole) {
+        this.holeHoldMs = 0;
+        this.holeHoldArmed = false;
+        this.burrowHoldRingGfx.clear();
+        this.burrowPreviewGfx.clear();
+        this.burrowTargetLabel.setVisible(false);
+
+        this.state = 'squeeze';
+        bus.emit(SFX.DASH);
+        this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.05, 'sine');
+
+        // Any monster chasing Pi loses track immediately!
+        this.monsters.forEach((m) => {
+            if (m.state === 'chase' || m.state === 'alert') {
+                m.state = 'confused';
+                m.confusedUntil = this.time.now + 2800;
+                m.suspicion = 0;
+                this._setMonsterBadge(m, 'badge_sleep');
+            }
+        });
+
+        // Underground carpet-bulge ripple particle trail from `fromHole` to `toHole`
+        const ripple = this.add.circle(fromHole.x, fromHole.y, 16, fromHole.colorHex, 0.65)
+            .setStrokeStyle(3, 0xfef08a, 0.95)
+            .setDepth(27);
+
+        this.tweens.add({
+            targets: [this.player, ripple],
+            x: toHole.x,
+            y: toHole.y,
+            duration: SQUEEZE_TRAVEL_MS,
+            ease: 'Cubic.easeInOut',
+            onUpdate: () => {
+                this.playerHalo.setPosition(this.player.x, this.player.y + 10);
+            },
+            onComplete: () => {
+                ripple.destroy();
+                this.player.setScale(0.29).setAlpha(1);
+                this.state = 'play';
+                this.invulnerableUntil = Math.max(this.invulnerableUntil, this.time.now + 750);
+
+                if (this.runPerks.fast_burrow) {
+                    this.turboUntil = Math.max(this.turboUntil, this.time.now + 3000);
+                }
+
+                // Pop-out sparkle ring
+                const popRing = this.add.circle(toHole.x, toHole.y, 10, 0xfef08a, 0.45).setDepth(27);
+                this.tweens.add({
+                    targets: popRing,
+                    radius: 38,
+                    alpha: 0,
+                    duration: 320,
+                    onComplete: () => popRing.destroy()
+                });
+            }
+        });
+    }
+
+    // =========================================================================
+    // 7. GLOSSY 3D TOUCH CONTROLS & HUD (Snowball Fight Style)
     // =========================================================================
 
     _mountDomControlsAndHud() {
         this._unmountDomControls();
-
-        const isHidden = () => {
-            if (this._isPlayerInBurrow()) return true;
-            if (this.time.now < this.activeBoosters.cloak) return true;
-            return this._isInsideShadowCushion(this.player.x, this.player.y);
-        };
 
         const ui = document.createElement('div');
         ui.id = 'sneak-touch-ui';
@@ -956,17 +1051,17 @@ export class SneakScene extends Phaser.Scene {
                 }
                 .sneak-pill {
                     pointer-events: auto;
-                    background: rgba(15, 10, 32, 0.86);
+                    background: rgba(15, 10, 30, 0.88);
                     border: 2px solid rgba(250, 204, 21, 0.55);
                     border-radius: 999px;
-                    padding: 5px 13px;
+                    padding: 5px 14px;
                     color: #fff;
                     font-weight: 900;
-                    font-size: clamp(12px, 2.7vw, 15px);
+                    font-size: clamp(12px, 2.6vw, 15px);
                     display: flex;
                     align-items: center;
                     gap: 8px;
-                    box-shadow: 0 5px 14px rgba(0,0,0,0.45);
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
                 }
                 .sneak-icon-btn {
                     pointer-events: auto;
@@ -1037,30 +1132,31 @@ export class SneakScene extends Phaser.Scene {
                     cursor: pointer;
                     transition: transform 0.08s ease;
                 }
-                .sneak-gloss-btn:active {
+                .sneak-gloss-btn:active, .sneak-gloss-btn.holding {
                     transform: scale(0.92);
                 }
                 #sneak-btn-whistle {
-                    width: 66px;
-                    height: 66px;
+                    width: 64px;
+                    height: 64px;
                     background: radial-gradient(circle at 30% 25%, #fde047, #eab308 65%, #a16207 100%);
                 }
-                #sneak-btn-cake {
+                #sneak-btn-pie {
                     width: 72px;
                     height: 72px;
                     background: radial-gradient(circle at 30% 25%, #f9a8d4, #ec4899 65%, #9d174d 100%);
                 }
                 #sneak-btn-dash {
-                    width: 78px;
-                    height: 78px;
+                    width: 76px;
+                    height: 76px;
                     background: radial-gradient(circle at 30% 25%, #7dd3fc, #0284c7 65%, #075985 100%);
                 }
-                #sneak-btn-burrow {
-                    width: 90px;
-                    height: 90px;
-                    background: radial-gradient(circle at 30% 25%, #6ee7b7, #10b981 60%, #047857 100%);
+                #sneak-btn-hole {
+                    width: 96px;
+                    height: 96px;
+                    background: radial-gradient(circle at 30% 25%, #fde047, #d97706 62%, #78350f 100%);
                     border-color: #fef08a;
-                    box-shadow: 0 0 22px rgba(16,185,129,0.75), inset 0 3px 6px rgba(255,255,255,0.5);
+                    box-shadow: 0 0 26px rgba(250, 204, 21, 0.85), inset 0 3px 8px rgba(255,255,255,0.6);
+                    display: none;
                 }
                 .sneak-badge-count {
                     position: absolute;
@@ -1080,16 +1176,16 @@ export class SneakScene extends Phaser.Scene {
                 }
                 #sneak-toast-banner {
                     position: absolute;
-                    top: 58px;
+                    top: 56px;
                     left: 50%;
                     transform: translateX(-50%);
-                    background: rgba(15, 23, 42, 0.92);
+                    background: rgba(15, 23, 42, 0.94);
                     border: 2px solid #facc15;
                     border-radius: 999px;
                     padding: 6px 16px;
                     color: #fef08a;
                     font-weight: 900;
-                    font-size: clamp(12px, 2.8vw, 15px);
+                    font-size: clamp(12px, 2.7vw, 15px);
                     box-shadow: 0 6px 18px rgba(0,0,0,0.5);
                     opacity: 0;
                     transition: opacity 0.22s ease;
@@ -1099,7 +1195,7 @@ export class SneakScene extends Phaser.Scene {
                 #sneak-modal-root {
                     position: fixed;
                     inset: 0;
-                    background: rgba(8, 5, 20, 0.82);
+                    background: rgba(8, 5, 20, 0.84);
                     backdrop-filter: blur(6px);
                     display: none;
                     align-items: center;
@@ -1139,9 +1235,6 @@ export class SneakScene extends Phaser.Scene {
                     gap: 5px;
                     cursor: pointer;
                 }
-                .sneak-perk-card:active {
-                    transform: scale(0.95);
-                }
                 .sneak-action-btn {
                     width: 100%;
                     padding: 11px 16px;
@@ -1159,17 +1252,16 @@ export class SneakScene extends Phaser.Scene {
                 <div style="display:flex;align-items:center;gap:6px;">
                     <button class="sneak-icon-btn" id="sneak-pause-btn" title="Пауза">⏸</button>
                     <div class="sneak-pill">
-                        <span id="sneak-hud-floor">${this.theme.icon} Этаж ${this.floor}</span>
+                        <span>🏰 Этаж ${this.floor}</span>
                         <span id="sneak-hud-hearts">❤️❤️❤️</span>
                     </div>
                 </div>
 
-                <div class="sneak-pill" id="sneak-hud-layer-badge" style="border-color:#34d399;color:#a7f3d0;">
-                    🏠 В НОРКЕ (БЕЗОПАСНО)
+                <div class="sneak-pill" id="sneak-hud-goal" style="border-color:#fde047;color:#fef08a;">
+                    1️⃣ Нырни в норку на Балкон за Ключом!
                 </div>
 
                 <div class="sneak-pill">
-                    <span id="sneak-hud-quota">🏠 Добыча: 0/${this.totalQuota}</span>
                     <span id="sneak-hud-cheese" style="color:#facc15;">🧀 ${this.carriedCheese}</span>
                 </div>
             </div>
@@ -1181,22 +1273,22 @@ export class SneakScene extends Phaser.Scene {
             </div>
 
             <div class="sneak-right-cluster">
-                <button class="sneak-gloss-btn" id="sneak-btn-whistle" title="Свистнуть и приманить монстра">
-                    <span style="font-size:22px;line-height:1;">📣</span>
-                    <span style="font-size:10px;">СВИСТ!</span>
+                <button class="sneak-gloss-btn" id="sneak-btn-whistle" title="Свистнуть и отвлечь стража">
+                    <span style="font-size:21px;line-height:1;">📣</span>
+                    <span style="font-size:9.5px;">СВИСТ</span>
                 </button>
-                <button class="sneak-gloss-btn" id="sneak-btn-cake" title="Бросить кремовый тортик">
-                    <span style="font-size:24px;line-height:1;">🎂</span>
-                    <span style="font-size:10px;">ТОРТИК</span>
-                    <div class="sneak-badge-count" id="sneak-cake-count">${this.piesLeft}</div>
+                <button class="sneak-gloss-btn" id="sneak-btn-pie" title="Бросить пирог">
+                    <span style="font-size:23px;line-height:1;">🥧</span>
+                    <span style="font-size:9.5px;">ПИРОГ</span>
+                    <div class="sneak-badge-count" id="sneak-pie-count">${this.piesLeft}</div>
                 </button>
                 <button class="sneak-gloss-btn" id="sneak-btn-dash" title="Тихий кувырок">
-                    <span style="font-size:24px;line-height:1;">💨</span>
-                    <span style="font-size:10px;">КУВЫРОК</span>
+                    <span style="font-size:23px;line-height:1;">💨</span>
+                    <span style="font-size:9.5px;">КУВЫРОК</span>
                 </button>
-                <button class="sneak-gloss-btn" id="sneak-btn-burrow" style="display:none;">
-                    <span style="font-size:28px;line-height:1;" id="sneak-burrow-icon">🕳️</span>
-                    <span style="font-size:11px;" id="sneak-burrow-label">В НОРКУ!</span>
+                <button class="sneak-gloss-btn" id="sneak-btn-hole" title="Удерживай, чтобы залезть в норку!">
+                    <span style="font-size:28px;line-height:1;">🕳️</span>
+                    <span style="font-size:11px;" id="sneak-hole-btn-text">ДЕРЖИ: НОРА</span>
                 </button>
             </div>
 
@@ -1207,7 +1299,7 @@ export class SneakScene extends Phaser.Scene {
         this.touchUiEl = ui;
         this.joyVec = { x: 0, y: 0 };
 
-        // Bind Virtual Joystick
+        // Virtual Joystick
         const joyZone = document.getElementById('sneak-joy-zone');
         const joyKnob = document.getElementById('sneak-joy-knob');
         let joyPointerId = null;
@@ -1251,29 +1343,57 @@ export class SneakScene extends Phaser.Scene {
         });
         joyZone.addEventListener('pointercancel', resetJoy);
 
-        // Bind Action Buttons
+        // Hold-to-Burrow Button («ДЕРЖИ: НОРА»)
+        const holeBtn = document.getElementById('sneak-btn-hole');
+        if (holeBtn) {
+            holeBtn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                holeBtn.setPointerCapture?.(e.pointerId);
+                this.holeHoldDown = true;
+                holeBtn.classList.add('holding');
+            });
+            const releaseHole = () => {
+                this.holeHoldDown = false;
+                holeBtn.classList.remove('holding');
+            };
+            holeBtn.addEventListener('pointerup', releaseHole);
+            holeBtn.addEventListener('pointercancel', releaseHole);
+            holeBtn.addEventListener('lostpointercapture', releaseHole);
+        }
+
+        // Other Action Buttons
         document.getElementById('sneak-pause-btn')?.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             this.togglePauseModal();
         });
         document.getElementById('sneak-btn-whistle')?.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            this._triggerWhistleDecoy();
+            this._triggerWhistle();
         });
-        document.getElementById('sneak-btn-cake')?.addEventListener('pointerdown', (e) => {
+        document.getElementById('sneak-btn-pie')?.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            this._throwCreamCake();
+            this._throwPie();
         });
         document.getElementById('sneak-btn-dash')?.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            this._triggerSilentRoll();
-        });
-        document.getElementById('sneak-btn-burrow')?.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            this._useNearestBurrowChute();
+            this._triggerDash();
         });
 
         this._refreshHud();
+    }
+
+    _updateBurrowDomButton(nearHole, isHolding) {
+        const holeBtn = document.getElementById('sneak-btn-hole');
+        const labelEl = document.getElementById('sneak-hole-btn-text');
+        if (!holeBtn || !labelEl) return;
+
+        if (!nearHole) {
+            holeBtn.style.display = 'none';
+            this.holeHoldDown = false;
+            return;
+        }
+        holeBtn.style.display = 'flex';
+        labelEl.textContent = isHolding ? 'ЗАЛЕЗАЕМ...' : `ДЕРЖИ: НОРА #${nearHole.pairNum}`;
     }
 
     _unmountDomControls() {
@@ -1287,37 +1407,28 @@ export class SneakScene extends Phaser.Scene {
         if (heartsEl) {
             heartsEl.textContent = '❤️'.repeat(Math.max(0, this.hearts)) + '🖤'.repeat(Math.max(0, this.maxHearts - this.hearts));
         }
-        const quotaEl = document.getElementById('sneak-hud-quota');
-        if (quotaEl) {
-            const keyStr = this.hasGoldenKey ? ' 🗝️' : '';
-            quotaEl.textContent = `🏠 В норке: ${this.deliveredCount}/${this.totalQuota}${keyStr}`;
-        }
         const cheeseEl = document.getElementById('sneak-hud-cheese');
         if (cheeseEl) {
             cheeseEl.textContent = `🧀 ${this.carriedCheese}`;
         }
-        const cakeCountEl = document.getElementById('sneak-cake-count');
-        if (cakeCountEl) {
-            cakeCountEl.textContent = `${this.piesLeft}`;
+        const pieEl = document.getElementById('sneak-pie-count');
+        if (pieEl) {
+            pieEl.textContent = `${this.piesLeft}`;
         }
-        const layerBadge = document.getElementById('sneak-hud-layer-badge');
-        if (layerBadge && this.player) {
-            if (this._isPlayerInBurrow()) {
-                layerBadge.textContent = '🏠 ПОД ЗЕМЛЁЙ В НОРКЕ (НЕВИДИМА!)';
-                layerBadge.style.borderColor = '#34d399';
-                layerBadge.style.color = '#a7f3d0';
-            } else if (this.carriedItem) {
-                layerBadge.textContent = `🏃‍♀️ НЕСЁТ: ${this.carriedItem.icon} — НЫРЯЙ В НОРКУ!`;
-                layerBadge.style.borderColor = '#facc15';
-                layerBadge.style.color = '#fef08a';
-            } else if (this._isInsideShadowCushion(this.player.x, this.player.y)) {
-                layerBadge.textContent = '🌙 В ТЕНИ (НЕВИДИМА)';
-                layerBadge.style.borderColor = '#c084fc';
-                layerBadge.style.color = '#e9d5ff';
+        const goalEl = document.getElementById('sneak-hud-goal');
+        if (goalEl) {
+            if (!this.hasKey) {
+                goalEl.textContent = '1️⃣ Нырни в норку #2 на Балкон за Ключом!';
+                goalEl.style.borderColor = '#fde047';
+                goalEl.style.color = '#fef08a';
+            } else if (!this.friendRescued) {
+                goalEl.textContent = '2️⃣ Ключ есть! Нырни в норку #1 за решётку к Другу!';
+                goalEl.style.borderColor = '#34d399';
+                goalEl.style.color = '#a7f3d0';
             } else {
-                layerBadge.textContent = '👀 НАВЕРХУ В ЗАЛЕ (ОСТОРОЖНО!)';
-                layerBadge.style.borderColor = '#fb7185';
-                layerBadge.style.color = '#fecdd3';
+                goalEl.textContent = '3️⃣ Выход открыт! Беги к Лестнице на след. этаж!';
+                goalEl.style.borderColor = '#4ade80';
+                goalEl.style.color = '#86efac';
             }
         }
     }
@@ -1331,14 +1442,10 @@ export class SneakScene extends Phaser.Scene {
         clearTimeout(this._toastTimer);
         this._toastTimer = setTimeout(() => {
             if (el) el.style.opacity = '0';
-        }, 2900);
+        }, 3000);
     }
 
-    _showFloorIntroBanner() {
-        this._showToast(`${this.mission.badge}: ${this.mission.title}`, '#38bdf8');
-    }
-
-    _setupKeyboardAndMapTap() {
+    _setupKeyboard() {
         this.keys = this.input.keyboard?.addKeys({
             up: Phaser.Input.Keyboard.KeyCodes.W,
             down: Phaser.Input.Keyboard.KeyCodes.S,
@@ -1353,348 +1460,105 @@ export class SneakScene extends Phaser.Scene {
             q: Phaser.Input.Keyboard.KeyCodes.Q
         });
 
-        this.input.keyboard?.on('keydown-SPACE', () => this._useNearestBurrowChute());
-        this.input.keyboard?.on('keydown-E', () => this._throwCreamCake());
-        this.input.keyboard?.on('keydown-Q', () => this._triggerWhistleDecoy());
+        this.input.keyboard?.on('keydown-E', () => this._throwPie());
+        this.input.keyboard?.on('keydown-Q', () => this._triggerWhistle());
     }
 
     // =========================================================================
-    // 9. BURROW CHUTE DIVE & "TOM AND JERRY" MONSTER WALL-BONK («БАМ! 💫»)
+    // 8. WHISTLE, PIE THROW & DASH
     // =========================================================================
 
-    _isPlayerInBurrow() {
-        if (!this.player) return true;
-        return this.player.y >= (this.room.slabY1 + 0.5) * this.room.cell;
-    }
-
-    _findNearestChuteInteraction() {
-        if (!this.player) return null;
-        const px = this.player.x;
-        const py = this.player.y;
-        const inBurrow = this._isPlayerInBurrow();
-
-        let best = null;
-        let bestDist = 72;
-
-        for (const ch of this.room.chutes) {
-            if (inBurrow) {
-                const d = Math.hypot(px - ch.botX, py - ch.botY);
-                if (d < bestDist) {
-                    bestDist = d;
-                    best = { chute: ch, dir: 'up', targetX: ch.topX, targetY: ch.topY - 8 };
-                }
-            } else {
-                const d = Math.hypot(px - ch.topX, py - ch.topY);
-                if (d < bestDist) {
-                    bestDist = d;
-                    best = { chute: ch, dir: 'down', targetX: ch.botX, targetY: ch.botY + 8 };
-                }
-            }
-        }
-        return best;
-    }
-
-    _useNearestBurrowChute(forcedInfo = null) {
-        if (this.ended || this.isPaused || this.isChuteSliding) return;
-        const info = forcedInfo || this._findNearestChuteInteraction();
-        if (!info) return;
-
-        this.isChuteSliding = true;
-        const { chute, dir, targetX, targetY } = info;
-
-        bus.emit(SFX.DASH);
-        this._playMusicalChime(
-            dir === 'down' ? [783.99, 659.25, 523.25, 392.0] : [392.0, 523.25, 659.25, 783.99],
-            0.045,
-            'sine'
-        );
-
-        // If Pi dives DOWN into a mouse-hole from the upper room:
-        // 1. Trigger the "Tom & Jerry" Monster Wall-Bonk on any monster chasing or close to Pi!
-        if (dir === 'down') {
-            this._checkTomAndJerryMonsterBonk(chute);
-        }
-
-        // Smooth animated zip through the vertical cutaway chute!
-        this.tweens.add({
-            targets: this.player,
-            x: targetX,
-            y: targetY,
-            scaleX: 0.22,
-            scaleY: 0.36,
-            duration: 240,
-            ease: 'Cubic.easeInOut',
-            onUpdate: () => {
-                this.playerHalo.setPosition(this.player.x, this.player.y + 10);
-                this.carriedVisual.setPosition(this.player.x, this.player.y - 34);
-            },
-            onComplete: () => {
-                this.player.setScale(0.29);
-                this.isChuteSliding = false;
-                this.invulnerableUntil = Math.max(this.invulnerableUntil, this.time.now + 700);
-
-                // If Pi has the Burrow Turbo perk and popped UP into the hall, grant brief turbo & cloak!
-                if (dir === 'up' && this.runPerks.burrow_turbo) {
-                    this.activeBoosters.turbo = Math.max(this.activeBoosters.turbo, this.time.now + 3000);
-                    this.activeBoosters.cloak = Math.max(this.activeBoosters.cloak, this.time.now + 2500);
-                    this._showToast('🚀 Пружинный вылет из норки! Ускорение + Невидимость!', '#a855f7');
-                }
-
-                // If Pi dove DOWN into the burrow while carrying a Giant Prize or Pet Friend,
-                // deliver it straight along the burrow into her Cozy Home Sanctuary!
-                if (dir === 'down' && this.carriedItem) {
-                    this._deliverCarriedItemToHomeNest();
-                }
-
-                this._refreshHud();
-            }
-        });
-    }
-
-    /**
-     * Classic "Tom & Jerry" comedic payoff:
-     * When Pi dives into a baseboard Mouse-Hole while a monster is chasing or nearby,
-     * the monster lunges at the mouse-hole and SLAMS its forehead into the wall above ("БАМ! 💫")!
-     */
-    _checkTomAndJerryMonsterBonk(chute) {
-        this.monsters.forEach((m) => {
-            if (m.state === 'wall_bonk') return;
-            const dist = Math.hypot(m.x - chute.topX, m.y - chute.topY);
-            const isChasingInRoom = (m.state === 'chase' || m.state === 'alert') && dist < 260;
-            if (dist < 165 || isChasingInRoom) {
-                m.state = 'wall_bonk';
-                m.bonkUntil = this.time.now + 3800;
-
-                // Monster lunges at the mouse-hole and bounces off with stars!
-                this.tweens.add({
-                    targets: m.sprite,
-                    x: chute.topX,
-                    y: chute.topY - 14,
-                    duration: 160,
-                    ease: 'Quad.easeIn',
-                    onComplete: () => {
-                        this.cameras.main.shake(180, 0.008);
-                        bus.emit(SFX. ENEMY_HIT || SFX.PIE_HIT);
-                        this._playMusicalChime([220, 196, 146.83], 0.08, 'sawtooth');
-
-                        // Bonus cheese for outsmarting the monster!
-                        this.carriedCheese += 10;
-                        this._refreshHud();
-
-                        const bonkTxt = this.add.text(chute.topX, chute.topY - 46, '💥 БАМ! НЕ ДОГНАЛ! 💫 (+10🧀)', {
-                            fontFamily: 'Nunito, sans-serif',
-                            fontSize: '14px',
-                            fontStyle: '900',
-                            color: '#fef08a',
-                            stroke: '#be185d',
-                            strokeThickness: 4
-                        }).setOrigin(0.5).setDepth(35).setResolution(this.dpr);
-
-                        this.tweens.add({
-                            targets: bonkTxt,
-                            y: chute.topY - 78,
-                            alpha: 0,
-                            duration: 1500,
-                            onComplete: () => bonkTxt.destroy()
-                        });
-
-                        // Bounce monster slightly back
-                        m.x = chute.topX;
-                        m.y = Math.max((this.room.upperY1 + 1.5) * this.room.cell, chute.topY - 38);
-                        m.sprite.setPosition(m.x, m.y);
-                        m.statusBadge.setText('💫 БАМ! ⭐');
-                    }
-                });
-            }
-        });
-    }
-
-    /**
-     * Delivers the currently carried Giant Treasure or Captive Pet Friend
-     * into Pi's Cozy Home Sanctuary in the underground burrow!
-     */
-    _deliverCarriedItemToHomeNest() {
-        if (!this.carriedItem) return;
-        const item = this.carriedItem;
-        this.carriedItem = null;
-        this.carriedVisual.setVisible(false);
-        this.burrowGuideArrow.setVisible(false);
-
-        this.deliveredCount++;
-        const bonusCheese = item.value || 25;
-        this.carriedCheese += bonusCheese;
-        if (item.kind === 'pet') {
-            this.totalRescuedInRun++;
-        }
-
-        bus.emit(SFX.KEY_PICKUP);
-        this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.07, 'triangle');
-
-        // Animate the prize flying along the burrow tunnel into Pi's Cozy Home Stash!
-        const flyIcon = this.add.text(this.player.x, this.player.y, item.icon, {
-            fontSize: '30px'
-        }).setOrigin(0.5).setDepth(32).setResolution(this.dpr);
-
-        const targetX = this.room.homeNest.x + 15 + ((this.deliveredCount - 1) % 4) * 24;
-        const targetY = this.room.homeNest.y + 4 - Math.floor((this.deliveredCount - 1) / 4) * 20;
-
-        this.tweens.add({
-            targets: flyIcon,
-            x: targetX,
-            y: targetY,
-            scale: 0.88,
-            duration: 460,
-            ease: 'Back.easeOut'
-        });
-
-        this._refreshHomeQuotaLabel();
-        this._refreshHud();
-
-        const left = Math.max(0, this.totalQuota - this.deliveredCount);
-        if (left > 0) {
-            this._showToast(`🏠 ${item.name} в норке! (+${bonusCheese}🧀) Осталось утащить: ${left}`, '#4ade80');
-        } else {
-            this._showToast('🎉 ВСЯ ДОБЫЧА В УЮТНОЙ НОРКЕ! Победа!', '#facc15');
-            this.time.delayedCall(650, () => this.onFloorCleared());
-        }
-    }
-
-    // =========================================================================
-    // 10. WHISTLE DECOY, CREAM CAKE THROW & SILENT ROLL
-    // =========================================================================
-
-    _triggerWhistleDecoy() {
-        if (this.ended || this.isPaused) return;
+    _triggerWhistle() {
+        if (this.ended || this.isPaused || this.state !== 'play') return;
         const now = this.time.now;
         if (now < this.whistleCooldownUntil) return;
         this.whistleCooldownUntil = now + 2600;
 
-        // If Pi is underground in the burrow, the whistle echoes out of the nearest upper mouse-hole!
-        let soundX = this.player.x;
-        let soundY = this.player.y;
-        if (this._isPlayerInBurrow()) {
-            let bestChute = this.room.chutes[0];
-            let bestD = Infinity;
-            for (const ch of this.room.chutes) {
-                const d = Math.abs(this.player.x - ch.botX);
-                if (d < bestD) {
-                    bestD = d;
-                    bestChute = ch;
-                }
-            }
-            if (bestChute) {
-                soundX = bestChute.topX;
-                soundY = bestChute.topY;
-            }
-        }
-
         this._playMusicalChime([987.77, 1318.5, 1174.66], 0.06, 'sine');
 
-        const ring = this.add.circle(soundX, soundY, 14, 0xfacc15, 0.25)
+        const ring = this.add.circle(this.player.x, this.player.y, 12, 0xfacc15, 0.25)
             .setStrokeStyle(3, 0xfef08a, 0.95)
-            .setDepth(28);
+            .setDepth(35);
         this.tweens.add({
             targets: ring,
-            radius: 170,
+            radius: 175,
             alpha: 0,
             duration: 620,
             onComplete: () => ring.destroy()
         });
 
-        const txt = this.add.text(soundX, soundY - 26, '🎵 ФЬЮТЬ-ФЬЮТЬ!', {
-            fontFamily: 'Nunito, sans-serif',
-            fontSize: '13px',
-            fontStyle: '900',
-            color: '#fef08a',
-            stroke: '#0f172a',
-            strokeThickness: 3.5
-        }).setOrigin(0.5).setDepth(29).setResolution(this.dpr);
-        this.tweens.add({
-            targets: txt,
-            y: soundY - 52,
-            alpha: 0,
-            duration: 900,
-            onComplete: () => txt.destroy()
-        });
-
-        // Attract nearest monster in the upper rooms to investigate the whistle!
-        let lured = 0;
         this.monsters.forEach((m) => {
-            if (m.state === 'cake_blind' || m.state === 'wall_bonk') return;
-            if (Math.hypot(m.x - soundX, m.y - soundY) <= 320) {
+            if (m.state === 'blind') return;
+            if (Math.hypot(m.x - this.player.x, m.y - this.player.y) <= 320) {
                 m.state = 'alert';
-                m.investigateTarget = { x: soundX, y: soundY };
+                m.investigateTarget = { x: this.player.x, y: this.player.y };
                 m.investigateUntil = now + WHISTLE_DISTRACT_MS;
-                m.statusBadge.setText('❓ Кто свистел?');
-                lured++;
+                this._setMonsterBadge(m, 'badge_ear');
             }
         });
 
-        if (lured > 0) {
-            this._showToast('📣 Свист из норки приманил стража к плинтусу!', '#facc15');
-        }
+        this._showToast('📣 Свист приманил стражей! Самое время нырнуть в норку!', '#facc15');
     }
 
-    _throwCreamCake() {
-        if (this.ended || this.isPaused) return;
+    _throwPie() {
+        if (this.ended || this.isPaused || this.state !== 'play') return;
         if (this.piesLeft <= 0) {
-            this._showToast('🎂 Тортики закончились!', '#fda4af');
+            this._showToast('🥧 Пироги закончились!', '#fda4af');
             return;
         }
         this.piesLeft--;
         this._refreshHud();
         bus.emit(SFX.PIE_THROW);
 
-        const dirLen = Math.hypot(this.playerFacing.x, this.playerFacing.y) || 1;
-        const dx = this.playerFacing.x / dirLen;
-        const dy = this.playerFacing.y / dirLen;
+        const len = Math.hypot(this.playerFacing.x, this.playerFacing.y) || 1;
+        const dx = this.playerFacing.x / len;
+        const dy = this.playerFacing.y / len;
 
-        const cake = this.add.image(this.player.x, this.player.y, 'd_pie')
+        const spr = this.add.image(this.player.x, this.player.y, 'd_pie')
             .setDisplaySize(30, 30)
-            .setDepth(25);
+            .setDepth(33);
 
-        this.thrownCakes.push({
-            sprite: cake,
+        this.thrownPies.push({
+            sprite: spr,
             x: this.player.x,
             y: this.player.y,
-            vx: dx * CAKE_SPEED,
-            vy: dy * CAKE_SPEED,
+            vx: dx * PIE_SPEED,
+            vy: dy * PIE_SPEED,
             bornAt: this.time.now
         });
     }
 
-    _splatCakeAt(wx, wy, fromCeiling = false) {
+    _splatPieAt(wx, wy) {
         bus.emit(SFX.PIE_HIT);
-
-        const splat = this.add.circle(wx, wy, 12, 0xf472b6, 0.55)
+        const splat = this.add.circle(wx, wy, 10, 0xf472b6, 0.55)
             .setStrokeStyle(3, 0xffffff, 0.95)
-            .setDepth(17);
+            .setDepth(24);
         this.tweens.add({
             targets: splat,
-            radius: CAKE_BLIND_RADIUS,
+            radius: PIE_BLIND_RADIUS,
             alpha: 0,
-            duration: 600,
+            duration: 550,
             onComplete: () => splat.destroy()
         });
 
         const now = this.time.now;
         this.monsters.forEach((m) => {
             const d = Math.hypot(m.x - wx, m.y - wy);
-            if (d <= CAKE_BLIND_RADIUS + (fromCeiling ? 45 : 0)) {
-                m.state = 'cake_blind';
-                m.blindUntil = now + CAKE_BLIND_MS;
-                m.statusBadge.setText('🎂 В КРЕМЕ! 😋');
-            } else if (d <= CAKE_HEAR_RADIUS && m.state !== 'cake_blind' && m.state !== 'wall_bonk') {
+            if (d <= PIE_BLIND_RADIUS) {
+                m.state = 'blind';
+                m.blindUntil = now + PIE_BLIND_MS;
+                this._setMonsterBadge(m, 'badge_sleep');
+            } else if (d <= PIE_HEAR_RADIUS && m.state !== 'blind') {
                 m.state = 'alert';
                 m.investigateTarget = { x: wx, y: wy };
-                m.investigateUntil = now + CAKE_DISTRACT_MS;
-                m.statusBadge.setText('🍰 Тортик?!');
+                m.investigateUntil = now + PIE_DISTRACT_MS;
+                this._setMonsterBadge(m, 'badge_ear');
             }
         });
     }
 
-    _triggerSilentRoll() {
-        if (this.ended || this.isPaused || this.isChuteSliding) return;
+    _triggerDash() {
+        if (this.ended || this.isPaused || this.state !== 'play') return;
         const now = this.time.now;
         if (now < this.dashCooldownUntil) return;
 
@@ -1711,24 +1575,23 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // 11. MAIN UPDATE LOOP
+    // 9. MAIN UPDATE LOOP
     // =========================================================================
 
     update(time, delta) {
         if (this.ended || this.isPaused) return;
         const dt = Math.min(0.05, delta / 1000);
 
-        this._updatePlayerMovement(time, dt);
-        this._updateBurrowActionButton();
-        this._updateCollectiblesAndHaulables(time, dt);
-        this._updateThrownCakes(time, dt);
-        this._updateMonstersAndCeilingSteps(time, dt);
-        this._refreshHud();
+        this._updateBurrowHoldMechanic(time, dt);
+        if (this.state === 'play' && this.holeHoldMs === 0) {
+            this._updatePlayerMovement(time, dt);
+        }
+        this._updateObjectivesAndPickups(time, dt);
+        this._updateThrownPies(time, dt);
+        this._updateMonsters(time, dt);
     }
 
     _updatePlayerMovement(time, dt) {
-        if (this.isChuteSliding) return;
-
         let ix = this.joyVec?.x || 0;
         let iy = this.joyVec?.y || 0;
 
@@ -1746,24 +1609,17 @@ export class SneakScene extends Phaser.Scene {
             this.playerFacing.x = nx;
             this.playerFacing.y = ny;
 
-            const inBurrow = this._isPlayerInBurrow();
-            let spd = inBurrow ? PLAYER_BURROW_SPEED : PLAYER_BASE_SPEED;
+            let spd = PLAYER_BASE_SPEED * this.skinSpeedMul;
             if (time < this.dashUntil) spd = PLAYER_DASH_SPEED;
-            if (time < this.activeBoosters.turbo) spd *= 1.32;
+            if (time < this.turboUntil) spd *= 1.32;
             if (this.runPerks.ninja_paws) spd *= 1.18;
-            if (!inBurrow && this.carriedItem) spd *= (this.carriedItem.weightMul || 0.88);
-            spd *= this.skinSpeedMul;
 
             const nextX = this.player.x + nx * spd * dt;
             const nextY = this.player.y + ny * spd * dt;
-            const r = 13;
+            const r = 14;
 
-            if (this._canWalkAt(nextX, this.player.y, r)) {
-                this.player.x = nextX;
-            }
-            if (this._canWalkAt(this.player.x, nextY, r)) {
-                this.player.y = nextY;
-            }
+            if (this._canWalkAt(nextX, this.player.y, r)) this.player.x = nextX;
+            if (this._canWalkAt(this.player.x, nextY, r)) this.player.y = nextY;
 
             if (Math.abs(nx) > 0.08) {
                 this.player.setFlipX(nx < 0);
@@ -1773,94 +1629,34 @@ export class SneakScene extends Phaser.Scene {
             const frame = Math.floor(this.walkAnimTimer) % 2;
             this.player.setTexture(frame === 0 ? this.playerWalk1 : this.playerWalk2);
 
-            // Seamless Auto-Dive into a baseboard Mouse-Hole when Pi runs into it while carrying loot or pushing down!
-            if (!inBurrow) {
-                const nearChute = this._findNearestChuteInteraction();
-                if (nearChute && nearChute.dir === 'down') {
-                    const distToHole = Math.hypot(this.player.x - nearChute.chute.topX, this.player.y - nearChute.chute.topY);
-                    if (distToHole < 26 && (this.carriedItem || ny > 0.35)) {
-                        this._useNearestBurrowChute(nearChute);
-                        return;
-                    }
-                }
-            } else {
-                // In the burrow: if Pi pushes UP right at a chute landing, pop up to the room above!
-                const nearChute = this._findNearestChuteInteraction();
-                if (nearChute && nearChute.dir === 'up') {
-                    const distToLanding = Math.hypot(this.player.x - nearChute.chute.botX, this.player.y - nearChute.chute.botY);
-                    if (distToLanding < 24 && ny < -0.55) {
-                        this._useNearestBurrowChute(nearChute);
-                        return;
-                    }
-                }
+            // Record breadcrumb trail for rescued follower train
+            const head = this.playerTrail[0];
+            if (!head || Math.hypot(this.player.x - head.x, this.player.y - head.y) > 8) {
+                this.playerTrail.unshift({ x: this.player.x, y: this.player.y });
+                if (this.playerTrail.length > 90) this.playerTrail.pop();
             }
         } else {
             this.player.setTexture(this.playerSkinBase);
         }
 
         this.playerHalo.setPosition(this.player.x, this.player.y + 10);
-        this.carriedVisual.setPosition(this.player.x, this.player.y - 36);
 
-        // Update Guide Arrow pointing to the nearest Mouse-Hole when carrying a prize in the upper hall
-        if (this.carriedItem && !this._isPlayerInBurrow()) {
-            this.burrowGuideArrow.setVisible(true);
-            this.burrowGuideArrow.clear();
-            let nearestChute = this.room.chutes[0];
-            let bestD = Infinity;
-            for (const ch of this.room.chutes) {
-                const d = Math.hypot(this.player.x - ch.topX, this.player.y - ch.topY);
-                if (d < bestD) {
-                    bestD = d;
-                    nearestChute = ch;
-                }
-            }
-            if (nearestChute) {
-                this.burrowGuideArrow.lineStyle(3.5, 0xfacc15, 0.85);
-                this.burrowGuideArrow.lineBetween(this.player.x, this.player.y, nearestChute.topX, nearestChute.topY);
-                this.burrowGuideArrow.fillStyle(0xfef08a, 0.9);
-                this.burrowGuideArrow.fillCircle(nearestChute.topX, nearestChute.topY, 8);
-            }
-        } else {
-            this.burrowGuideArrow.setVisible(false);
-        }
-
-        // Check if all quota is delivered and Pi is inside her Cozy Home Nest
-        if (this.deliveredCount >= this.totalQuota && this._isPlayerInBurrow()) {
-            const distHome = Math.hypot(this.player.x - this.room.homeNest.x, this.player.y - this.room.homeNest.y);
-            if (distHome < 85) {
-                this.onFloorCleared();
-            }
-        }
+        // Update Follower Train positions
+        this.followerSprites.forEach((spr, idx) => {
+            const trailIdx = Math.min(this.playerTrail.length - 1, (idx + 1) * 5);
+            const pt = this.playerTrail[trailIdx] || { x: this.player.x, y: this.player.y };
+            spr.x = Phaser.Math.Linear(spr.x, pt.x, 0.25);
+            spr.y = Phaser.Math.Linear(spr.y, pt.y, 0.25);
+        });
     }
 
-    _updateBurrowActionButton() {
-        const btn = document.getElementById('sneak-btn-burrow');
-        const iconEl = document.getElementById('sneak-burrow-icon');
-        const labelEl = document.getElementById('sneak-burrow-label');
-        if (!btn || !iconEl || !labelEl) return;
-
-        const near = this._findNearestChuteInteraction();
-        if (!near) {
-            btn.style.display = 'none';
-            return;
-        }
-        btn.style.display = 'flex';
-        if (near.dir === 'down') {
-            iconEl.textContent = '🕳️';
-            labelEl.textContent = `В НОРКУ #${near.chute.label}`;
-        } else {
-            iconEl.textContent = '🔼';
-            labelEl.textContent = `НАВЕРХ #${near.chute.label}`;
-        }
-    }
-
-    _updateCollectiblesAndHaulables(time, dt) {
+    _updateObjectivesAndPickups(time, dt) {
         const px = this.player.x;
         const py = this.player.y;
-        const magnetR = (time < this.activeBoosters.magnet || this.runPerks.cheese_magnet) ? 125 : 30;
+        const magnetR = this.runPerks.cheese_magnet ? 125 : 30;
 
-        // 1. Small Cheese Crumbs
-        this.cheeseSprites.forEach((ch) => {
+        // 1. Cheese Wedges
+        this.cheeseObjs.forEach((ch) => {
             if (ch.collected) return;
             const d = Math.hypot(px - ch.x, py - ch.y);
             if (d < magnetR && d > 22) {
@@ -1873,169 +1669,133 @@ export class SneakScene extends Phaser.Scene {
                 ch.sprite.destroy();
                 const gain = Math.round(ch.value * (this.runPerks.cheese_magnet ? 1.3 : 1));
                 this.carriedCheese += gain;
+                this._refreshHud();
                 bus.emit(SFX.CHEESE);
             }
         });
 
-        // 2. Golden Key Pickup
-        if (this.goldenKeyObj && !this.goldenKeyObj.collected) {
-            if (Math.hypot(px - this.goldenKeyObj.x, py - this.goldenKeyObj.y) <= 32) {
-                this.goldenKeyObj.collected = true;
-                this.goldenKeyObj.container.destroy();
-                this.hasGoldenKey = true;
+        // 2. Treasure Chests (`w_chest_closed` -> `w_chest_open`)
+        this.chestObjs.forEach((ch) => {
+            if (ch.opened) return;
+            if (Math.hypot(px - ch.x, py - ch.y) <= 36) {
+                ch.opened = true;
+                ch.sprite.setTexture('w_chest_open');
+                this.carriedCheese += ch.cheeseValue;
+                this._refreshHud();
+                bus.emit(SFX.CHEST_OPEN);
+                this._playMusicalChime([523.25, 659.25, 783.99, 1046.5], 0.06, 'triangle');
+                this._showToast(`👑 Сундук открыт! +${ch.cheeseValue} 🧀`, '#facc15');
+            }
+        });
+
+        // 3. Golden Key on the Elevated Balcony
+        if (this.keyObj && !this.keyObj.collected) {
+            if (Math.hypot(px - this.keyObj.x, py - this.keyObj.y) <= 34) {
+                this.keyObj.collected = true;
+                this.keyObj.container.destroy();
+                this.hasKey = true;
+                this._refreshHud();
                 bus.emit(SFX.KEY_PICKUP);
-                this._playMusicalChime([659.25, 783.99, 1046.5], 0.07, 'triangle');
-                this._showToast('🗝️ Золотой Ключ Стража найден! Теперь можно открыть любую клетку!', '#facc15');
-
-                // Update locked pet badges
-                this.petNodes.forEach((pt) => {
-                    if (pt.locked && !pt.pickedUp) {
-                        pt.locked = false;
-                        pt.lockBadge.setText('🔓 ОТКРЫТО! СПАСИ В НОРКУ!');
-                        pt.lockBadge.setColor('#4ade80');
-                    }
-                });
+                this._playMusicalChime([659.25, 783.99, 1046.5, 1318.5], 0.06, 'triangle');
+                this._showToast('🗝️ Ключ с высокого балкона взят! Теперь ныряй в норку #1 в Сокровищницу!', '#34d399');
             }
         }
 
-        // 3. Underground Sabotage Levers
-        this.leverObjs.forEach((lv) => {
-            if (!lv.data.used && Math.hypot(px - lv.data.x, py - lv.data.y) <= 34) {
-                this._triggerSabotageLever(lv);
-            }
-        });
+        // 4. Captive Pet Friend inside the Iron-Barred Vault
+        this.petObjs.forEach((pet) => {
+            if (pet.rescued) return;
+            if (Math.hypot(px - pet.x, py - pet.y) <= 38) {
+                if (pet.requiresKey && !this.hasKey) {
+                    this._showToast('🔒 Клетка заперта! Сначала нырни в норку #2 на Балкон за Ключом!', '#fde047');
+                    return;
+                }
+                pet.rescued = true;
+                pet.cageSpr.destroy();
+                pet.lockSpr.destroy();
+                this.friendRescued = true;
+                this.totalRescuedInRun++;
+                this.rescuedFollowers.push(pet.spriteKey);
+                this.carriedCheese += 25;
 
-        // 4. Boosters
-        this.boosterSprites.forEach((b) => {
-            if (b.collected) return;
-            if (Math.hypot(px - b.x, py - b.y) <= 30) {
-                b.collected = true;
-                b.container.destroy();
-                this.activeBoosters[b.type] = time + b.durationMs;
+                // Spawn follower sprite behind Pi
+                const fSpr = this.add.image(pet.x, pet.y, pet.spriteKey).setScale(0.21).setDepth(29);
+                this.followerSprites.push(fSpr);
+                pet.container.destroy();
+
+                this._unlockExitStairs();
+                this._refreshHud();
                 bus.emit(SFX.RELIC_PICKUP);
-                this._showToast(`${b.icon} ${b.name} активирован!`, '#a855f7');
+                this._playMusicalChime([523.25, 659.25, 783.99, 1046.5, 1318.5], 0.07, 'triangle');
+                this._showToast(`🐾 ${pet.name} спасена (+25🧀)! Лестница на Этаж ${this.floor + 1} открыта!`, '#4ade80');
             }
         });
 
-        // 5. Picking up a Giant Carryable Treasure or Captive Pet Friend (if hands are free!)
-        if (!this.carriedItem && !this._isPlayerInBurrow()) {
-            for (const pr of this.carryableObjs) {
-                if (pr.pickedUp) continue;
-                if (Math.hypot(px - pr.x, py - pr.y) <= 34) {
-                    pr.pickedUp = true;
-                    pr.container.destroy();
-                    this._equipCarriedItem({
-                        kind: 'treasure',
-                        name: pr.name,
-                        icon: pr.icon,
-                        value: pr.value,
-                        weightMul: pr.weightMul
-                    });
-                    break;
-                }
-            }
-        }
-
-        if (!this.carriedItem && !this._isPlayerInBurrow()) {
-            for (const pt of this.petNodes) {
-                if (pt.pickedUp) continue;
-                if (Math.hypot(px - pt.x, py - pt.y) <= 36) {
-                    if (pt.locked && !this.hasGoldenKey) {
-                        this._showToast('🔒 Клетка заперта! Сначала найди Золотой Ключ 🗝️!', '#facc15');
-                        continue;
-                    }
-                    pt.pickedUp = true;
-                    pt.container.destroy();
-                    this._equipCarriedItem({
-                        kind: 'pet',
-                        name: pt.name,
-                        icon: pt.badge,
-                        value: 35,
-                        weightMul: 0.92
-                    });
-                    break;
-                }
-            }
+        // 5. Exit Stairs -> Next Infinite Floor!
+        if (this.exitUnlocked && Math.hypot(px - this.room.exit.x, py - this.room.exit.y) <= 36) {
+            this.onFloorCleared();
         }
     }
 
-    _equipCarriedItem(item) {
-        this.carriedItem = item;
-        this.carriedIconText.setText(item.icon);
-        this.carriedLabelText.setText(`БЕГИ В НОРКУ! 🕳️`);
-        this.carriedVisual.setVisible(true);
+    _updateThrownPies(time, dt) {
+        for (let i = this.thrownPies.length - 1; i >= 0; i--) {
+            const p = this.thrownPies[i];
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.sprite.setPosition(p.x, p.y);
+            p.sprite.rotation += 10 * dt;
 
-        bus.emit(SFX.CHEST_OPEN);
-        this._playMusicalChime([523.25, 659.25, 783.99], 0.06, 'triangle');
-        this._showToast(`🙌 Схватила: ${item.icon} ${item.name}! Ныряй с ней в ближайшую НОРКУ 🕳️!`, '#facc15');
-    }
-
-    _updateThrownCakes(time, dt) {
-        for (let i = this.thrownCakes.length - 1; i >= 0; i--) {
-            const c = this.thrownCakes[i];
-            c.x += c.vx * dt;
-            c.y += c.vy * dt;
-            c.sprite.setPosition(c.x, c.y);
-            c.sprite.rotation += 10 * dt;
-
-            let hitMonster = false;
+            let hit = false;
             for (const m of this.monsters) {
-                if (Math.hypot(m.x - c.x, m.y - c.y) <= 28) {
-                    hitMonster = true;
+                if (Math.hypot(m.x - p.x, m.y - p.y) <= 28) {
+                    hit = true;
                     break;
                 }
             }
-
-            if (hitMonster || !this._isWalkableCellAtWorld(c.x, c.y) || time - c.bornAt > 1100) {
-                c.sprite.destroy();
-                this.thrownCakes.splice(i, 1);
-                this._splatCakeAt(c.x, c.y, false);
+            if (hit || !this._isWalkableCellAtWorld(p.x, p.y) || time - p.bornAt > 1100) {
+                p.sprite.destroy();
+                this.thrownPies.splice(i, 1);
+                this._splatPieAt(p.x, p.y);
             }
         }
     }
 
     // =========================================================================
-    // 12. MONSTER AI, VISION CONES & CEILING FOOTSTEP DUST («ШАГИ НАД ГОЛОВОЙ»)
+    // 10. MONSTER AI & VISION CONES
     // =========================================================================
 
-    _updateMonstersAndCeilingSteps(time, dt) {
-        const playerInBurrow = this._isPlayerInBurrow();
-        const playerCloaked = (time < this.activeBoosters.cloak) || this._isInsideShadowCushion(this.player.x, this.player.y);
-        const playerInvisible = playerInBurrow || playerCloaked || this.isChuteSliding;
-
-        const floorSlabCeilingY = this.room.burrowY1 * this.room.cell;
+    _updateMonsters(time, dt) {
+        // Player is hidden if squeezing through a burrow, holding inside a burrow mouth (>15%), or standing on a Moonflower shadow!
+        const holdingInBurrow = this.holeHoldMs > 85;
+        const inShadow = this._isInsideShadow(this.player.x, this.player.y);
+        const playerHidden = (this.state === 'squeeze') || holdingInBurrow || inShadow;
 
         this.monsters.forEach((m) => {
-            // 1. Handle Stunned / Blinded states
-            if (m.state === 'wall_bonk') {
-                if (time >= m.bonkUntil) {
-                    m.state = 'patrol';
-                    m.statusBadge.setText('');
-                } else {
-                    m.coneGfx.clear();
-                    m.statusBadge.setPosition(m.x, m.y - 44);
-                    return;
-                }
-            }
-
-            if (m.state === 'cake_blind') {
+            if (m.state === 'blind') {
                 if (time >= m.blindUntil) {
                     m.state = 'patrol';
-                    m.statusBadge.setText('');
+                    this._setMonsterBadge(m, null);
                 } else {
                     m.coneGfx.clear();
-                    m.statusBadge.setPosition(m.x, m.y - 44);
                     return;
                 }
             }
 
-            // 2. Check Vision Cone against Pi (ONLY if Pi is in the Upper Castle Rooms!)
+            if (m.state === 'confused') {
+                if (time >= m.confusedUntil) {
+                    m.state = 'patrol';
+                    this._setMonsterBadge(m, null);
+                } else {
+                    m.coneGfx.clear();
+                    return;
+                }
+            }
+
             const dx = this.player.x - m.x;
             const dy = this.player.y - m.y;
             const dist = Math.hypot(dx, dy);
             let seesPlayer = false;
 
-            if (!playerInvisible && dist <= m.cfg.coneLen) {
+            if (!playerHidden && dist <= m.cfg.coneLen) {
                 const angleToPlayer = Math.atan2(dy, dx);
                 const diff = Math.abs(Phaser.Math.Angle.Wrap(angleToPlayer - m.facingRad));
                 if (diff <= m.cfg.coneHalfRad && this._hasLineOfSight(m.x, m.y, this.player.x, this.player.y)) {
@@ -2045,43 +1805,38 @@ export class SneakScene extends Phaser.Scene {
 
             if (seesPlayer) {
                 m.suspicion = Math.min(1, m.suspicion + (dt * 1000) / SUSPICION_FILL_MS);
-                if (m.suspicion >= 1 || this.carriedItem) {
+                if (m.suspicion >= 1) {
                     if (m.state !== 'chase') {
                         m.state = 'chase';
                         this.seenOnThisFloor = true;
                         this.everSeenInRun = true;
-                        m.statusBadge.setText('❗ ДЕРЖИ ЕЁ!');
-                        this._showToast(`🐾 ${m.cfg.name} заметил Пи! Ныряй в норку, чтобы он врезался в стену!`, '#fda4af');
+                        this._setMonsterBadge(m, 'badge_anger');
                     }
                     m.investigateTarget = { x: this.player.x, y: this.player.y };
                     m.investigateUntil = time + 2600;
                 } else {
-                    m.statusBadge.setText('👀 Кто там?');
+                    this._setMonsterBadge(m, 'badge_alert');
                 }
             } else {
                 m.suspicion = Math.max(0, m.suspicion - (dt * 1000) / SUSPICION_DECAY_MS);
-                if (m.state === 'chase' && (playerInBurrow || time > m.investigateUntil)) {
+                if ((m.state === 'chase' || m.state === 'alert') && time > m.investigateUntil) {
                     m.state = 'patrol';
-                    m.statusBadge.setText('');
-                } else if (m.state === 'alert' && time > m.investigateUntil) {
-                    m.state = 'patrol';
-                    m.statusBadge.setText('');
+                    this._setMonsterBadge(m, null);
                 }
             }
 
-            // 3. Move Monster toward current waypoint or chase target
             let targetX = m.x;
             let targetY = m.y;
-            let moveSpd = m.cfg.speed;
+            let spd = m.cfg.speed;
 
-            if (m.state === 'chase' && !playerInvisible) {
+            if (m.state === 'chase' && !playerHidden) {
                 targetX = this.player.x;
                 targetY = this.player.y;
-                moveSpd = m.cfg.chaseSpeed;
+                spd = m.cfg.chaseSpeed;
             } else if ((m.state === 'alert' || m.state === 'chase') && m.investigateTarget) {
                 targetX = m.investigateTarget.x;
                 targetY = m.investigateTarget.y;
-                moveSpd = m.cfg.speed * 1.15;
+                spd = m.cfg.speed * 1.15;
             } else {
                 const wp = m.cfg.waypoints[m.wpIndex] || m.cfg.waypoints[0];
                 targetX = wp.x;
@@ -2099,30 +1854,22 @@ export class SneakScene extends Phaser.Scene {
                 const uy = tdy / tDist;
                 m.facingRad = Phaser.Math.Angle.RotateTo(m.facingRad, Math.atan2(uy, ux), 4.5 * dt);
 
-                const nx = m.x + ux * moveSpd * dt;
-                const ny = m.y + uy * moveSpd * dt;
-                // Monsters stay inside upper castle rooms
-                if (this._isUpperRoomWalkable(nx, m.y)) m.x = nx;
-                if (this._isUpperRoomWalkable(m.x, ny)) m.y = ny;
+                const nx = m.x + ux * spd * dt;
+                const ny = m.y + uy * spd * dt;
+                if (this._isMonsterWalkable(nx, m.y)) m.x = nx;
+                if (this._isMonsterWalkable(m.x, ny)) m.y = ny;
 
                 if (Math.abs(ux) > 0.08) {
                     m.sprite.setFlipX(ux < 0);
                 }
-
-                // 4. CEILING FOOTSTEP RIPPLES («ТОП-ТОП НАД ГОЛОВОЙ В НОРКЕ!»)
-                m.stepTimer += dt;
-                if (m.stepTimer >= 0.68) {
-                    m.stepTimer = 0;
-                    this._spawnCeilingFootstepDust(m.x, floorSlabCeilingY, m.cfg.name);
-                }
             }
 
             m.sprite.setPosition(m.x, m.y);
-            m.statusBadge.setPosition(m.x, m.y - 44);
+            m.shadow.setPosition(m.x, m.y + 18);
+            m.badgeSpr.setPosition(m.x, m.y - 42);
             this._drawMonsterCone(m);
 
-            // 5. Check Catch Collision (only in Upper Room!)
-            if (!playerInBurrow && !this.isChuteSliding && time >= this.invulnerableUntil) {
+            if (!playerHidden && time >= this.invulnerableUntil) {
                 if (Math.hypot(this.player.x - m.x, this.player.y - m.y) <= CATCH_DIST) {
                     this._onPlayerCaught(m);
                 }
@@ -2130,46 +1877,11 @@ export class SneakScene extends Phaser.Scene {
         });
     }
 
-    /**
-     * Spawns visible dust motes & "ТОП!" vibration ripples on the ceiling of the
-     * underground burrow directly beneath a walking monster's feet!
-     */
-    _spawnCeilingFootstepDust(mx, ceilingY) {
-        const dust = this.add.circle(mx, ceilingY + 2, 6, 0xfde68a, 0.45).setDepth(15);
-        this.tweens.add({
-            targets: dust,
-            y: ceilingY + 26,
-            scale: 2.1,
-            alpha: 0,
-            duration: 520,
-            onComplete: () => dust.destroy()
-        });
-
-        if (this._isPlayerInBurrow() && Math.abs(this.player.x - mx) < 220) {
-            const thudTxt = this.add.text(mx, ceilingY + 8, 'ТОП!', {
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '9.5px',
-                fontStyle: '900',
-                color: '#fde68a',
-                stroke: '#451a03',
-                strokeThickness: 2.5
-            }).setOrigin(0.5).setDepth(16).setResolution(this.dpr);
-
-            this.tweens.add({
-                targets: thudTxt,
-                y: ceilingY + 24,
-                alpha: 0,
-                duration: 480,
-                onComplete: () => thudTxt.destroy()
-            });
-        }
-    }
-
     _drawMonsterCone(m) {
         const g = m.coneGfx;
         g.clear();
         const color = m.state === 'chase' ? 0xf43f5e : (m.suspicion > 0.15 ? 0xfacc15 : 0x38bdf8);
-        const alpha = m.state === 'chase' ? 0.30 : 0.17;
+        const alpha = m.state === 'chase' ? 0.30 : 0.16;
 
         g.fillStyle(color, alpha);
         g.beginPath();
@@ -2191,7 +1903,9 @@ export class SneakScene extends Phaser.Scene {
             const t = i / steps;
             const sx = x1 + (x2 - x1) * t;
             const sy = y1 + (y2 - y1) * t;
-            if (!this._isUpperRoomWalkable(sx, sy)) return false;
+            const gx = Math.floor(sx / this.room.cell);
+            const gy = Math.floor(sy / this.room.cell);
+            if (this.room.grid[gy]?.[gx] === '#') return false;
         }
         return true;
     }
@@ -2205,14 +1919,12 @@ export class SneakScene extends Phaser.Scene {
         this._refreshHud();
 
         if (this.hearts > 0) {
-            // Smoke-bomb escape straight down into Pi's Cozy Underground Home Nest!
             this.invulnerableUntil = this.time.now + 2400;
-            const sx = this.room.homeNest.x;
-            const sy = this.room.homeNest.y;
+            const sx = this.room.spawn.x;
+            const sy = this.room.spawn.y;
             this.player.setPosition(sx, sy);
             this.playerHalo.setPosition(sx, sy + 10);
-            this.carriedVisual.setPosition(sx, sy - 36);
-            this._showToast(`💨 Успела юркнуть в свою норку! Осталось сердечек: ${this.hearts}`, '#fca5a5');
+            this._showToast(`💨 Успела увернуться в норку! Осталось сердечек: ${this.hearts}`, '#fca5a5');
             return;
         }
 
@@ -2231,14 +1943,14 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // 13. MODALS: FLOOR CLEARED PERK PICKER, PAUSE & GAME OVER
+    // 11. INFINITE FLOOR CLEAR MODAL, PAUSE & GAME OVER
     // =========================================================================
 
     onFloorCleared() {
         if (this.ended) return;
         this.ended = true;
 
-        const floorBonus = 18 + this.floor * 6;
+        const floorBonus = 15 + this.floor * 5;
         const stealthBonus = this.seenOnThisFloor ? 0 : 15;
         const earned = floorBonus + stealthBonus;
         this.carriedCheese += earned;
@@ -2263,10 +1975,10 @@ export class SneakScene extends Phaser.Scene {
         modalRoot.innerHTML = `
             <div class="sneak-modal-card">
                 <div style="font-weight:900;font-size:min(5vw, 22px);color:#fef08a;">
-                    🏠 ВСЯ ДОБЫЧА В НОРКЕ! ЭТАЖ ${this.floor} ПРОЙДЕН! +${earned} 🧀
+                    🏰 ЭТАЖ ${this.floor} ПРОЙДЕН! +${earned} 🧀
                 </div>
                 <div style="font-weight:800;font-size:min(3.4vw, 14px);color:#e2e8f0;margin-top:4px;">
-                    🎁 Выбери 1 Супер-Способность для Норки на Этаж ${this.floor + 1}:
+                    🎁 Выбери 1 Супер-Способность на Этаж ${this.floor + 1}:
                 </div>
                 <div class="sneak-perk-grid">
                     ${shuffled.map((p, idx) => `
@@ -2320,6 +2032,7 @@ export class SneakScene extends Phaser.Scene {
             carriedCheese: nextCheese,
             bankedInRun: nextBanked,
             totalRescuedInRun: this.totalRescuedInRun,
+            rescuedFollowers: this.rescuedFollowers,
             streak: Math.min(3.0, +(this.streak + 0.2).toFixed(2)),
             hearts: nextHearts,
             maxHearts: this.maxHearts,
@@ -2336,16 +2049,16 @@ export class SneakScene extends Phaser.Scene {
         modalRoot.innerHTML = `
             <div class="sneak-modal-card" style="border-color:#f43f5e;max-width:440px;">
                 <div style="font-weight:900;font-size:min(5vw, 21px);color:#fda4af;">
-                    🐾 ${monster.cfg.name} поймал Пи наверху!
+                    🐾 ${monster.cfg.name} поймал Пи!
                 </div>
                 <div style="font-weight:800;font-size:14.5px;color:#f8fafc;margin:14px 0;line-height:1.5;">
                     Достигнут этаж: <b>${this.floor}</b><br>
-                    Спасено друзей в норку: <b>${this.totalRescuedInRun} 🐾</b><br>
-                    Сохранено в норке: <b style="color:#facc15;">+${keptCheese} 🧀</b>
+                    Спасено друзей: <b>${this.totalRescuedInRun} 🐾</b><br>
+                    Сохранено в копилку: <b style="color:#facc15;">+${keptCheese} 🧀</b>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:8px;">
                     <button class="sneak-action-btn" id="sneak-retry-btn" style="background:linear-gradient(180deg,#10b981,#059669);">
-                        🔄 НОВАЯ ОПЕРАЦИЯ (ЭТАЖ 1)
+                        🔄 НАЧАТЬ С ЭТАЖА 1
                     </button>
                     <button class="sneak-action-btn" id="sneak-gameover-menu-btn" style="background:#334155;">
                         🏰 В МЕНЮ ЗАМКА ТЕНЕЙ
@@ -2409,10 +2122,10 @@ export class SneakScene extends Phaser.Scene {
     }
 
     // =========================================================================
-    // 14. WALKABILITY & AUDIO HELPERS
+    // 12. WALKABILITY & AUDIO HELPERS
     // =========================================================================
 
-    _isUpperRoomWalkable(wx, wy) {
+    _isMonsterWalkable(wx, wy) {
         const gx = Math.floor(wx / this.room.cell);
         const gy = Math.floor(wy / this.room.cell);
         if (gy < 0 || gy >= this.room.H || gx < 0 || gx >= this.room.W) return false;
@@ -2423,18 +2136,8 @@ export class SneakScene extends Phaser.Scene {
         const gx = Math.floor(wx / this.room.cell);
         const gy = Math.floor(wy / this.room.cell);
         if (gy < 0 || gy >= this.room.H || gx < 0 || gx >= this.room.W) return false;
-        const tile = this.room.grid[gy][gx];
-        if (tile === '#') return false;
-
-        // Check active laser gates in the upper room
-        if (tile === '.' && this.laserGateObjs) {
-            for (const lg of this.laserGateObjs) {
-                if (lg.data.active && Math.abs(wx - lg.data.x) < 16 && wy >= lg.data.y1 && wy <= lg.data.y2) {
-                    return false;
-                }
-            }
-        }
-        return tile === '.' || tile === 'U';
+        const t = this.room.grid[gy][gx];
+        return t === '.' || t === 'B' || t === 'V' || t === 'S';
     }
 
     _canWalkAt(wx, wy, r) {
@@ -2446,9 +2149,9 @@ export class SneakScene extends Phaser.Scene {
         );
     }
 
-    _isInsideShadowCushion(wx, wy) {
-        for (const sr of this.shadowRects) {
-            if (Math.hypot(wx - sr.x, wy - sr.y) <= sr.r) return true;
+    _isInsideShadow(wx, wy) {
+        for (const sz of this.shadowZones) {
+            if (Math.hypot(wx - sz.x, wy - sz.y) <= sz.r) return true;
         }
         return false;
     }
