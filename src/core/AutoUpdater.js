@@ -59,7 +59,7 @@ class AutoUpdaterService {
         btn.className = 'mpi-reload-chip';
         btn.title = 'Сбросить кэш и загрузить свежую версию с сервера';
         btn.textContent = `🔄 ${this.currentLabel}`;
-        btn.addEventListener('click', () => this.forceHardReload('Прилетело обновление галактики! 🚀', this.currentVersion || Date.now()));
+        btn.addEventListener('click', () => this.forceHardReload('🔄 Сброс кэша и перезагрузка...', this.currentVersion || Date.now()));
         this.badges.add(btn);
         return btn;
     }
