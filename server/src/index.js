@@ -61,9 +61,73 @@ app.get('/version', (_req, res) => {
 // Colyseus dashboard for debugging (http://localhost:2567/colyseus)
 app.use('/colyseus', monitor());
 
+// ============================================================================
+// Space Hub Realtime Relay (/space-ws WebSocket + /api/space-sync HTTP fallback)
+// ============================================================================
+const spacePeers = new Map();
+const spaceSockets = new Set();
+
+function pruneSpacePeers() {
+    const cutoff = Date.now() - 16000;
+    for (const [id, entry] of spacePeers) {
+        if (entry.updatedAt < cutoff) spacePeers.delete(id);
+    }
+}
+
+function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
+    if (!pkt || typeof pkt.playerId !== 'string' || !pkt.playerId) return;
+    pruneSpacePeers();
+    spacePeers.set(pkt.playerId, { pkt, updatedAt: Date.now() });
+    const raw = JSON.stringify(pkt);
+    for (const sock of spaceSockets) {
+        if (sock !== senderWs && sock.readyState === 1) {
+            try { sock.send(raw); } catch (_) {}
+        }
+    }
+}
+
+app.post('/api/space-sync', (req, res) => {
+    const pkt = req.body;
+    if (pkt?.playerId) recordAndBroadcastSpacePkt(pkt, null);
+    else pruneSpacePeers();
+    const peers = [];
+    for (const [id, entry] of spacePeers) {
+        if (id !== pkt?.playerId) peers.push(entry.pkt);
+    }
+    res.json({ ok: true, peers });
+});
+
 const httpServer = createServer(app);
+const wsTransport = new WebSocketTransport({ server: httpServer });
+const origOnConnection = wsTransport.onConnection.bind(wsTransport);
+wsTransport.wss.removeListener('connection', wsTransport.onConnection);
+wsTransport.wss.on('connection', (rawClient, req) => {
+    const url = req?.url || rawClient?.upgradeReq?.url || '';
+    if (url.startsWith('/space-ws')) {
+        rawClient.pingCount = 0;
+        rawClient.on('pong', () => { rawClient.pingCount = 0; });
+        rawClient.on('error', () => {});
+        spaceSockets.add(rawClient);
+        pruneSpacePeers();
+        for (const { pkt } of spacePeers.values()) {
+            if (rawClient.readyState === 1) {
+                try { rawClient.send(JSON.stringify(pkt)); } catch (_) {}
+            }
+        }
+        rawClient.on('message', (data) => {
+            try {
+                const pkt = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
+                recordAndBroadcastSpacePkt(pkt, rawClient);
+            } catch (_) {}
+        });
+        rawClient.on('close', () => spaceSockets.delete(rawClient));
+        return;
+    }
+    return origOnConnection(rawClient, req);
+});
+
 const gameServer = new Server({
-    transport: new WebSocketTransport({ server: httpServer })
+    transport: wsTransport
 });
 
 gameServer.define('snowball', SnowballRoom)
