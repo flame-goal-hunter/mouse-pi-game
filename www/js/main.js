@@ -121,6 +121,16 @@ if (document.fonts && document.fonts.load) {
     _boot();
 }
 
+function _isAppMuted() {
+    try {
+        if (localStorage.getItem('mousie_muted') === '1') return true;
+        if (localStorage.getItem('mousie_muted') === '0') return false;
+        return !!Progress.getAudioPrefs().muted;
+    } catch (e) {
+        return false;
+    }
+}
+
 // Suppress DAC pop + resume the Phaser AudioContext on first gesture.
 // Capture phase + document so Phaser canvas handlers can't stop propagation.
 function _unlockAllAudio() {
@@ -134,10 +144,8 @@ function _unlockAllAudio() {
         game.sound.mute = true;
         // Restore the stored preference, not `false` — unlocking must not un-mute a muted game.
         ctx.resume().then(() => setTimeout(() => {
-            let muted = false;
-            try { muted = !!Progress.getAudioPrefs().muted; } catch (e) {}
-            game.sound.mute = muted;
-        }, 150));
+            game.sound.mute = _isAppMuted();
+        }, 150)).catch(() => {});
     }
 }
 document.addEventListener('touchstart', _unlockAllAudio, { capture: true });
@@ -157,19 +165,78 @@ window.addEventListener('resize', () => {
     }, 200);
 });
 
-// Pause/resume with mute trick to suppress DAC pop on app restore
-document.addEventListener('visibilitychange', () => {
+let _restoreMuteTimer = null;
+let _wasPausedByBackground = false;
+
+function _pauseAllGameAudio() {
+    _wasPausedByBackground = true;
+    if (_restoreMuteTimer) {
+        clearTimeout(_restoreMuteTimer);
+        _restoreMuteTimer = null;
+    }
+    try { window.audio?.pauseAll?.(); } catch (_) {}
     if (!game) return;
-    if (document.hidden) {
-        game.sound.pauseAll();
-    } else {
+    try {
+        const gs = game.scene?.getScene?.('GameScene');
+        if (gs) {
+            gs._appBackgrounded = true;
+            if (gs.bgm && gs.bgm.isPlaying) gs.bgm.pause();
+        }
+    } catch (_) {}
+    try { game.sound.pauseAll(); } catch (_) {}
+    try { game.sound.context?.suspend?.().catch(() => {}); } catch (_) {}
+}
+
+function _resumeAllGameAudio() {
+    if (!_wasPausedByBackground) return;
+    try {
+        if (document.hidden) return;
+        if (window.parent && window.parent !== window && window.parent.document?.hidden) return;
+    } catch (_) {}
+    _wasPausedByBackground = false;
+    try { window.audio?.resumeAll?.(); } catch (_) {}
+    if (!game) return;
+    const muted = _isAppMuted();
+    try {
+        const gs = game.scene?.getScene?.('GameScene');
+        if (gs) {
+            gs._appBackgrounded = false;
+            gs._soundMuted = muted;
+            if (gs.hudMusic) gs.hudMusic.textContent = muted ? '🔇' : '🔊';
+            if (!muted && gs.bgm && gs.bgm.isPaused) {
+                try { gs.bgm.resume(); } catch (_) {}
+            }
+        }
+    } catch (_) {}
+    if (muted) {
         game.sound.mute = true;
-        game.sound.resumeAll();
-        // Restore the stored preference, not `false` — resuming must not un-mute a muted game.
-        setTimeout(() => {
-            let muted = false;
-            try { muted = !!Progress.getAudioPrefs().muted; } catch (e) {}
-            game.sound.mute = muted;
-        }, 400);
+        return;
+    }
+    game.sound.mute = true;
+    try { game.sound.context?.resume?.().catch(() => {}); } catch (_) {}
+    try { game.sound.resumeAll(); } catch (_) {}
+    if (_restoreMuteTimer) clearTimeout(_restoreMuteTimer);
+    _restoreMuteTimer = setTimeout(() => {
+        _restoreMuteTimer = null;
+        if (!game) return;
+        game.sound.mute = _isAppMuted();
+    }, 200);
+}
+
+// Pause/resume on visibilitychange, pagehide/pageshow, window blur/focus, and parent message
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) _pauseAllGameAudio();
+    else _resumeAllGameAudio();
+});
+window.addEventListener('pagehide', _pauseAllGameAudio);
+window.addEventListener('blur', _pauseAllGameAudio);
+window.addEventListener('focus', _resumeAllGameAudio);
+window.addEventListener('pageshow', _resumeAllGameAudio);
+document.addEventListener('pointerdown', _resumeAllGameAudio, { capture: true });
+document.addEventListener('touchstart', _resumeAllGameAudio, { capture: true });
+window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'appVisibility') {
+        if (e.data.hidden) _pauseAllGameAudio();
+        else _resumeAllGameAudio();
     }
 });

@@ -114,7 +114,16 @@ function fadeTo(target) {
 
 // Mirrors AudioManager._startEl: try straight away, fall back to a gesture only if the
 // browser actually refuses.
+function isDocHidden() {
+    try {
+        if (document.hidden) return true;
+        if (window.parent && window.parent !== window && window.parent.document?.hidden) return true;
+    } catch (e) {}
+    return false;
+}
+
 export function startMenuMusic() {
+    if (_suspended || isDocHidden()) return Promise.resolve(false);
     const target = bgmVolume();
     if (!_bgm) {
         const file = (BGM_FILES[BGM_KEY] && BGM_FILES[BGM_KEY][0]) || BGM_KEY;
@@ -127,8 +136,12 @@ export function startMenuMusic() {
     let pr = null;
     try { pr = _bgm.play(); } catch (e) { return Promise.resolve(false); }
     if (!pr || typeof pr.then !== 'function') { _started = true; fadeTo(target); return Promise.resolve(true); }
-    return pr.then(() => { _started = true; fadeTo(target); return true; })
-             .catch(() => false);
+    return pr.then(() => {
+        if (_suspended || isDocHidden()) { try { _bgm.pause(); } catch (e) {} return false; }
+        _started = true;
+        fadeTo(target);
+        return true;
+    }).catch(() => false);
 }
 
 export function refreshMenuMusicVolume() {
@@ -136,18 +149,32 @@ export function refreshMenuMusicVolume() {
     const target = bgmVolume();
     if (_fade) { clearInterval(_fade); _fade = null; }
     _bgm.volume = target;
-    if (target <= 0) { try { _bgm.pause(); } catch (e) {} }
+    if (target <= 0 || _suspended || isDocHidden()) { try { _bgm.pause(); } catch (e) {} }
     else if (_bgm.paused) startMenuMusic();
 }
 
 if (typeof window !== 'undefined') {
     const attempt = () => startMenuMusic().catch(() => false);
+    const pauseMenuBgm = () => {
+        _suspended = true;
+        if (_fade) { clearInterval(_fade); _fade = null; }
+        if (_bgm) { try { _bgm.pause(); } catch (e) {} }
+    };
+    const resumeMenuBgm = () => {
+        if (isDocHidden()) return;
+        _suspended = false;
+        attempt();
+    };
 
     // Capture phase on both window and document, and every event that can carry a
     // user gesture: a listener on window in the bubble phase is lost the moment any
     // handler on the page calls stopPropagation.
     const EVENTS = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'];
-    const kick = () => { if (!_started) attempt(); };
+    const kick = () => {
+        if (isDocHidden()) return;
+        if (_suspended) { resumeMenuBgm(); return; }
+        if (!_started) attempt();
+    };
     for (const ev of EVENTS) {
         window.addEventListener(ev, kick, true);
         document.addEventListener(ev, kick, true);
@@ -158,7 +185,7 @@ if (typeof window !== 'undefined') {
     // costs one paused check a second and stops asking once the track is running.
     let ticks = 0;
     const watchdog = setInterval(() => {
-        if (document.hidden || _suspended) return;    // backgrounded: do not fight the pause
+        if (isDocHidden() || _suspended) return;      // backgrounded: do not fight the pause
         if (bgmVolume() <= 0) return;                 // muted on purpose: leave it alone
         if (_bgm && !_bgm.paused) { _started = true; return; }
         if (++ticks > 600) { clearInterval(watchdog); return; }   // give up after 10 min
@@ -166,15 +193,18 @@ if (typeof window !== 'undefined') {
     }, 1000);
 
     attempt();
-    window.addEventListener('pagehide', () => { if (_bgm) { try { _bgm.pause(); } catch (e) {} } });
-    // Coming back to the menu from the game: resume rather than stay silent.
+    window.addEventListener('pagehide', pauseMenuBgm);
+    window.addEventListener('blur', pauseMenuBgm);
+    window.addEventListener('focus', resumeMenuBgm);
+    window.addEventListener('pageshow', resumeMenuBgm);
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            _suspended = !!(_bgm && !_bgm.paused);
-            if (_bgm) { try { _bgm.pause(); } catch (e) {} }
-            return;
+        if (isDocHidden()) pauseMenuBgm();
+        else resumeMenuBgm();
+    });
+    window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'appVisibility') {
+            if (e.data.hidden) pauseMenuBgm();
+            else resumeMenuBgm();
         }
-        if (_suspended) { _suspended = false; attempt(); }
-        else if (_bgm && _bgm.paused) attempt();
     });
 }

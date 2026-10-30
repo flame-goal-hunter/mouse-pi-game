@@ -433,15 +433,28 @@ export const Progress = {
     getGhostRuns() { return load().ghostRuns; },
 
     // === Audio prefs ===
-    getAudioPrefs() { return load().audioPrefs; },
+    getAudioPrefs() {
+        const s = load();
+        try {
+            const globalMute = localStorage.getItem('mousie_muted');
+            if (globalMute === '1' || globalMute === '0') {
+                s.audioPrefs.muted = (globalMute === '1');
+            }
+        } catch (e) {}
+        return s.audioPrefs;
+    },
     setAudioPref(key, value) {
         const s = load();
         s.audioPrefs[key] = value;
+        if (key === 'muted') {
+            try { localStorage.setItem('mousie_muted', value ? '1' : '0'); } catch (e) {}
+        }
         save();
     },
     toggleMute() {
         const s = load();
         s.audioPrefs.muted = !s.audioPrefs.muted;
+        try { localStorage.setItem('mousie_muted', s.audioPrefs.muted ? '1' : '0'); } catch (e) {}
         save();
         return s.audioPrefs.muted;
     },

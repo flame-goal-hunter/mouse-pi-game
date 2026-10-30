@@ -91,10 +91,25 @@ export class AudioManager {
         document.addEventListener('keydown', unlock, { capture: true });
         document.addEventListener('mousedown', unlock, { capture: true });
 
-        // Pause / resume on visibility change
+        // Pause / resume on visibility, pagehide, window blur/focus, and parent postMessage
+        this._appBackgrounded = false;
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) this.pauseAll();
             else this.resumeAll();
+        });
+        window.addEventListener('pagehide', () => this.pauseAll());
+        window.addEventListener('blur', () => this.pauseAll());
+        window.addEventListener('focus', () => {
+            if (!document.hidden) this.resumeAll();
+        });
+        window.addEventListener('pageshow', () => {
+            if (!document.hidden) this.resumeAll();
+        });
+        window.addEventListener('message', (e) => {
+            if (e.data && e.data.type === 'appVisibility') {
+                if (e.data.hidden) this.pauseAll();
+                else this.resumeAll();
+            }
         });
     }
 
@@ -141,6 +156,7 @@ export class AudioManager {
     }
 
     _play(event, opts = {}) {
+        if (this._appBackgrounded || document.hidden) return;
         const cfg = EVENT_MAP[event];
         if (!cfg) return;
         const now = performance.now();
@@ -329,7 +345,7 @@ export class AudioManager {
         if (!el) return;
         if (this._bgmKey === key && this._bgmEl === el) {
             // Same track: only nudge it if a blocked autoplay (or a stall) left it paused
-            if (el.paused && !document.hidden) {
+            if (el.paused && !document.hidden && !this._appBackgrounded) {
                 this._startEl(el, key);
                 this._ramp(el, this._musicVolume(key), 800);
             }
@@ -343,6 +359,10 @@ export class AudioManager {
         this._bgmKey = key;
         this._stopRamp(el);
         try { el.volume = 0; el.currentTime = 0; } catch (e) {}
+        if (document.hidden || this._appBackgrounded) {
+            this._bgmWasPlaying = true;
+            return;
+        }
         this._startEl(el, key);
         this._ramp(el, this._musicVolume(key), 800);
     }
@@ -359,15 +379,37 @@ export class AudioManager {
 
     pauseAll() {
         try {
-            this._bgmWasPlaying = !!(this._bgmEl && !this._bgmEl.paused);
-            if (this._bgmEl) this._bgmEl.pause();
+            if (!this._appBackgrounded) {
+                this._bgmWasPlaying = !!(this._bgmEl && !this._bgmEl.paused);
+            }
+            this._appBackgrounded = true;
+            for (const el of Object.values(this._bgmEls)) {
+                this._stopRamp(el);
+                try { el.pause(); } catch (e) {}
+            }
         } catch (e) {}
-        if (this.game?.sound) this.game.sound.pauseAll?.();
+        if (this.game?.sound) {
+            this.game.sound.pauseAll?.();
+            try { this.game.sound.context?.suspend?.().catch(() => {}); } catch (e) {}
+        }
     }
     resumeAll() {
+        if (!this._appBackgrounded || document.hidden) return;
+        this._appBackgrounded = false;
+        this.applyPrefs(safeGetPrefs());
         if (!this._duckTimer && this._duckGain !== 1) this._clearDuck();
-        try { if (this._bgmEl && this._bgmWasPlaying) this._startEl(this._bgmEl, this._bgmKey); } catch (e) {}
-        if (this.game?.sound) this.game.sound.resumeAll?.();
+        try {
+            if (this._bgmEl && this._bgmWasPlaying && !(this.prefs && this.prefs.muted)) {
+                this._bgmEl.volume = this._musicVolume(this._bgmKey);
+                this._startEl(this._bgmEl, this._bgmKey);
+            }
+        } catch (e) {}
+        if (this.game?.sound) {
+            if (!(this.prefs && this.prefs.muted)) {
+                try { this.game.sound.context?.resume?.().catch(() => {}); } catch (e) {}
+            }
+            this.game.sound.resumeAll?.();
+        }
     }
 
     // === Convenience: direct emit shortcuts ===

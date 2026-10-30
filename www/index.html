@@ -950,7 +950,7 @@
     <iframe id="phaserFrame" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 500; border: none;"></iframe>
 
     <!-- Menu background music -->
-    <audio id="menuMusic" loop autoplay>
+    <audio id="menuMusic" loop preload="auto">
         <source src="assets/sounds/KleptoLindaCavernsA_Loopable.ogg" type="audio/ogg">
     </audio>
 
@@ -1371,17 +1371,19 @@
             } catch (_) {}
         }
 
-        function updateMenuSoundButton() {
+        function syncMenuMuteState() {
+            menuSoundMuted = localStorage.getItem('mousie_muted') === '1';
             const btn = document.getElementById('menuSoundToggle');
             if (btn) btn.textContent = menuSoundMuted ? '🔇' : '🔊';
+            try { menuMusic.muted = menuSoundMuted; } catch (_) {}
         }
-        updateMenuSoundButton();
+        syncMenuMuteState();
 
         document.getElementById('menuSoundToggle')?.addEventListener('click', (e) => {
             e.stopPropagation();
             menuSoundMuted = !menuSoundMuted;
             localStorage.setItem('mousie_muted', menuSoundMuted ? '1' : '0');
-            updateMenuSoundButton();
+            syncMenuMuteState();
             if (menuSoundMuted) {
                 menuMusic.pause();
             } else {
@@ -1402,9 +1404,14 @@
         });
 
         let _menuFadeTimer = null;
+        let _appBackgrounded = false;
 
         function playMenuMusic() {
-            if (menuSoundMuted) return;
+            syncMenuMuteState();
+            if (menuSoundMuted || document.hidden || _appBackgrounded) {
+                try { menuMusic.pause(); } catch (_) {}
+                return;
+            }
             const startScreenEl = document.getElementById('startScreen');
             if (!startScreenEl || !startScreenEl.classList.contains('visible')) return;
             const frameEl = document.getElementById('phaserFrame');
@@ -1433,22 +1440,55 @@
         // Try to play immediately
         playMenuMusic();
 
-        // Fallback: play on first user interaction (if browser blocked autoplay)
-        document.addEventListener('click', function initMusic() {
+        // Fallback: play on first user interaction in the menu (if browser blocked autoplay)
+        function initMusicOnGesture(e) {
+            if (e && e.target && e.target.closest && e.target.closest('#menuSoundToggle')) return;
+            if (_appBackgrounded) _appBackgrounded = false;
             playMenuMusic();
-            document.removeEventListener('click', initMusic);
-        }, { once: true });
+        }
+        document.getElementById('startScreen')?.addEventListener('pointerdown', initMusicOnGesture);
+        document.getElementById('startScreen')?.addEventListener('click', initMusicOnGesture);
 
-        // Pause/resume music when app goes to background (Android minimize)
-        let wasMusicPlaying = false;
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                wasMusicPlaying = !menuMusic.paused;
-                menuMusic.pause();
-            } else if (wasMusicPlaying && !menuSoundMuted) {
+        function notifyIframeVisibility(hidden) {
+            try {
+                const frameEl = document.getElementById('phaserFrame');
+                if (frameEl && frameEl.style.display === 'block' && frameEl.contentWindow) {
+                    frameEl.contentWindow.postMessage({ type: 'appVisibility', hidden: !!hidden }, '*');
+                }
+            } catch (_) {}
+        }
+
+        function handleAppPause(isWindowBlur = false) {
+            // If focus simply moved into #phaserFrame, only pause parent menu music, not the iframe!
+            const frameEl = document.getElementById('phaserFrame');
+            const focusMovedToIframe = isWindowBlur && frameEl && document.activeElement === frameEl;
+            try { menuMusic.pause(); } catch (_) {}
+            try { _uiAudioCtx?.suspend?.().catch(() => {}); } catch (_) {}
+            if (!focusMovedToIframe) {
+                _appBackgrounded = true;
+                notifyIframeVisibility(true);
+            }
+        }
+
+        function handleAppResume() {
+            if (document.hidden) return;
+            _appBackgrounded = false;
+            notifyIframeVisibility(false);
+            syncMenuMuteState();
+            if (!menuSoundMuted) {
+                try { _uiAudioCtx?.resume?.().catch(() => {}); } catch (_) {}
                 playMenuMusic();
             }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) handleAppPause(false);
+            else handleAppResume();
         });
+        window.addEventListener('pagehide', () => handleAppPause(false));
+        window.addEventListener('blur', () => handleAppPause(true));
+        window.addEventListener('focus', handleAppResume);
+        window.addEventListener('pageshow', handleAppResume);
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');

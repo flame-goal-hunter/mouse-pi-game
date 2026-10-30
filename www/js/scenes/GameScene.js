@@ -566,18 +566,27 @@ export class GameScene extends Phaser.Scene {
                 volume: 0.34,
                 rate: 1.0
             });
-            if (!this._soundMuted) {
+            if (!this._soundMuted && !this._isHiddenOrBackgrounded()) {
                 try { this.bgm.play(); } catch (_) {}
             }
         }
         this._startArcadeBeatLoop();
     }
 
-    _getAudioCtx() {
-        if (this._soundMuted) return null;
+    _isHiddenOrBackgrounded() {
+        if (this._appBackgrounded) return true;
+        try {
+            if (document.hidden) return true;
+            if (window.parent && window.parent !== window && window.parent.document?.hidden) return true;
+        } catch (_) {}
+        return false;
+    }
+
+    _getAudioCtx(allowResume = true) {
+        if (this._soundMuted || this._isHiddenOrBackgrounded()) return null;
         const phaserCtx = this.sound?.context;
         if (phaserCtx) {
-            if (phaserCtx.state === 'suspended') {
+            if (allowResume && phaserCtx.state === 'suspended') {
                 phaserCtx.resume().catch(() => {});
             }
             return phaserCtx;
@@ -607,8 +616,8 @@ export class GameScene extends Phaser.Scene {
         ];
 
         this._beatInterval = setInterval(() => {
-            if (this._soundMuted || this.isGamePaused || !this.scene?.isActive()) return;
-            const ac = this._getAudioCtx();
+            if (this._soundMuted || this.isGamePaused || this._isHiddenOrBackgrounded() || !this.scene?.isActive()) return;
+            const ac = this._getAudioCtx(false);
             if (!ac || ac.state !== 'running') return;
 
             const step = this._beatStep % 16;
@@ -3118,8 +3127,8 @@ export class GameScene extends Phaser.Scene {
             volume = baseVolume * Math.max(0, falloff);
         }
 
-        // Only play if audible (minimum 5% volume) and not muted
-        if (volume > 0 && !this._soundMuted) {
+        // Only play if audible (minimum 5% volume), not muted, and not backgrounded
+        if (volume > 0 && !this._soundMuted && !this._isHiddenOrBackgrounded()) {
             const vol = Math.max(0.05, volume);
             // Randomize pitch slightly so rapid throws/hits never sound robotic
             const detune = Math.round((Math.random() - 0.5) * 260);
@@ -5064,10 +5073,13 @@ export class GameScene extends Phaser.Scene {
             this.network = null;
         }
 
-        // Stop background music
+        // Stop background music and procedural beat loop
+        this._stopArcadeBeatLoop();
         if (this.bgm) {
-            this.bgm.stop();
+            try { this.bgm.stop(); } catch (_) {}
+            this.bgm = null;
         }
+        try { this.sound.stopAll(); } catch (_) {}
 
         // Send message to parent window to close iframe and show HTML menu
         // This triggers stopPhaserSnowball() which shows the menu and plays music
