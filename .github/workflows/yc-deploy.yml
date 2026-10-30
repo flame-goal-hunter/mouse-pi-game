@@ -22,15 +22,23 @@ jobs:
           docker build -t cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }} .
           docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }}
 
+      - name: Extract Service Account ID
+        id: sa
+        env:
+          SA_JSON: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+        run: |
+          echo "id=$(echo "$SA_JSON" | jq -r '.service_account_id')" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Yandex Serverless Containers
         uses: yc-actions/yc-sls-container-deploy@v5
         with:
           yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
           folder-id: ${{ secrets.YC_FOLDER_ID }}
           container-name: pi-mouse-game
-          image: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }}
-          cores: 1
-          memory: 512Mb
-          execution-timeout: 3600s
-          concurrency: 16
+          revision-service-account-id: ${{ steps.sa.outputs.id }}
+          revision-image-url: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }}
+          revision-cores: 1
+          revision-memory: 512Mb
+          revision-execution-timeout: 3600
+          revision-concurrency: 16
           public: true
