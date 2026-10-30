@@ -8,6 +8,7 @@ import { HomePlanetRenderer, HOME_ZONES } from './HomePlanetRenderer.js';
 import { HomeWardrobeModal } from './HomeWardrobeModal.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceNetwork } from '../space_hub/SpaceNetwork.js';
+import { AutoUpdater } from '../core/AutoUpdater.js';
 
 export class HomePlanetScene {
     constructor({ onTakeOff } = {}) {
@@ -56,6 +57,7 @@ export class HomePlanetScene {
         this.banner = el.querySelector('#hpZoneBanner');
         this.bannerTitle = el.querySelector('#hpBannerTitle');
         this.bannerSub = el.querySelector('#hpBannerSub');
+        el.querySelector('.hp-hud-bar').appendChild(AutoUpdater.createReloadButton());
     }
 
     _resize() {

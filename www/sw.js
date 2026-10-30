@@ -1,10 +1,8 @@
-// ============================================
-// Service worker — makes the game installable from Chrome and playable offline.
-// Shell files are precached on install; heavy assets (art, audio) are cached the
-// first time they are used, so the first load stays small.
-// Bump CACHE_VERSION whenever shipping new files.
-// ============================================
-const CACHE_VERSION = 'mousiepi-0c12764caf';
+// ============================================================================
+// sw.js — Умный Service Worker: строгий Network First (cache: 'no-store'),
+// мгновенный self.skipWaiting() + self.clients.claim() без удержания старого кэша
+// ============================================================================
+const CACHE_VERSION = 'mousiepi-bd5a6d7c1f';
 const SHELL = [
   './',
   './index.html',
@@ -24,11 +22,15 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
   e.waitUntil((async () => {
     const c = await caches.open(CACHE_VERSION);
-    // Never fail the install because one optional file is missing.
-    await Promise.all(SHELL.map((u) => c.add(u).catch(() => {})));
-    self.skipWaiting();
+    await Promise.all(SHELL.map(async (u) => {
+      try {
+        const res = await fetch(new Request(u, { cache: 'no-store' }));
+        if (res && res.ok) await c.put(u, res);
+      } catch (_) {}
+    }));
   })());
 });
 
@@ -44,40 +46,33 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Multiplayer and health endpoints always go to the network.
-  if (url.pathname.startsWith('/colyseus') || url.pathname.startsWith('/health') ||
-      url.pathname.startsWith('/matchmake')) return;
-  // Same-origin only: any CDN stays on the network.
-  if (url.origin !== self.location.origin) return;
-
-  // Pages: network first (so a fresh deploy is picked up), falling back to cache offline.
-  if (req.mode === 'navigate') {
-    e.respondWith((async () => {
-      try {
-        const fresh = await fetch(req);
-        const c = await caches.open(CACHE_VERSION);
-        c.put(req, fresh.clone());
-        return fresh;
-      } catch (err) {
-        return (await caches.match(req, { ignoreSearch: true })) || (await caches.match('./index.html'));
-      }
-    })());
+  if (
+    url.pathname.startsWith('/colyseus') ||
+    url.pathname.startsWith('/health') ||
+    url.pathname.startsWith('/matchmake') ||
+    url.pathname.endsWith('/version.json')
+  ) {
     return;
   }
+  if (url.origin !== self.location.origin) return;
 
-  // Network-first for all same-origin assets so updates are picked up immediately,
-  // falling back to cache only when offline.
+  // Strict Network First with cache: 'no-store' for all HTML pages and assets
   e.respondWith((async () => {
     try {
-      const res = await fetch(req, { cache: 'no-store' });
-      if (res && res.ok) {
+      const fresh = await fetch(new Request(req.url, { cache: 'no-store' }));
+      if (fresh && fresh.ok) {
         const c = await caches.open(CACHE_VERSION);
-        c.put(req, res.clone());
+        c.put(req, fresh.clone());
       }
-      return res;
-    } catch (err) {
+      return fresh;
+    } catch (_) {
       const hit = await caches.match(req, { ignoreSearch: true });
-      return hit || Response.error();
+      if (hit) return hit;
+      if (req.mode === 'navigate') {
+        const fallback = await caches.match('./index.html', { ignoreSearch: true });
+        if (fallback) return fallback;
+      }
+      return Response.error();
     }
   })());
 });

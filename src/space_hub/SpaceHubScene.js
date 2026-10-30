@@ -15,6 +15,7 @@ import { OnlineHUD } from './OnlineHUD.js';
 import { RemoteSpaceRenderer } from './RemoteSpaceRenderer.js';
 import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
+import { AutoUpdater } from '../core/AutoUpdater.js';
 
 export class SpaceHubScene {
     constructor({ onSelectPlanet, onToggleMenu } = {}) {
@@ -79,6 +80,7 @@ export class SpaceHubScene {
         this.bannerSub = el.querySelector('#shBannerSub');
         this.bannerPlayers = el.querySelector('#shBannerPlayers');
         this.cheeseCounter = el.querySelector('#shCheeseCounter');
+        el.querySelector('.sh-top-bar').appendChild(AutoUpdater.createReloadButton());
         el.querySelector('#shMenuSwitchBtn').addEventListener('click', () => this.onToggleMenu('classic'));
     }
     _updateCheeseHUD() {
@@ -128,10 +130,8 @@ export class SpaceHubScene {
     }
 
     stop() {
-        this.running = false;
-        this.overlay.style.display = 'none';
-        const ss = document.getElementById('startScreen');
-        if (ss) ss.style.display = '';
+        this.running = false; this.overlay.style.display = 'none';
+        const ss = document.getElementById('startScreen'); if (ss) ss.style.display = '';
     }
 
     _renderBannerPlayers(planet) {

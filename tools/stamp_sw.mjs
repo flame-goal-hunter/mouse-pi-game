@@ -1,22 +1,19 @@
 #!/usr/bin/env node
-// Stamps the service worker's cache version so shipped changes actually reach players.
-//
-// sw.js serves cache-first, and it only updates when the FILE ITSELF changes bytes.
-// The version used to be stamped from Heroku's SOURCE_VERSION, which meant local
-// builds and Android packages kept 'mousiepi-v1' forever: every fix stayed invisible
-// to any browser that had opened the game once.
-//
-// The version is now a hash of the code that ships, so it changes exactly when the
-// code changes — no manual bump, no needless re-download when nothing moved.
-import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+// Stamps the service worker's cache version and writes www/version.json (and public/version.json)
+// so PWA clients immediately detect any new deployment.
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { join, relative, sep } from 'node:path';
 
-const WWW = fileURLToPath(new URL('../www', import.meta.url));
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const WWW = join(ROOT, 'www');
+const PUBLIC = join(ROOT, 'public');
 const SW = join(WWW, 'sw.js');
-const HASHED = /\.(js|mjs|css|html|webmanifest|json|svg)$/i;
-const SKIP = new Set(['sw.js', 'node_modules']);
+const VER_WWW = join(WWW, 'version.json');
+const VER_PUB = join(PUBLIC, 'version.json');
+const HASHED = /\.(js|mjs|css|html|webmanifest|svg)$/i;
+const SKIP = new Set(['sw.js', 'version.json', 'node_modules']);
 
 function walk(dir, out = []) {
     for (const name of readdirSync(dir).sort()) {
@@ -34,11 +31,20 @@ for (const f of walk(WWW)) {
     h.update(readFileSync(f));
 }
 const stamp = h.digest('hex').slice(0, 10);
+const versionPayload = JSON.stringify({
+    version: `1.05-${stamp}`,
+    label: `v1.05 · ${stamp.slice(0, 4)}`,
+    shortLabel: 'v1.05',
+    buildHash: stamp
+}, null, 2) + '\n';
+
+writeFileSync(VER_WWW, versionPayload);
+mkdirSync(PUBLIC, { recursive: true });
+writeFileSync(VER_PUB, versionPayload);
 
 const src = readFileSync(SW, 'utf8');
 const line = /const CACHE_VERSION = '[^']+';/;
 if (!line.test(src)) { console.error('[stamp_sw] CACHE_VERSION line not found'); process.exit(1); }
 const out = src.replace(line, `const CACHE_VERSION = 'mousiepi-${stamp}';`);
-if (out === src) { console.log(`[stamp_sw] unchanged (mousiepi-${stamp})`); process.exit(0); }
 writeFileSync(SW, out);
-console.log(`[stamp_sw] cache version -> mousiepi-${stamp}`);
+console.log(`[stamp_sw] cache version -> mousiepi-${stamp} (version.json updated)`);

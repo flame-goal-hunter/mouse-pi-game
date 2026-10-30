@@ -171,3 +171,4 @@ export class RemoteSpaceRenderer {
         ctx.restore();
     }
 }
+
