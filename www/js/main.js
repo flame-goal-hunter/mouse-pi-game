@@ -40,7 +40,10 @@ const roomCode = (urlParams.get('roomCode') || '').toUpperCase().slice(0, 6);
 const isPrivate = urlParams.get('private') === '1' || roomCode.length > 0;
 const nickname = urlParams.get('nickname') || 'Игрок';
 const remoteNickname = urlParams.get('remoteNickname') || null;
-const serverUrl = urlParams.get('server') || 'ws://localhost:2567';
+const defaultWsHost = (typeof window !== 'undefined' && window.location?.host)
+    ? ((window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host)
+    : 'ws://localhost:8080';
+const serverUrl = urlParams.get('server') || defaultWsHost;
 const runMode = urlParams.get('runMode') || null;
 
 // Store config globally for scenes to access

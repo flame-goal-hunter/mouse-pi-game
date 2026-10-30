@@ -11190,13 +11190,11 @@
                 localStorage.setItem('colyseusServer', urlParam);
                 return urlParam;
             }
-            const saved = localStorage.getItem('colyseusServer');
-            if (saved) return saved;
-            const isWeb = location.protocol === 'https:' || location.protocol === 'http:';
-            if (isWeb && ((location.hostname && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') || location.port === '2567')) {
-                return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
+            const isWeb = window.location.protocol === 'https:' || window.location.protocol === 'http:';
+            if (isWeb && window.location.host) {
+                return (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host;
             }
-            return 'ws://localhost:2567';
+            return 'ws://localhost:8080';
         }
 
         // Start online/multiplayer snowball game via Colyseus server

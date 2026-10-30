@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SnowballRoom } from './rooms/SnowballRoom.js';
 
-const PORT = Number(process.env.PORT) || 2567;
+const PORT = Number(process.env.PORT) || 8080;
+const HOST = '0.0.0.0';
 const STARTED_AT = new Date().toISOString();
 
 const app = express();
@@ -68,8 +69,8 @@ const gameServer = new Server({
 gameServer.define('snowball', SnowballRoom)
     .filterBy(['roomCode', 'isPrivate']);
 
-gameServer.listen(PORT).then(() => {
-    console.log(`[server] Mousie Pi snowball server listening on port ${PORT}`);
-    console.log(`[server] Game + multiplayer on http://localhost:${PORT}`);
-    console.log(`[server] Monitor: http://localhost:${PORT}/colyseus`);
+gameServer.listen(PORT, HOST).then(() => {
+    console.log(`[server] Mousie Pi snowball server listening on http://${HOST}:${PORT}`);
+    console.log(`[server] Game + multiplayer on http://${HOST}:${PORT}`);
+    console.log(`[server] Monitor: http://${HOST}:${PORT}/colyseus`);
 });
