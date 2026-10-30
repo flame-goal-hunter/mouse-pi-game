@@ -150,8 +150,8 @@ function renderModeHints() {
         ? `Лучший этаж: ${eStat.bestFloor}`
         : 'Спускайся вечно · растущая сложность';
     sneakHintEl.textContent = (nStat.bestFloor > 0 || nStat.clears > 0)
-        ? `Рекорд: этаж ${Math.max(nStat.bestFloor || 1, nStat.clears || 1)} · Залов: ${nStat.clears || 0}`
-        : 'Норы-телепорты · Золотой сыр · Бесконечные этажи';
+        ? `Рекорд: этаж ${Math.max(nStat.bestFloor || 1, nStat.clears || 1)} · Спасений: ${nStat.clears || 0}`
+        : 'Норы между островами · Спасай пушистиков · Перки';
 }
 
 function renderAll() {
