@@ -64,6 +64,7 @@ export class SneakScene extends Phaser.Scene {
             data?.floor || (typeof data?.roomIndex === 'number' ? data.roomIndex + 1 : 1)
         );
         this.carriedCheese = data?.carriedCheese ?? 0;
+        this.bankedInRun = data?.bankedInRun ?? 0;
         this.totalRescuedInRun = data?.totalRescuedInRun ?? 0;
         this.streak = data?.streak ?? 1.0;
         this.hearts = data?.hearts ?? 3;
@@ -2455,13 +2456,17 @@ export class SneakScene extends Phaser.Scene {
         }
 
         this.ended = true;
-        const kept = Math.floor(this.carriedCheese * 0.8);
-        Progress.recordSneakCaught({
-            roomIndex: this.floor - 1,
-            floor: this.floor,
-            keptCheese: kept
+        const unbankedOnFloor = Math.max(0, this.carriedCheese - (this.bankedInRun || 0));
+        const keptOnFloor = Math.floor(unbankedOnFloor * 0.8);
+        const totalKeptInRun = (this.bankedInRun || 0) + keptOnFloor;
+        this.bankedInRun = totalKeptInRun;
+        Progress.recordSneakRun({
+            cleared: false,
+            neverSeen: false,
+            cheese: keptOnFloor,
+            floor: this.floor
         });
-        this._showGameOverModal(monster, kept);
+        this._showGameOverModal(monster, totalKeptInRun);
     }
 
     // =========================================================================
@@ -2478,10 +2483,13 @@ export class SneakScene extends Phaser.Scene {
         this.carriedCheese += earned;
         this._refreshHud();
 
-        Progress.recordSneakClear({
-            floor: this.floor,
-            totalCheese: earned,
-            everSeen: this.everSeenInRun
+        const unbankedFloorCheese = Math.max(0, this.carriedCheese - (this.bankedInRun || 0));
+        this.bankedInRun = this.carriedCheese;
+        Progress.recordSneakRun({
+            cleared: true,
+            neverSeen: !this.seenOnThisFloor,
+            cheese: unbankedFloorCheese,
+            floor: this.floor
         });
 
         bus.emit(SFX.VICTORY);
@@ -2537,11 +2545,14 @@ export class SneakScene extends Phaser.Scene {
         const nextPerks = { ...this.runPerks, [perk.id]: (this.runPerks[perk.id] || 0) + 1 };
         let nextHearts = this.hearts;
         let nextCheese = this.carriedCheese;
+        let nextBanked = this.bankedInRun || 0;
         let nextPies = this.piesLeft;
 
         if (perk.id === 'extra_heart') {
             nextHearts = this.maxHearts;
             nextCheese += 15;
+            nextBanked += 15;
+            Progress.addCheese?.(15);
         } else if (perk.id === 'cake_factory') {
             nextPies = Math.min(9, nextPies + 2);
         }
@@ -2549,6 +2560,7 @@ export class SneakScene extends Phaser.Scene {
         this.scene.restart({
             floor: this.floor + 1,
             carriedCheese: nextCheese,
+            bankedInRun: nextBanked,
             totalRescuedInRun: this.totalRescuedInRun,
             streak: Math.min(3.0, +(this.streak + 0.2).toFixed(2)),
             hearts: nextHearts,
@@ -2628,6 +2640,11 @@ export class SneakScene extends Phaser.Scene {
     }
 
     _exitToCastleMenu() {
+        const unbanked = Math.max(0, (this.carriedCheese || 0) - (this.bankedInRun || 0));
+        if (unbanked > 0) {
+            this.bankedInRun = this.carriedCheese;
+            Progress.addCheese?.(unbanked);
+        }
         this._unmountDomControls();
         bus.emit('bgm_stop');
         window.location.replace('transylvania-menu.html');

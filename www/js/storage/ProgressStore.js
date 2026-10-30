@@ -389,7 +389,7 @@ export const Progress = {
         if (floor >= 20 && !s.skinsUnlocked.includes('devil')) s.skinsUnlocked.push('devil');
         save();
     },
-    recordSneakRun({ cleared, neverSeen, cheese, floor }) {
+    recordSneakRun({ cleared, neverSeen, cheese, floor } = {}) {
         const s = load();
         s.stats.sneak.runs++;
         if (cleared) s.stats.sneak.clears++;
@@ -399,11 +399,28 @@ export const Progress = {
             s.stats.sneak.bestFloor = floor;
         }
         s.stats.sneak.lastRunDate = Date.now();
-        if (cheese > 0) {
-            s.cheeseBank += cheese;
-            s.cheeseEarnedAllTime += cheese;
+        const wholeCheese = Math.max(0, Math.round(cheese || 0));
+        if (wholeCheese > 0) {
+            s.cheeseBank += wholeCheese;
+            s.cheeseEarnedAllTime += wholeCheese;
         }
         save();
+    },
+    recordSneakClear({ floor = 1, totalCheese = 0, cheese = 0, everSeen = false, neverSeen } = {}) {
+        this.recordSneakRun({
+            cleared: true,
+            neverSeen: typeof neverSeen === 'boolean' ? neverSeen : !everSeen,
+            cheese: cheese || totalCheese || 0,
+            floor
+        });
+    },
+    recordSneakCaught({ floor = 1, roomIndex = 0, keptCheese = 0, cheese = 0 } = {}) {
+        this.recordSneakRun({
+            cleared: false,
+            neverSeen: false,
+            cheese: cheese || keptCheese || 0,
+            floor: floor || (roomIndex + 1)
+        });
     },
     getSneakStats() {
         const s = load();
