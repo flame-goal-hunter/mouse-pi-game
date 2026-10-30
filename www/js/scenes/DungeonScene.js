@@ -6318,41 +6318,11 @@ export class DungeonScene extends Phaser.Scene {
         // Power-up row
         this.powerupIcon.setPosition(L.powerup.iconCx, L.powerup.iconCy).setDisplaySize(L.powerup.size, L.powerup.size);
         this.powerupText.setPosition(L.powerup.textX, L.powerup.textY).setFontSize(L.powerup.fontSize);
-        // Exit button
-        this.exitBtnBg.clear();
-        this.exitBtnBg.fillStyle(0x140820, 0.92);
-        this.exitBtnBg.fillCircle(0, 0, L.exit.r);
-        this.exitBtnBg.lineStyle(2, 0xe8b54a, 0.75);
-        this.exitBtnBg.strokeCircle(0, 0, L.exit.r);
-        this.exitBtnBg.setPosition(L.exit.cx, L.exit.cy);
-        this.exitBtn.setPosition(L.exit.cx, L.exit.cy).setDisplaySize(L.exit.iconSize, L.exit.iconSize);
-        // Hit area is texture space (the frame is 64 x dpr), so centre it on the real
-        // frame and keep the tap disc at least 48 CSS px across at any dpr / HUD scale.
-        const hitArea = this.exitBtn.input && this.exitBtn.input.hitArea;
-        if (hitArea) {
-            const fw = this.exitBtn.frame.realWidth, fh = this.exitBtn.frame.realHeight;
-            hitArea.x = fw / 2;
-            hitArea.y = fh / 2;
-            hitArea.radius = Math.max(fw / 2, 24 * fw / Math.max(1, this.exitBtn.displayWidth));
-        }
-        // Pause disc: left of the exit one, or under it when the cheese counter is that close
-        const pR = L.exit.r;
-        const PAUSE_HIT_HALF = 26;              // pauseHit is a 52x52 rectangle
-        const exitHitHalf = Math.max(24, pR);   // exit's tap disc is at least 48 across
-        const pGap = Math.max(Math.round(10 * L.s), 8 + PAUSE_HIT_HALF - pR);
-        let pcx = L.exit.cx - exitHitHalf - pGap - pR, pcy = L.exit.cy;
-        const chRect = L.rects.find(r => r.name === 'cheese');
-        if (chRect && pcx - pR < chRect.x + chRect.w + Math.round(8 * L.s)) {
-            pcx = L.exit.cx; pcy = L.exit.cy + L.exit.r + pGap + pR;
-        }
-        this.pauseBtnBg.clear();
-        this.pauseBtnBg.fillStyle(0x140820, 0.92);
-        this.pauseBtnBg.fillCircle(0, 0, pR);
-        this.pauseBtnBg.lineStyle(2, 0xe8b54a, 0.75);
-        this.pauseBtnBg.strokeCircle(0, 0, pR);
-        this.pauseBtnBg.setPosition(pcx, pcy);
-        this.pauseBtn.setPosition(pcx, pcy).setDisplaySize(Math.round(L.exit.iconSize * 0.52), Math.round(L.exit.iconSize * 0.52));
-        this.pauseHit.setPosition(pcx, pcy);
+        this.exitBtnBg.clear().setVisible(false);
+        this.exitBtn.setVisible(false).disableInteractive();
+        this.pauseBtnBg.clear().setVisible(false);
+        this.pauseBtn.setVisible(false);
+        this.pauseHit.setVisible(false).disableInteractive();
         // Compass: label size / ring radius depend on the screen — force a redraw
         this._compassKey = null;
         if (this.joy) this.positionJoystick();
@@ -7948,6 +7918,10 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     openPauseMenu() {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage('toggleGameTopBarPause', '*');
+            return;
+        }
         if (this.state !== 'play' || this._pauseElements || this._pickerElements || this._shopElements) return;
         bus.emit(UI.MENU_OPEN);
         this.state = 'paused';                       // update() early-returns on anything but 'play'

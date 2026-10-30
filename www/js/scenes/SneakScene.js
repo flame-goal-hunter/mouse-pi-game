@@ -2079,6 +2079,10 @@ export class SneakScene extends Phaser.Scene {
     }
 
     togglePauseModal() {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage('toggleGameTopBarPause', '*');
+            return;
+        }
         if (this.ended) return;
         const modalRoot = document.getElementById('sneak-modal-root');
         if (!modalRoot) return;

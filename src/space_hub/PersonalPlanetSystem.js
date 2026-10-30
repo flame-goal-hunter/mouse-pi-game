@@ -140,3 +140,4 @@ export function drawPersonalPlanetVisual(ctx, radius, app, storedCheese, timeSec
         ctx.restore();
     }
 }
+

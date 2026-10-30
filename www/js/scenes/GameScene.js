@@ -2983,6 +2983,10 @@ export class GameScene extends Phaser.Scene {
     // === PAUSE MENU ===
 
     showPauseMenu() {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage('toggleGameTopBarPause', '*');
+            return;
+        }
         if (this.isGamePaused) return;
 
         this.closeAllModals();

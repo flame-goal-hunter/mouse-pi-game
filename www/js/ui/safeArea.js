@@ -13,5 +13,5 @@ export function readSafeArea() {
     }
     const cs = getComputedStyle(probe);
     const n = (v) => Math.max(0, parseFloat(v) || 0);
-    return { top: n(cs.paddingTop), right: n(cs.paddingRight), bottom: n(cs.paddingBottom), left: n(cs.paddingLeft) };
+    return { top: n(cs.paddingTop) + 48, right: n(cs.paddingRight), bottom: n(cs.paddingBottom), left: n(cs.paddingLeft) };
 }

@@ -965,7 +965,7 @@
         </div>
     </div>
 
-    <div class="overlay visible" id="startScreen">
+    <div class="overlay" id="startScreen" style="display: none !important;">
         <div class="overlay-content">
             <div class="arcade-header">
                 <button class="pwa-header-btn" id="pwaHeaderBtn" type="button" title="Установить на телефон или отправить подруге">
@@ -1219,38 +1219,50 @@
     </div>
 
     <div class="overlay" id="gameOverScreen">
-        <div class="overlay-content" style="gap: 3vh;">
+        <div class="overlay-content" style="gap: 2.5vh;">
             <h2>😿 Поймали!</h2>
             <p>Сыра собрано: <span id="finalScore">0</span> 🧀</p>
-            <button class="play-btn" id="restartBtn1" style="margin-top: auto !important;">Ещё раз!</button>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:auto;">
+                <button class="play-btn" id="restartBtn1" style="margin:0 !important;">🔄 Заново</button>
+                <button class="play-btn" onclick="window.__gameTopBar && window.__gameTopBar.exitToSpace()" style="margin:0 !important;background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#7dd3fc;">🚀 В Космос</button>
+            </div>
         </div>
     </div>
 
     <div class="overlay" id="winScreen">
-        <div class="overlay-content" style="gap: 3vh;">
+        <div class="overlay-content" style="gap: 2.5vh;">
             <h2>🏆 Победа!</h2>
             <p id="winText">Мышонок Пи долетел до Луны! 🌙</p>
             <p>Всего сыра: <span id="totalScore">0</span> 🧀</p>
-            <button class="play-btn" id="restartBtn2" style="margin-top: auto !important;">Играть снова!</button>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:auto;">
+                <button class="play-btn" id="restartBtn2" style="margin:0 !important;">🔄 Играть снова</button>
+                <button class="play-btn" onclick="window.__gameTopBar && window.__gameTopBar.exitToSpace()" style="margin:0 !important;background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#7dd3fc;">🚀 В Космос</button>
+            </div>
         </div>
     </div>
 
     <div class="overlay" id="newyearWinScreen">
-        <div class="overlay-content" style="gap: 3vh;">
+        <div class="overlay-content" style="gap: 2.5vh;">
             <h2>🎄 С Новым Годом! 🎄</h2>
             <p>Мышонок Пи нашёл все подарки!</p>
             <p style="font-size: min(4vw, 18px);">Собрано подарков: <span id="totalGifts">0</span> 🎁</p>
             <p id="totalStarsDisplay" style="font-size: min(5vw, 24px); color: #FFD700;">⭐⭐⭐</p>
-            <button class="play-btn" id="restartBtn3" style="margin-top: auto !important;">Играть снова!</button>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:auto;">
+                <button class="play-btn" id="restartBtn3" style="margin:0 !important;">🔄 Играть снова</button>
+                <button class="play-btn" onclick="window.__gameTopBar && window.__gameTopBar.exitToSpace()" style="margin:0 !important;background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#7dd3fc;">🚀 В Космос</button>
+            </div>
         </div>
     </div>
 
     <div class="overlay" id="newyearGameOverScreen">
-        <div class="overlay-content" style="gap: 3vh;">
+        <div class="overlay-content" style="gap: 2.5vh;">
             <h2>☃️ Не успел!</h2>
             <p id="gameOverReason">Время вышло!</p>
             <p>Подарков собрано: <span id="finalGifts">0</span> 🎁</p>
-            <button class="play-btn" id="restartBtn4" style="margin-top: auto !important;">Ещё раз!</button>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:auto;">
+                <button class="play-btn" id="restartBtn4" style="margin:0 !important;">🔄 Заново</button>
+                <button class="play-btn" onclick="window.__gameTopBar && window.__gameTopBar.exitToSpace()" style="margin:0 !important;background:linear-gradient(180deg,#0ea5e9,#0284c7);border-color:#7dd3fc;">🚀 В Космос</button>
+            </div>
         </div>
     </div>
 
@@ -2411,8 +2423,11 @@
 
         function pauseGame() {
             if (!gameRunning || gamePaused) return;
+            if (window.__gameTopBar && window.__gameTopBar.active) {
+                window.__gameTopBar.setPaused(true);
+                return;
+            }
             gamePaused = true;
-            document.getElementById('pauseScreen').classList.add('visible');
         }
 
         function resumeGame() {
@@ -2421,20 +2436,22 @@
         }
 
         function goToMainMenu() {
+            if (window.__gameTopBar && window.__gameTopBar.active) {
+                window.__gameTopBar.exitToSpace();
+                return;
+            }
             gameRunning = false;
             gamePaused = false;
-            // Stop Phaser if running
             if (phaserRunning) {
                 stopPhaserSnowball();
-                return; // stopPhaserSnowball already shows start screen
+                return;
             }
             document.getElementById('pauseScreen').classList.remove('visible');
             document.getElementById('gameOverScreen').classList.remove('visible');
             document.getElementById('winScreen').classList.remove('visible');
             document.getElementById('newyearWinScreen').classList.remove('visible');
             document.getElementById('newyearGameOverScreen').classList.remove('visible');
-            document.getElementById('startScreen').classList.add('visible');
-            playMenuMusic();
+            if (window.__spaceHub) window.__spaceHub.start();
         }
 
         // ==================== NEW YEAR MAZE PLATFORMER ====================
@@ -5588,41 +5605,35 @@
             const h = canvas.height;
             const w = canvas.width;
             const padding = Math.min(h * 0.02, 12);
-            const fontSize = Math.min(h * 0.045, 24);
+            const topY = padding + 46;
+            const fontSize = Math.min(h * 0.042, 22);
 
             ctx.font = `bold ${fontSize}px Comfortaa, sans-serif`;
 
-            // Compact UI bar at top (same as main game)
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            // Compact UI bar below GameTopBar
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
             ctx.beginPath();
-            ctx.roundRect(padding, padding, w - padding * 2, fontSize * 1.6, 8);
+            ctx.roundRect(padding, topY, w - padding * 2, fontSize * 1.6, 8);
             ctx.fill();
 
             // Gifts counter (left)
             ctx.fillStyle = '#FFD700';
             ctx.textAlign = 'left';
-            ctx.fillText(`🎁 ${nyGiftsCollected}/${nyTotalGifts}`, padding * 2 + 5, padding + fontSize * 1.1);
+            ctx.fillText(`🎁 ${nyGiftsCollected}/${nyTotalGifts}`, padding * 2 + 5, topY + fontSize * 1.15);
 
             // Title (center)
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
-            ctx.fillText('🎄 Новогодний Лабиринт', w / 2, padding + fontSize * 1.1);
+            ctx.fillText('🎄 Новогодний Лабиринт', w / 2, topY + fontSize * 1.15);
 
             // Lives (right)
             ctx.textAlign = 'right';
             let heartsStr = '';
             for (let i = 0; i < nyLives; i++) heartsStr += '❤️';
             for (let i = nyLives; i < 5; i++) heartsStr += '🖤';
-            ctx.fillText(heartsStr, w - padding * 2 - 5, padding + fontSize * 1.1);
+            ctx.fillText(heartsStr, w - padding * 2 - 5, topY + fontSize * 1.15);
 
-            // Pause hint (small icon between title and lives)
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
-            ctx.font = `${fontSize * 0.7}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText('⏸', w * 0.78, padding + fontSize * 1.05);
-
-            // Save pause button area for touch detection (covers right part of UI bar)
-            nyPauseBtnArea = { x: w * 0.7, y: 0, w: w * 0.15, h: fontSize * 2 + padding * 2 };
+            nyPauseBtnArea = { x: 0, y: 0, w: 0, h: 0 };
 
             // Exit hint
             if (nyExitOpen) {
@@ -5638,7 +5649,7 @@
             const mapW = 150;
             const mapH = 80;
             const mapX = canvas.width - mapW - 10;
-            const mapY = 60;
+            const mapY = 102;
 
             // Background
             ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -5932,20 +5943,21 @@
             const h = canvas.height;
             const w = canvas.width;
             const padding = Math.min(h * 0.02, 12);
-            const fontSize = Math.min(h * 0.045, 24);
+            const topY = padding + 46;
+            const fontSize = Math.min(h * 0.042, 22);
 
             ctx.font = `bold ${fontSize}px Comfortaa, sans-serif`;
 
-            // Compact UI bar at top
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            // Compact UI bar below GameTopBar
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.58)';
             ctx.beginPath();
-            ctx.roundRect(padding, padding, w - padding * 2, fontSize * 1.6, 8);
+            ctx.roundRect(padding, topY, w - padding * 2, fontSize * 1.6, 8);
             ctx.fill();
 
             // Score (left)
             ctx.fillStyle = '#FFD700';
             ctx.textAlign = 'left';
-            ctx.fillText('🧀 ' + score, padding * 2 + 5, padding + fontSize * 1.1);
+            ctx.fillText('🧀 ' + score, padding * 2 + 5, topY + fontSize * 1.15);
 
             // Zone name (center)
             const info = getZoneInfo();
@@ -5953,22 +5965,15 @@
             const zoneIcon = info.transition > 0.5 && info.nextZone ? ZONE_ICONS[info.nextZone] : ZONE_ICONS[info.zone];
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center';
-            ctx.fillText(zoneIcon + ' ' + zoneName, w / 2, padding + fontSize * 1.1);
+            ctx.fillText(zoneIcon + ' ' + zoneName, w / 2, topY + fontSize * 1.15);
 
             // Lives (right) - show max hearts based on difficulty, lose from right to left
             ctx.textAlign = 'right';
             const maxLives = DIFFICULTY[currentDifficulty].lives;
             let heartsStr = '';
-            // Build string so full hearts are on left, empty on right
             for (let i = 0; i < lives; i++) heartsStr += '❤️';
             for (let i = lives; i < maxLives; i++) heartsStr += '🖤';
-            ctx.fillText(heartsStr, w - padding * 2 - 5, padding + fontSize * 1.1);
-
-            // Pause hint (small icon between zone and lives)
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
-            ctx.font = `${fontSize * 0.7}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText('⏸', w * 0.75, padding + fontSize * 1.05);
+            ctx.fillText(heartsStr, w - padding * 2 - 5, topY + fontSize * 1.15);
         }
 
         // Draw touch controls (Glossy 3D Arcade Virtual Thumbstick + Action Capsule)
@@ -11120,9 +11125,10 @@
         }
 
         function stopPhaserSnowball() {
-            // Remember which mode the user was playing — closing the iframe must NOT
-            // dump them back into "Огненная долина" (adventure mode) when they came
-            // from Transylvania / Snowball.
+            if (window.__gameTopBar && window.__gameTopBar.active) {
+                window.__gameTopBar.exitToSpace();
+                return;
+            }
             const previousMode = currentGameMode;
             const frame = document.getElementById('phaserFrame');
             frame.src = '';
@@ -11938,23 +11944,90 @@
     </script>
     <script type="module">
         import { SpaceHubScene } from './src/space_hub/SpaceHubScene.js';
+        import { GameTopBar } from './src/ui/GameTopBar.js';
 
-        const HUB_MODE_KEY = 'mousie_hub_mode';
-        const getHubMode = () => localStorage.getItem(HUB_MODE_KEY) || 'space';
-        const setHubMode = (m) => localStorage.setItem(HUB_MODE_KEY, m);
+        window.__applyGlobalMute = (muted) => {
+            try {
+                menuSoundMuted = !!muted;
+                if (muted && typeof stopMenuMusic === 'function') stopMenuMusic();
+            } catch (_) {}
+        };
 
-        const spaceHub = new SpaceHubScene({
-            onToggleMenu: (targetMode) => {
-                setHubMode(targetMode);
-                spaceHub.stop();
-                const startScreen = document.getElementById('startScreen');
-                if (startScreen) {
-                    startScreen.style.display = '';
-                    startScreen.classList.add('visible');
+        const frame = document.getElementById('phaserFrame');
+
+        const topBar = new GameTopBar({
+            getRoundCheese: (planetId) => {
+                if (planetId === 'adventure') return Math.max(0, score || 0);
+                if (planetId === 'newyear') {
+                    const winBonus = document.getElementById('newyearWinScreen')?.classList.contains('visible') ? 25 : 0;
+                    return Math.max(0, (nyGiftsCollected || 0) * 5 + winBonus);
+                }
+                const g = frame?.contentWindow?.__game || frame?.contentWindow?.game;
+                if (planetId === 'snowball') {
+                    const gs = g?.scene?.getScene?.('GameScene');
+                    return Math.max(0, (gs?.matchData?.playerWins || 0) * 15);
+                }
+                if (planetId === 'transylvania') {
+                    const ds = g?.scene?.getScene?.('DungeonScene');
+                    const ss = g?.scene?.getScene?.('SneakScene');
+                    return Math.max(0, (ds?.runCheeseTotal || 0) + (ss?.carriedCheese || 0));
+                }
+                return 0;
+            },
+            onPauseChange: (paused) => {
+                gamePaused = paused;
+                try {
+                    const win = frame?.contentWindow;
+                    const g = win?.__game || win?.game;
+                    if (g && g.loop) {
+                        if (paused) { g.loop.sleep(); win?.audio?.pauseAll?.(); }
+                        else { g.loop.wake(); win?.audio?.resumeAll?.(); }
+                    }
+                } catch (_) {}
+            },
+            onRestart: (planetId) => {
+                if (planetId === 'adventure' || planetId === 'newyear') {
+                    if (typeof restartGame === 'function') restartGame();
+                    return;
+                }
+                if (planetId === 'snowball') {
+                    if (typeof startSoloSnowball === 'function') startSoloSnowball(1, 1);
+                    return;
+                }
+                if (planetId === 'transylvania') {
+                    try {
+                        const win = frame?.contentWindow;
+                        const g = win?.__game || win?.game;
+                        const ds = g?.scene?.getScene?.('DungeonScene');
+                        const ss = g?.scene?.getScene?.('SneakScene');
+                        if (ds?.scene?.isActive?.()) { ds.runCheeseTotal = 0; ds.scene.restart({ runMode: ds.runMode || 'story', level: 1, score: 0, runCheeseTotal: 0 }); return; }
+                        if (ss?.scene?.isActive?.()) { ss.carriedCheese = 0; ss.scene.restart({ floor: 1, carriedCheese: 0 }); return; }
+                    } catch (_) {}
+                    if (typeof startTransylvaniaPreview === 'function') startTransylvaniaPreview();
                 }
             },
+            onExitToSpace: () => {
+                gameRunning = false;
+                gamePaused = false;
+                ['pauseScreen', 'gameOverScreen', 'winScreen', 'newyearWinScreen', 'newyearGameOverScreen', 'snowballWinScreen', 'snowballLoseScreen', 'snowballDisconnectScreen'].forEach(id => {
+                    document.getElementById(id)?.classList.remove('visible');
+                });
+                if (phaserRunning && frame) {
+                    try { frame.contentWindow?.audio?.pauseAll?.(); } catch (_) {}
+                    frame.src = 'about:blank';
+                    frame.style.display = 'none';
+                    document.getElementById('gameCanvas').style.display = 'block';
+                    phaserRunning = false;
+                }
+                spaceHub.start();
+            }
+        });
+        window.__gameTopBar = topBar;
+
+        const spaceHub = new SpaceHubScene({
             onSelectPlanet: (planetId) => {
                 spaceHub.stop();
+                topBar.show(planetId);
                 if (planetId === 'transylvania') {
                     if (typeof startTransylvaniaPreview === 'function') startTransylvaniaPreview();
                 } else if (planetId === 'snowball') {
@@ -11970,35 +12043,14 @@
         });
         window.__spaceHub = spaceHub;
 
-        const toSpaceBtn = document.getElementById('classicToSpaceHubBtn');
-        if (toSpaceBtn) {
-            toSpaceBtn.addEventListener('click', () => {
-                setHubMode('space');
-                spaceHub.start();
-            });
-        }
+        window.addEventListener('message', (ev) => {
+            if (ev.data === 'toggleGameTopBarPause' && topBar.active) {
+                topBar.setPaused(!topBar.isPaused);
+            }
+        });
 
-        // Default to Space Hub on initial boot unless classic menu was chosen
-        if (getHubMode() === 'space') {
-            spaceHub.start();
-        }
-
-        // Automatically reopen Space Hub when returning to menu from any game if mode is 'space'
-        const startScreenEl = document.getElementById('startScreen');
-        if (startScreenEl) {
-            const obs = new MutationObserver(() => {
-                if (
-                    startScreenEl.classList.contains('visible') &&
-                    getHubMode() === 'space' &&
-                    !spaceHub.running &&
-                    !gameRunning &&
-                    !phaserRunning
-                ) {
-                    spaceHub.start();
-                }
-            });
-            obs.observe(startScreenEl, { attributes: true, attributeFilter: ['class'] });
-        }
+        // Единственная точка входа — сразу запускаем Космос!
+        spaceHub.start();
     </script>
 </body>
 </html>

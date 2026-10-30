@@ -60,12 +60,18 @@
             top: 0; left: 0; right: 0;
             z-index: 10;
             pointer-events: none;
-            padding: max(10px, env(safe-area-inset-top, 10px))
+            padding: max(54px, calc(env(safe-area-inset-top, 10px) + 46px))
                      calc(16px + env(safe-area-inset-right, 0px)) 10px
                      calc(16px + env(safe-area-inset-left, 0px));
             display: none;
             justify-content: space-between;
             align-items: flex-start;
+        }
+        #hud-pause, #sneak-pause-btn {
+            display: none !important;
+        }
+        #sneak-top-hud {
+            top: max(54px, calc(env(safe-area-inset-top, 10px) + 46px)) !important;
         }
 
         body.game-active #hud {
