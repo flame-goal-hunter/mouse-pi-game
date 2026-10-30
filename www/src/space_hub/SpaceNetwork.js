@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { PlayerProfile } from '../core/PlayerProfile.js';
+import { getPersonalPlanetCoords } from './PersonalPlanetSystem.js';
 
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 const TOPIC = 'mousie_pi_space/v1/state';
@@ -17,11 +18,6 @@ function _encodeLen(len) {
     return out;
 }
 function _mqttStr(str) { const b = enc.encode(str); return [b.length >> 8, b.length & 0xff, ...b]; }
-function _hashStr(s) {
-    let h = 2166136261;
-    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-    return Math.abs(h);
-}
 
 class SpaceNetworkManager {
     constructor() {
@@ -60,10 +56,7 @@ class SpaceNetworkManager {
     }
 
     getFriendPlanetPos(playerId) {
-        const h = _hashStr(playerId);
-        const angle = ((h % 12) / 12) * Math.PI * 2 + 0.32;
-        const radius = 1140 + (h % 3) * 145;
-        return { x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) };
+        return getPersonalPlanetCoords(playerId);
     }
 
     _initLocalChannel() {

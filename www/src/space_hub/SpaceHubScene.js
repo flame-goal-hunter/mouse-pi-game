@@ -1,6 +1,6 @@
 // ============================================================================
-// SpaceHubScene.js — Главная сцена Интерактивного Космоса Мышонка Пи:
-// мультиплеер без VPN, панель Кто Онлайн, чужие ракеты/дома и индикация игр
+// SpaceHubScene.js — Главная сцена Космоса Мышонка Пи:
+// старт у своего Дома, Пояс Домашних Планет, «ДОМОЙ!» (зелёная) и «В ГОСТИ!» (бирюзовая)
 // ============================================================================
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
@@ -21,10 +21,7 @@ export class SpaceHubScene {
     constructor({ onSelectPlanet, onToggleMenu } = {}) {
         this.onSelectPlanet = onSelectPlanet || (() => {});
         this.onToggleMenu = onToggleMenu || (() => {});
-        this.running = false;
-        this.activePlanet = null;
-        this.dockingPlanet = null;
-        this.lastTime = 0;
+        Object.assign(this, { running: false, activePlanet: null, dockingPlanet: null, lastOrbitPlanet: null, hasSpawnedOnce: false, lastTime: 0 });
         this._buildDOM();
         this.bg = new SpaceBackground();
         this.env = new SpaceEnvironment();
@@ -35,13 +32,16 @@ export class SpaceHubScene {
         this.onlineHud = new OnlineHUD(this.overlay);
         this.controls = new TouchControls(this.overlay, () => this._handleLandTap());
         this.homeScene = new HomePlanetScene({
-            onTakeOff: (visited) => {
-                Object.assign(this.rocket, { x: visited ? visited.x : 0, y: visited ? visited.y - 140 : -155, vx: 0, vy: -140, angle: -Math.PI / 2 });
-                this.start();
-            }
+            onTakeOff: (visited) => { this._placeRocketOnOrbit(visited || this.remoteRenderer.getMyHomePlanet()); this.start(); }
         });
         this._resize();
         window.addEventListener('resize', () => this._resize());
+    }
+
+    _placeRocketOnOrbit(planet) {
+        if (!planet) return;
+        const sx = planet.x, sy = planet.y - ((planet.radius || 75) + 75);
+        Object.assign(this.rocket, { x: sx, y: sy, vx: 0, vy: -90, angle: -Math.PI / 2, camX: sx, camY: sy, camZoom: 1 });
     }
 
     _buildDOM() {
@@ -83,14 +83,12 @@ export class SpaceHubScene {
         el.querySelector('.sh-top-bar').appendChild(AutoUpdater.createReloadButton());
         el.querySelector('#shMenuSwitchBtn').addEventListener('click', () => this.onToggleMenu('classic'));
     }
-    _updateCheeseHUD() {
-        this.cheeseCounter.textContent = `🧀 Багажник: ${PlayerProfile.pocketCheese} (Склад: ${PlayerProfile.storedCheese})`;
-    }
+
+    _updateCheeseHUD() { this.cheeseCounter.textContent = `🧀 Багажник: ${PlayerProfile.pocketCheese} (Склад: ${PlayerProfile.storedCheese})`; }
     _resize() {
         this.dpr = Math.min(2, window.devicePixelRatio || 1);
         this.viewW = window.innerWidth; this.viewH = window.innerHeight;
-        this.canvas.width = Math.round(this.viewW * this.dpr);
-        this.canvas.height = Math.round(this.viewH * this.dpr);
+        this.canvas.width = Math.round(this.viewW * this.dpr); this.canvas.height = Math.round(this.viewH * this.dpr);
     }
 
     _handleLandTap() {
@@ -108,17 +106,14 @@ export class SpaceHubScene {
     start() {
         if (this.running) return;
         PlayerProfile._syncFromStorage();
-        PlayerProfile.setLocation('space');
-        SpaceNetwork.broadcastNow();
-        this._updateCheeseHUD();
+        if (!this.hasSpawnedOnce) { this.hasSpawnedOnce = true; this._placeRocketOnOrbit(this.remoteRenderer.getMyHomePlanet()); }
+        else if (this.lastOrbitPlanet) { this._placeRocketOnOrbit(this.lastOrbitPlanet); this.lastOrbitPlanet = null; }
+        PlayerProfile.setLocation('space'); SpaceNetwork.broadcastNow(); this._updateCheeseHUD();
         const ss = document.getElementById('startScreen');
         if (ss) { ss.classList.remove('visible'); ss.style.display = 'none'; }
         this.overlay.style.display = 'block';
-        this.dockingPlanet = null;
-        this.rocket.zoomTargetPlanet = null;
-        this.rocket.camZoom = 1;
-        this.running = true;
-        this.lastTime = performance.now();
+        this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
+        this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
             if (!this.running) return;
             const dt = Math.min(0.05, (now - this.lastTime) / 1000);
@@ -134,8 +129,13 @@ export class SpaceHubScene {
         const ss = document.getElementById('startScreen'); if (ss) ss.style.display = '';
     }
 
-    _renderBannerPlayers(planet) {
-        if (!planet || planet.isHomePlanet || planet.isFriendHome) { this.bannerPlayers.innerHTML = ''; return; }
+    _renderBannerExtras(planet) {
+        if (!planet || planet.isMyHome) { this.bannerPlayers.innerHTML = ''; return; }
+        if (planet.isFriendHome) {
+            const spr = getPlayerSkinSprite(planet.ownerSkinId);
+            this.bannerPlayers.innerHTML = `<div class="sh-now-playing" style="color:#22d3ee;"><span>🛸 Владелец:</span><span class="sh-np-badge" style="border-color:#22d3ee;"><img src="${spr.svgUrl}" alt="">${planet.ownerNick}</span></div>`;
+            return;
+        }
         const playing = SpaceNetwork.getOnlinePeers().filter(p => p.currentLocation === planet.id);
         if (!playing.length) { this.bannerPlayers.innerHTML = ''; return; }
         const chips = playing.map(p => `<span class="sh-np-badge"><img src="${getPlayerSkinSprite(p.equippedSkinId).svgUrl}" alt="">${p.nickname || 'Пи'}</span>`).join('');
@@ -150,12 +150,11 @@ export class SpaceHubScene {
 
         if (zoomDone && this.dockingPlanet) {
             const target = this.dockingPlanet;
-            this.dockingPlanet = null;
-            this.rocket.zoomTargetPlanet = null;
-            this.rocket.camZoom = 1;
-            if (target.isHomePlanet) { this.stop(); this.homeScene.start(null); }
+            this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
+            if (target.isMyHome) { this.stop(); this.homeScene.start(null); }
             else if (target.isFriendHome) { this.stop(); this.homeScene.start(target); }
             else {
+                this.lastOrbitPlanet = target;
                 PlayerProfile.setLocation(target.id);
                 SpaceNetwork.broadcastNow();
                 this.onSelectPlanet(target.id);
@@ -163,24 +162,22 @@ export class SpaceHubScene {
             return;
         }
 
-        const allPlanets = [...SPACE_CONFIG.planets, ...this.remoteRenderer.getFriendPlanets()];
+        const allPlanets = [...SPACE_CONFIG.planets, ...this.remoteRenderer.getPersonalPlanets()];
         const nearest = allPlanets.find(p => Math.hypot(this.rocket.x - p.x, this.rocket.y - p.y) <= p.dockRadius) || null;
         if (nearest?.id !== this.activePlanet?.id) {
             this.activePlanet = nearest;
             if (nearest) {
-                if (!nearest.isFriendHome) this.planets.triggerSquash(nearest.id);
+                if (!nearest.isFriendHome && !nearest.isMyHome) this.planets.triggerSquash(nearest.id);
                 try { navigator.vibrate?.(15); } catch (_) {}
-                this.bannerTitle.textContent = `${nearest.badge} ${nearest.name}`;
+                this.bannerTitle.textContent = `${nearest.badge} · ${nearest.name}`;
                 this.bannerSub.textContent = nearest.subtitle;
-                this._renderBannerPlayers(nearest);
+                this._renderBannerExtras(nearest);
+                this.banner.style.borderColor = nearest.isFriendHome ? '#22d3ee' : '#4ade80';
                 this.banner.classList.add('visible');
-                const icon = nearest.isHomePlanet ? '🏠' : (nearest.isFriendHome ? '🛸' : '🪐');
-                this.controls.setDockMode(!nearest.locked, nearest.actionLabel || 'СЕСТЬ!', icon);
-            } else {
-                this.banner.classList.remove('visible');
-                this.controls.setDockMode(false);
-            }
-        } else if (nearest) this._renderBannerPlayers(nearest);
+                const icon = nearest.isMyHome ? '🏠' : (nearest.isFriendHome ? '🛸' : '🪐');
+                this.controls.setDockMode(!nearest.locked, nearest.actionLabel || 'СЕСТЬ!', icon, nearest.actionTheme || 'green');
+            } else { this.banner.classList.remove('visible'); this.controls.setDockMode(false); }
+        } else if (nearest) this._renderBannerExtras(nearest);
 
         this.planets.update(dt, this.activePlanet?.id || null);
         const ctx = this.ctx;

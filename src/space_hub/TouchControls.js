@@ -59,6 +59,12 @@ export class TouchControls {
                     box-shadow: 0 0 28px rgba(74, 222, 128, 0.85);
                     animation: shPulseDock 0.9s infinite alternate ease-in-out;
                 }
+                .sh-action-btn.dock-cyan {
+                    border-color: #a5f3fc;
+                    background: radial-gradient(circle at 30% 25%, #22d3ee, #0284c7 70%, #0c4a6e);
+                    box-shadow: 0 0 28px rgba(34, 211, 238, 0.85);
+                    animation: shPulseDock 0.9s infinite alternate ease-in-out;
+                }
                 @keyframes shPulseDock { from { transform: scale(1); } to { transform: scale(1.08); } }
             </style>
             <div class="sh-joy-zone"><div class="sh-joy-knob"></div></div>
@@ -76,9 +82,10 @@ export class TouchControls {
         this.btnIcon = this.actionBtn.querySelector('span');
     }
 
-    setDockMode(canDock, label = 'СЕСТЬ!', icon = '🪐') {
+    setDockMode(canDock, label = 'СЕСТЬ!', icon = '🪐', theme = 'green') {
         this.canDock = Boolean(canDock);
-        this.actionBtn.classList.toggle('dock-ready', this.canDock);
+        this.actionBtn.classList.toggle('dock-ready', this.canDock && theme !== 'cyan');
+        this.actionBtn.classList.toggle('dock-cyan', this.canDock && theme === 'cyan');
         this.btnLabel.textContent = this.canDock ? label : 'ТУРБО';
         this.btnIcon.textContent = this.canDock ? icon : '🔥';
     }

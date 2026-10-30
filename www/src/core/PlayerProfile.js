@@ -1,7 +1,9 @@
 // ============================================================================
-// PlayerProfile.js — Единый профиль Мышонка Пи (скины, сыр, никнейм, локация)
+// PlayerProfile.js — Единый профиль Мышонка Пи (скины, сыр, ник, planetAppearance)
 // Синхронизируется с mousiePi.progress.v1 для полной совместимости со всеми играми
 // ============================================================================
+
+import { getDefaultAppearance } from '../space_hub/PersonalPlanetSystem.js';
 
 const PROGRESS_KEY = 'mousiePi.progress.v1';
 const SPACE_KEY = 'mousiePi.spaceProfile.v1';
@@ -28,17 +30,8 @@ export const SKIN_CATALOG = [
 ];
 
 const _spriteCache = new Map();
-
-function _readJson(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? { ...fallback, ...JSON.parse(raw) } : { ...fallback };
-    } catch (_) { return { ...fallback }; }
-}
-
-function _writeJson(key, obj) {
-    try { localStorage.setItem(key, JSON.stringify(obj)); } catch (_) {}
-}
+function _readJson(k, fb) { try { const r = localStorage.getItem(k); return r ? { ...fb, ...JSON.parse(r) } : { ...fb }; } catch (_) { return { ...fb }; } }
+function _writeJson(k, obj) { try { localStorage.setItem(k, JSON.stringify(obj)); } catch (_) {} }
 
 class PlayerProfileStore {
     constructor() {
@@ -49,35 +42,33 @@ class PlayerProfileStore {
 
     _syncFromStorage() {
         const prog = _readJson(PROGRESS_KEY, { cheeseBank: 50, skinsUnlocked: ['blue'], currentSkin: 'blue' });
-        const defaultId = 'pi_' + Math.random().toString(36).slice(2, 8);
-        const defaultNick = (typeof localStorage !== 'undefined' && localStorage.getItem('mousie_nickname')) || ('Пи-' + Math.floor(100 + Math.random() * 899));
+        const defId = 'pi_' + Math.random().toString(36).slice(2, 8);
+        const defNick = (typeof localStorage !== 'undefined' && localStorage.getItem('mousie_nickname')) || ('Пи-' + Math.floor(100 + Math.random() * 899));
         const space = _readJson(SPACE_KEY, {
-            playerId: defaultId,
-            nickname: defaultNick,
-            pocketCheese: 12,
+            playerId: defId, nickname: defNick, pocketCheese: 12,
             storedCheese: typeof prog.cheeseBank === 'number' ? prog.cheeseBank : 50,
             equippedSkinId: prog.currentSkin || 'blue',
-            unlockedSkins: Array.isArray(prog.skinsUnlocked) ? prog.skinsUnlocked : ['blue']
+            unlockedSkins: Array.isArray(prog.skinsUnlocked) ? prog.skinsUnlocked : ['blue'],
+            planetAppearance: null
         });
 
-        this.playerId = space.playerId || defaultId;
-        this.nickname = (space.nickname || defaultNick).slice(0, 16);
+        this.playerId = space.playerId || defId;
+        this.nickname = (space.nickname || defNick).slice(0, 16);
         this.unlockedSkins = Array.from(new Set(['blue', ...(prog.skinsUnlocked || []), ...(space.unlockedSkins || [])]));
-        const candidate = prog.currentSkin || space.equippedSkinId;
-        this.equippedSkinId = SKIN_CATALOG.some(s => s.id === candidate) ? candidate : 'blue';
+        const cand = prog.currentSkin || space.equippedSkinId;
+        this.equippedSkinId = SKIN_CATALOG.some(s => s.id === cand) ? cand : 'blue';
         this.pocketCheese = Math.max(0, Math.round(space.pocketCheese || 0));
         this.storedCheese = Math.max(prog.cheeseBank || 0, space.storedCheese || 0);
+        this.planetAppearance = space.planetAppearance || getDefaultAppearance(this.playerId, this.nickname);
         this._persist();
     }
 
     _persist() {
         _writeJson(SPACE_KEY, {
-            playerId: this.playerId,
-            nickname: this.nickname,
-            equippedSkinId: this.equippedSkinId,
-            unlockedSkins: this.unlockedSkins,
-            pocketCheese: this.pocketCheese,
-            storedCheese: this.storedCheese
+            playerId: this.playerId, nickname: this.nickname,
+            equippedSkinId: this.equippedSkinId, unlockedSkins: this.unlockedSkins,
+            pocketCheese: this.pocketCheese, storedCheese: this.storedCheese,
+            planetAppearance: this.planetAppearance
         });
         try { localStorage.setItem('mousie_nickname', this.nickname); } catch (_) {}
         const prog = _readJson(PROGRESS_KEY, {});
@@ -95,14 +86,18 @@ class PlayerProfileStore {
         this._persist();
     }
 
-    setLocation(loc) {
-        this.currentLocation = loc || 'space';
+    setPlanetAppearance(app) {
+        this.planetAppearance = { ...this.planetAppearance, ...app };
+        this._persist();
     }
+
+    setLocation(loc) { this.currentLocation = loc || 'space'; }
 
     getHomeSnapshot() {
         return {
             storedCheese: this.storedCheese,
-            unlockedSkins: this.unlockedSkins.slice()
+            unlockedSkins: this.unlockedSkins.slice(),
+            planetAppearance: this.planetAppearance
         };
     }
 
@@ -116,8 +111,7 @@ class PlayerProfileStore {
     depositOnePocketCheese() {
         this._syncFromStorage();
         if (this.pocketCheese <= 0) return false;
-        this.pocketCheese -= 1;
-        this.storedCheese += 1;
+        this.pocketCheese -= 1; this.storedCheese += 1;
         this._persist();
         return true;
     }

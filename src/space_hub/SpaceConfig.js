@@ -1,12 +1,12 @@
 // ============================================================================
 // SpaceConfig.js — Единый конфиг Интерактивного Космоса Мышонка Пи
-// Спиральная галактика планет, физика ракеты, астероиды, кометы и звёздный сыр
+// Внутреннее Центральное Кольцо (общие планеты с мини-играми) + параметры мира
 // ============================================================================
 
 export const SPACE_CONFIG = {
     world: {
-        halfWidth: 1680,
-        halfHeight: 1580
+        halfWidth: 2150,
+        halfHeight: 2050
     },
     rocket: {
         startX: 0,
@@ -43,23 +43,23 @@ export const SPACE_CONFIG = {
             { x: 180,  y: -1180,r: 540, color: 'rgba(217, 70, 239, 0.18)' }
         ],
         parallaxLayers: [
-            { factor: 0.1, count: 95,  minSize: 1.0, maxSize: 2.0, alpha: 0.55 },
-            { factor: 0.3, count: 65,  minSize: 1.5, maxSize: 2.8, alpha: 0.80 },
-            { factor: 0.6, count: 40,  minSize: 2.2, maxSize: 3.8, alpha: 0.95 }
+            { factor: 0.1, count: 110, minSize: 1.0, maxSize: 2.0, alpha: 0.55 },
+            { factor: 0.3, count: 75,  minSize: 1.5, maxSize: 2.8, alpha: 0.80 },
+            { factor: 0.6, count: 45,  minSize: 2.2, maxSize: 3.8, alpha: 0.95 }
         ]
     },
     environment: {
-        asteroidCount: 32,
+        asteroidCount: 34,
         cometCount: 5,
         cheeseMagnetRadius: 155,
         cheeseCollectRadius: 36,
         cheeseMagnetPull: 520,
         cheeseClusters: [
+            { x: 0,    y: 0,    count: 6, spread: 80 },
             { x: -340, y: -170, count: 5, spread: 75 },
             { x: 370,  y: -210, count: 5, spread: 75 },
             { x: -520, y: 260,  count: 6, spread: 85 },
             { x: 510,  y: 310,  count: 6, spread: 85 },
-            { x: -120, y: -640, count: 6, spread: 90 },
             { x: -860, y: -40,  count: 5, spread: 80 },
             { x: 880,  y: 110,  count: 5, spread: 80 },
             { x: 40,   y: 540,  count: 5, spread: 75 }
@@ -67,33 +67,13 @@ export const SPACE_CONFIG = {
     },
     planets: [
         {
-            id: 'home_base',
-            name: 'Домашняя Планета Пи',
-            subtitle: 'Склад Сыра, Гардероб Скинов и Космодром',
-            badge: '🏠 ДОМ МЫШОНКА',
-            actionLabel: 'ДОМОЙ!',
-            x: 0,
-            y: 0,
-            radius: 78,
-            dockRadius: 175,
-            coreColor: '#facc15',
-            midColor: '#f59e0b',
-            rimColor: '#b45309',
-            atmoColor: 'rgba(250, 204, 21, 0.45)',
-            ringColor: 'rgba(254, 240, 138, 0.65)',
-            moonColor: '#fde047',
-            monsterImg: 'assets/characters/transylvania/pi.svg',
-            isHomePlanet: true,
-            locked: false
-        },
-        {
             id: 'transylvania',
             name: 'Замок Теней',
             subtitle: 'Тихая лапка, норы-телепорты и призраки',
             badge: '🏰 СТЕЛС И ЭКШЕН',
             actionLabel: 'СЕСТЬ!',
-            x: -690,
-            y: -360,
+            x: -520,
+            y: -240,
             radius: 86,
             dockRadius: 185,
             coreColor: '#c084fc',
@@ -111,8 +91,8 @@ export const SPACE_CONFIG = {
             subtitle: 'Битва снежками в пещерах и онлайн с друзьями',
             badge: '❄️ СНЕЖКИ',
             actionLabel: 'СЕСТЬ!',
-            x: 740,
-            y: -430,
+            x: 540,
+            y: -240,
             radius: 84,
             dockRadius: 185,
             coreColor: '#7dd3fc',
@@ -130,8 +110,8 @@ export const SPACE_CONFIG = {
             subtitle: 'Платформер: 3 ярких мира и сырные трофеи',
             badge: '🌋 3 МИРА',
             actionLabel: 'СЕСТЬ!',
-            x: -980,
-            y: 620,
+            x: -440,
+            y: 440,
             radius: 82,
             dockRadius: 180,
             coreColor: '#fb923c',
@@ -149,8 +129,8 @@ export const SPACE_CONFIG = {
             subtitle: 'Новогодний поиск подарков среди гирлянд',
             badge: '🎄 ЛАБИРИНТ',
             actionLabel: 'СЕСТЬ!',
-            x: 960,
-            y: 660,
+            x: 460,
+            y: 440,
             radius: 82,
             dockRadius: 180,
             coreColor: '#4ade80',
@@ -168,8 +148,8 @@ export const SPACE_CONFIG = {
             subtitle: 'Секретная планета откроется в новых обновлениях!',
             badge: '🔒 СЕКРЕТ',
             actionLabel: 'ЗАКРЫТО',
-            x: 210,
-            y: -1220,
+            x: 0,
+            y: -590,
             radius: 74,
             dockRadius: 170,
             coreColor: '#94a3b8',
