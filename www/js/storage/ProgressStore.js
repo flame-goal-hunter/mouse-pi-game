@@ -109,7 +109,14 @@ export const SKINS = [
       body: '#f2a6c8', desc: 'Уши торчком, хвост трубой',
       perk: { plus: 'Видит дальше в темноте', minus: 'Пугливая — на сердце меньше',
               apply: (s) => { s.lightMul = (s.lightMul || 1) * 1.25;
-                              s.maxHp = Math.max(3, s.maxHp - 1); } } }
+                              s.maxHp = Math.max(3, s.maxHp - 1); } } },
+
+    { id: 'cockroach',     name: 'Забавный таракан', price: 380, spriteKey: 'skin_cockroach',   menuKey: 'm_skin_cockroach',
+      body: '#9a4412', desc: 'Усики дрожат, тапки не догонят!',
+      perk: { plus: 'Юркий — бегает быстрее и тише крадётся', minus: 'Пироги чуть меньше',
+              apply: (s) => { s.speedMul = (s.speedMul || 1) * 1.14;
+                              s.stealthMul = (s.stealthMul || 1) * 0.78;
+                              s.pieSizeMul = (s.pieSizeMul || 1) * 0.9; } } }
 ];
 
 // === CONSUMABLES — bought before a run, spent by starting one ===

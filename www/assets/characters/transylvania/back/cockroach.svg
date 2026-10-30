@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
+  </defs>
+  <!-- Bottom feet -->
+  <ellipse cx="76" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
+  <ellipse cx="124" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
+  <!-- Middle bug legs -->
+  <path d="M 52 174 Q 26 178 22 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="21" cy="191" r="5" fill="#d97706" class="outline"/>
+  <path d="M 148 174 Q 174 178 178 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="179" cy="191" r="5" fill="#d97706" class="outline"/>
+  <!-- Upper arms -->
+  <ellipse cx="46" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(-28 46 148)"/>
+  <ellipse cx="154" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(28 154 148)"/>
+  <!-- Shiny Winged Carapace from behind -->
+  <ellipse cx="100" cy="158" rx="50" ry="42" fill="#7c2d12" class="outline"/>
+  <path d="M 100 116 L 100 200" stroke="#1a1a1a" stroke-width="3"/>
+  <path d="M 62 146 Q 100 154 138 146" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 60 166 Q 100 174 140 166" fill="none" stroke="#b45309" stroke-width="3" stroke-linecap="round"/>
+  <!-- Long curly antennae -->
+  <path d="M 84 68 Q 54 22 26 36 Q 14 44 24 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="24" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
+  <path d="M 116 68 Q 146 22 174 36 Q 186 44 176 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="176" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
+  <!-- Ears -->
+  <ellipse cx="62" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(-20 62 84)"/>
+  <ellipse cx="138" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(20 138 84)"/>
+  <!-- Back of head -->
+  <ellipse cx="100" cy="102" rx="42" ry="36" fill="#9a4412" class="outline"/>
+  <ellipse cx="88" cy="80" rx="14" ry="5" fill="#d97706" opacity="0.6" transform="rotate(-12 88 80)"/>
+</svg>

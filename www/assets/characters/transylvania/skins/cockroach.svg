@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <style>.outline { stroke: #1a1a1a; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }</style>
+  </defs>
+  <!-- Glossy wing-case cape behind body -->
+  <ellipse cx="100" cy="156" rx="54" ry="44" fill="#5c2808" class="outline"/>
+  <path d="M 100 114 L 100 198" stroke="#1a1a1a" stroke-width="2.5"/>
+  <!-- 6 Funny Cockroach Legs! (Bottom pair = feet, Middle & Upper pairs = waving side legs) -->
+  <!-- Bottom feet -->
+  <ellipse cx="76" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
+  <ellipse cx="124" cy="206" rx="15" ry="8" fill="#4a1f05" class="outline"/>
+  <!-- Middle pair of extra bug legs sticking out with little shoes -->
+  <path d="M 52 174 Q 26 178 22 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="21" cy="191" r="5" fill="#d97706" class="outline"/>
+  <path d="M 148 174 Q 174 178 178 190" fill="none" stroke="#4a1f05" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="179" cy="191" r="5" fill="#d97706" class="outline"/>
+  <!-- Upper pair of arms -->
+  <ellipse cx="46" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(-28 46 148)"/>
+  <ellipse cx="154" cy="148" rx="10" ry="17" fill="#8b3e0f" class="outline" transform="rotate(28 154 148)"/>
+  <!-- Chubby cockroach body -->
+  <ellipse cx="100" cy="158" rx="46" ry="39" fill="#9a4412" class="outline"/>
+  <!-- Striped golden-amber belly -->
+  <ellipse cx="100" cy="164" rx="31" ry="27" fill="#fbbf24" class="outline"/>
+  <path d="M 73 154 Q 100 160 127 154" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 71 166 Q 100 172 129 166" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 75 178 Q 100 183 125 178" fill="none" stroke="#9a4412" stroke-width="3" stroke-linecap="round"/>
+  <!-- Long curly bouncy antennae on top! -->
+  <path d="M 84 68 Q 54 22 26 36 Q 14 44 24 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="24" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
+  <path d="M 116 68 Q 146 22 174 36 Q 186 44 176 54" fill="none" stroke="#1a1a1a" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="176" cy="54" r="5.5" fill="#f59e0b" class="outline"/>
+  <!-- Cute little mouse-bug ears peeking on the sides -->
+  <ellipse cx="62" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(-20 62 84)"/>
+  <ellipse cx="138" cy="84" rx="12" ry="9" fill="#7c2d12" class="outline" transform="rotate(20 138 84)"/>
+  <!-- Head -->
+  <ellipse cx="100" cy="102" rx="42" ry="36" fill="#9a4412" class="outline"/>
+  <!-- Shiny forehead highlight -->
+  <ellipse cx="88" cy="78" rx="14" ry="5" fill="#d97706" opacity="0.65" transform="rotate(-12 88 78)"/>
+  <!-- Goofy hilarious asymmetric cartoon eyes! -->
+  <circle cx="82" cy="96" r="15" fill="#ffffff" class="outline"/>
+  <circle cx="118" cy="96" r="12.5" fill="#ffffff" class="outline"/>
+  <circle cx="84" cy="97" r="5.5" fill="#1a1a1a"/>
+  <circle cx="116" cy="95" r="4.5" fill="#1a1a1a"/>
+  <circle cx="86" cy="94" r="2.2" fill="#ffffff"/>
+  <circle cx="118" cy="93" r="1.8" fill="#ffffff"/>
+  <!-- Funny twitchy mustache / feelers by the nose -->
+  <path d="M 86 112 Q 66 110 58 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M 114 112 Q 134 110 142 118" fill="none" stroke="#1a1a1a" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="100" cy="109" rx="6" ry="4.5" fill="#4a1f05" class="outline"/>
+  <!-- Cheeky wide grin with two goofy buck-teeth -->
+  <path d="M 76 118 Q 100 134 124 118" fill="none" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round"/>
+  <rect x="93" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
+  <rect x="101" y="122" width="6" height="7" rx="1.5" fill="#ffffff" class="outline" stroke-width="2"/>
+  <!-- Rosy cheeks -->
+  <circle cx="68" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
+  <circle cx="132" cy="112" r="5.5" fill="#fb7185" opacity="0.6"/>
+</svg>
