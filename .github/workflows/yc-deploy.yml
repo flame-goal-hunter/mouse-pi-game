@@ -1,0 +1,36 @@
+name: Deploy to Yandex Cloud
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Yandex Container Registry
+        uses: yc-actions/yc-cr-login@v2
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }} .
+          docker push cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }}
+
+      - name: Deploy to Yandex Serverless Containers
+        uses: yc-actions/yc-sls-container-deploy@v5
+        with:
+          yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          folder-id: ${{ secrets.YC_FOLDER_ID }}
+          container-name: pi-mouse-game
+          image: cr.yandex/${{ secrets.YC_REGISTRY_ID }}/pi-mouse-game:${{ github.sha }}
+          cores: 1
+          memory: 512Mb
+          execution-timeout: 3600s
+          concurrency: 16
+          public: true
