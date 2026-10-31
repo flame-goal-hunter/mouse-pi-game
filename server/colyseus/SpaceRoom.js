@@ -79,6 +79,15 @@ export class SpaceRoom extends Room {
             this.projMeta.set(id, { ttl: 1.35, sessionId: client.sessionId });
             this.broadcast('fx_event', { type: 'horn', playerId: p.id, sessionId: client.sessionId, emoji: d.emoji || '😜', x: pr.x, y: pr.y });
         });
+
+        this.onMessage('hit_asteroid', (_client, d) => {
+            const id = String(d?.id || '');
+            const pr = this.state.projectiles.get(id);
+            if (!pr) return;
+            this.state.projectiles.delete(id);
+            this.projMeta.delete(id);
+            this.broadcast('fx_event', { type: 'paint_splat', x: Math.round(Number(d.x) || pr.x), y: Math.round(Number(d.y) || pr.y), color: pr.color });
+        });
     }
 
     onJoin(client, opts = {}) {
@@ -127,11 +136,6 @@ export class SpaceRoom extends Room {
         const b = this.state.ball, minX = FIELD.cx - FIELD.hw, maxX = FIELD.cx + FIELD.hw, minY = FIELD.cy - FIELD.hh, maxY = FIELD.cy + FIELD.hh;
         b.x += b.vx * dt; b.y += b.vy * dt; b.angle = Number((b.angle + Math.hypot(b.vx, b.vy) * 0.012 * dt).toFixed(2));
         b.vx *= 0.985; b.vy *= 0.985;
-        if (b.y - FIELD.ballR < minY) { b.y = minY + FIELD.ballR; b.vy = Math.abs(b.vy) * 0.85; }
-        if (b.y + FIELD.ballR > maxY) { b.y = maxY - FIELD.ballR; b.vy = -Math.abs(b.vy) * 0.85; }
-        const inGoal = Math.abs(b.y - FIELD.cy) < FIELD.goalH;
-        if (b.x - FIELD.ballR < minX) { if (inGoal) this._goal('pink'); else { b.x = minX + FIELD.ballR; b.vx = Math.abs(b.vx) * 0.85; } }
-        else if (b.x + FIELD.ballR > maxX) { if (inGoal) this._goal('blue'); else { b.x = maxX - FIELD.ballR; b.vx = -Math.abs(b.vx) * 0.85; } }
 
         for (const p of spacePlayers) {
             const dx = b.x - p.x, dy = b.y - p.y, d = Math.hypot(dx, dy);
@@ -143,6 +147,12 @@ export class SpaceRoom extends Room {
                 this.broadcast('fx_event', { type: 'bumper_hit', x: Math.round(b.x - nx * FIELD.ballR), y: Math.round(b.y - ny * FIELD.ballR) });
             }
         }
+
+        if (b.y - FIELD.ballR < minY) { b.y = minY + FIELD.ballR; b.vy = Math.abs(b.vy) * 0.85; }
+        if (b.y + FIELD.ballR > maxY) { b.y = maxY - FIELD.ballR; b.vy = -Math.abs(b.vy) * 0.85; }
+        const inGoal = Math.abs(b.y - FIELD.cy) < FIELD.goalH;
+        if (b.x - FIELD.ballR < minX) { if (inGoal) this._goal('pink'); else { b.x = minX + FIELD.ballR; b.vx = Math.abs(b.vx) * 0.85; } }
+        else if (b.x + FIELD.ballR > maxX) { if (inGoal) this._goal('blue'); else { b.x = maxX - FIELD.ballR; b.vx = -Math.abs(b.vx) * 0.85; } }
 
         for (const [id, pr] of this.state.projectiles.entries()) {
             const meta = this.projMeta.get(id);

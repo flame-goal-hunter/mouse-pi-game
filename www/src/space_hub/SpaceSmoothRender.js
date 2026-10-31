@@ -75,8 +75,8 @@ export class SpaceSmoothRender {
         if (state.ball) {
             entities.push({
                 id: 'ball',
-                x: Number(state.ball.x) || 0,
-                y: Number(state.ball.y) || 110,
+                x: Number.isFinite(Number(state.ball.x)) ? Number(state.ball.x) : 0,
+                y: Number.isFinite(Number(state.ball.y)) ? Number(state.ball.y) : 110,
                 angle: Number(state.ball.angle) || 0
             });
             if (!this.smoothBall) {

@@ -43,10 +43,10 @@ export class SpaceFun {
         this.Emotes.push({ x: s.rx ?? s.x, y: (s.ry ?? s.y) - 34, text: s.emoji || '😜', life: 1.2 });
     }
 
-    _spawnSplat(x, y, color, count = 16, isConfetti = false) {
+    _spawnSplat(x, y, color, count = 16, isConfetti = false, baseR = 8) {
         for (let i = 0; i < count; i++) {
             const a = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.35, spd = (isConfetti ? 240 : 140) + Math.random() * 160;
-            this.fx.push({ x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: (isConfetti ? 6 : 8) + Math.random() * 6, life: 1, color: isConfetti ? PAINT_COLORS[i % PAINT_COLORS.length] : color });
+            this.fx.push({ x, y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, r: (isConfetti ? 6 : baseR) + Math.random() * (baseR * 0.6), life: 1, color: isConfetti ? PAINT_COLORS[i % PAINT_COLORS.length] : color });
         }
     }
 
@@ -62,8 +62,8 @@ export class SpaceFun {
             if (ev.targetId) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y);
             else { this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
         } else if (ev.type === 'bumper_hit') {
-            this._spawnSplat(ev.x, ev.y, '#fde047', 14, false);
-            this.shakeTime = Math.max(this.shakeTime, 0.16);
+            this._spawnSplat(ev.x, ev.y, '#fde047', 8, false, 3.5);
+            this.shakeTime = Math.max(this.shakeTime, 0.14);
             SpaceAudio.playBumperBounce();
         } else if (ev.type === 'goal') {
             if (ev.score) this.score = ev.score;
@@ -111,12 +111,36 @@ export class SpaceFun {
             const nx = dxB / distB, ny = dyB / distB, boost = turboHeld ? 1.55 : 1.25;
             b.vx = r.vx * boost + nx * (turboHeld ? 360 : 230); b.vy = r.vy * boost + ny * (turboHeld ? 360 : 230);
             b.x = r.x + nx * (b.r + 28); b.y = r.y + ny * (b.r + 28); r.vx *= 0.7; r.vy *= 0.7;
-            this._spawnSplat(b.x - nx * b.r, b.y - ny * b.r, '#fde047', 10, false); SpaceAudio.playBumperBounce();
+            if (!SpaceNetwork.connected) { this._spawnSplat(b.x - nx * b.r, b.y - ny * b.r, '#fde047', 8, false, 3.5); SpaceAudio.playBumperBounce(); }
+        }
+
+        const minX = FIELD.cx - FIELD.hw, maxX = FIELD.cx + FIELD.hw, minY = FIELD.cy - FIELD.hh, maxY = FIELD.cy + FIELD.hh;
+        if (b.y - b.r < minY) { b.y = minY + b.r; b.vy = Math.abs(b.vy) * 0.85; }
+        if (b.y + b.r > maxY) { b.y = maxY - b.r; b.vy = -Math.abs(b.vy) * 0.85; }
+        const inGoal = Math.abs(b.y - FIELD.cy) < FIELD.goalH;
+        if (b.x - b.r < minX && !inGoal) { b.x = minX + b.r; b.vx = Math.abs(b.vx) * 0.85; }
+        else if (b.x + b.r > maxX && !inGoal) { b.x = maxX - b.r; b.vx = -Math.abs(b.vx) * 0.85; }
+
+        if (this.env?.asteroids) {
+            const netProjs = SpaceNetwork.smoother?.smoothProjectiles || [];
+            for (let i = netProjs.length - 1; i >= 0; i--) {
+                const s = netProjs[i];
+                const hitAst = this.env.asteroids.find(a => Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8);
+                if (hitAst) {
+                    hitAst.hitFlash = 1;
+                    try { SpaceNetwork.room?.send('hit_asteroid', { id: s.id, x: s.x, y: s.y }); } catch (_) {}
+                    netProjs.splice(i, 1);
+                }
+            }
         }
 
         for (let i = this.shots.length - 1; i >= 0; i--) {
-            const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt;
-            if ((s.life -= dt) <= 0) this.shots.splice(i, 1);
+            const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+            let hit = false;
+            if (this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) {
+                a.hitFlash = 1; this._spawnSplat(s.x, s.y, s.color, 12, false); SpaceAudio.playPaintSplat(); hit = true; break;
+            }
+            if (hit || s.life <= 0) this.shots.splice(i, 1);
         }
         for (let i = this.fx.length - 1; i >= 0; i--) { const f = this.fx[i]; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.94; f.vy *= 0.94; if ((f.life -= dt * 1.45) <= 0) this.fx.splice(i, 1); }
         for (let i = this.Emotes.length - 1; i >= 0; i--) { const em = this.Emotes[i]; em.y -= 36 * dt; if ((em.life -= dt) <= 0) this.Emotes.splice(i, 1); }
