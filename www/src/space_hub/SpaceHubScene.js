@@ -17,6 +17,7 @@ import { SpaceFun } from './SpaceFun.js';
 import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
+import { SPACE_MUSIC_TRACKS } from '../audio/SpaceMusicTracks.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
 import { PushInviteManager } from '../ui/PushInviteManager.js';
 import { SpaceNetDebug } from './SpaceNetDebug.js';
@@ -67,8 +68,11 @@ export class SpaceHubScene {
                 .sh-np-badge img { width: 18px; height: 18px; border-radius: 50%; object-fit: contain; }
                 .sh-settings-modal { position: fixed; inset: 0; z-index: 9998; background: rgba(8, 12, 28, 0.82); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; padding: 14px; pointer-events: auto; }
                 .sh-settings-modal.visible { display: flex; }
-                .sh-settings-card { width: min(92vw, 370px); background: linear-gradient(180deg, #1e293b, #0f172a); border: 2.5px solid #38bdf8; border-radius: 24px; padding: 18px; color: #f8fafc; box-shadow: 0 20px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 12px; }
-                .sh-set-btn { min-height: 44px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.22); font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 14.5px; color: #fff; cursor: pointer; padding: 8px 14px; }
+                .sh-settings-card { width: min(92vw, 390px); max-height: 92dvh; overflow-y: auto; background: linear-gradient(180deg, #1e293b, #0f172a); border: 2.5px solid #38bdf8; border-radius: 24px; padding: 16px 18px; color: #f8fafc; box-shadow: 0 20px 50px rgba(0,0,0,0.8); display: flex; flex-direction: column; gap: 10px; }
+                .sh-set-btn { min-height: 42px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.22); font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 14px; color: #fff; cursor: pointer; padding: 7px 12px; }
+                .sh-track-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+                .sh-track-btn { min-height: 40px; border-radius: 12px; border: 2px solid rgba(148,163,184,0.35); background: rgba(15,23,42,0.85); color: #e2e8f0; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; transition: transform 0.1s, border-color 0.15s, background 0.15s; }
+                .sh-track-btn.active { border-color: #facc15; background: rgba(133, 77, 14, 0.45); color: #fef08a; box-shadow: 0 0 12px rgba(250, 204, 21, 0.35); }
             </style>
             <canvas id="spaceHubCanvas"></canvas>
             <div class="sh-top-bar">
@@ -84,10 +88,16 @@ export class SpaceHubScene {
                 <div class="sh-settings-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:900;font-size:18px;color:#fef08a;">⚙️ Настройки пилота</span><button type="button" id="shCloseSetBtn" style="background:none;border:none;color:#94a3b8;font-size:20px;font-weight:900;cursor:pointer;">✕</button></div>
                     <label style="font-size:12.5px;font-weight:800;color:#93c5fd;">👤 Твой космический никнейм:</label>
-                    <input id="shNickInput" type="text" maxlength="16" style="padding:10px 12px;border-radius:12px;border:2px solid #38bdf8;background:#0f172a;color:#fff;font-family:'Nunito',sans-serif;font-weight:900;font-size:15px;">
-                    <button type="button" class="sh-set-btn" id="shSoundToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔊 Звук и музыка: ВКЛ</button>
+                    <input id="shNickInput" type="text" maxlength="16" style="padding:9px 12px;border-radius:12px;border:2px solid #38bdf8;background:#0f172a;color:#fff;font-family:'Nunito',sans-serif;font-weight:900;font-size:15px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px;">
+                        <span style="font-size:12.5px;font-weight:800;color:#93c5fd;">🎵 Фоновая музыка:</span>
+                        <button type="button" class="sh-set-btn" id="shSoundToggleBtn" style="min-height:34px;padding:4px 10px;font-size:12px;background:linear-gradient(180deg,#334155,#1e293b);">🔊 Звук: ВКЛ</button>
+                    </div>
+                    <div class="sh-track-grid" id="shTrackGrid">
+                        ${SPACE_MUSIC_TRACKS.map(t => `<button type="button" class="sh-track-btn" data-track-id="${t.id}">${t.label}</button>`).join('')}
+                    </div>
                     <button type="button" class="sh-set-btn" id="shPushToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔔 Включить вызовы на телефон</button>
-                    <button type="button" class="sh-set-btn" id="shNetDebugToggleBtn" style="background:linear-gradient(180deg,#1e293b,#0f172a);font-size:13px;color:#cbd5e1;">🐞 Сетевая диагностика (NetDebug): Выкл</button>
+                    <button type="button" class="sh-set-btn" id="shNetDebugToggleBtn" style="background:linear-gradient(180deg,#1e293b,#0f172a);font-size:12.5px;color:#cbd5e1;">🐞 Сетевая диагностика (NetDebug): Выкл</button>
                     <button type="button" class="sh-set-btn" id="shSaveSetBtn" style="background:linear-gradient(180deg,#22c55e,#15803d);border-color:#86efac;">✅ Сохранить</button>
                 </div>
             </div>
@@ -105,15 +115,25 @@ export class SpaceHubScene {
 
     _wireSettings(el) {
         const modal = el.querySelector('#shSettingsModal'), nickIn = el.querySelector('#shNickInput'), sndBtn = el.querySelector('#shSoundToggleBtn'), dbgBtn = el.querySelector('#shNetDebugToggleBtn');
-        const syncSnd = () => { sndBtn.textContent = localStorage.getItem('mousie_muted') === '1' ? '🔇 Звук и музыка: ВЫКЛ' : '🔊 Звук и музыка: ВКЛ'; };
+        const trackBtns = Array.from(el.querySelectorAll('.sh-track-btn'));
+        const syncSnd = () => { sndBtn.textContent = localStorage.getItem('mousie_muted') === '1' ? '🔇 Звук: ВЫКЛ' : '🔊 Звук: ВКЛ'; };
+        const syncTracks = () => {
+            const cur = PlayerProfile.musicTrackId || 'space_chill';
+            trackBtns.forEach(b => b.classList.toggle('active', b.dataset.trackId === cur));
+        };
         const syncDbg = () => {
             dbgBtn.textContent = SpaceNetDebug.enabled ? '🐞 Сетевая диагностика (NetDebug): Вкл' : '🐞 Сетевая диагностика (NetDebug): Выкл';
             dbgBtn.style.borderColor = SpaceNetDebug.enabled ? '#facc15' : 'rgba(255,255,255,0.22)';
             dbgBtn.style.color = SpaceNetDebug.enabled ? '#fef08a' : '#cbd5e1';
         };
-        el.querySelector('#shSettingsBtn').addEventListener('click', () => { nickIn.value = PlayerProfile.nickname; syncSnd(); syncDbg(); modal.classList.add('visible'); });
+        el.querySelector('#shSettingsBtn').addEventListener('click', () => { nickIn.value = PlayerProfile.nickname; syncSnd(); syncTracks(); syncDbg(); modal.classList.add('visible'); });
         el.querySelector('#shCloseSetBtn').addEventListener('click', () => modal.classList.remove('visible'));
         sndBtn.addEventListener('click', () => { const next = localStorage.getItem('mousie_muted') === '1' ? '0' : '1'; SpaceAudio.setMuted(next === '1'); window.__applyGlobalMute?.(next === '1'); syncSnd(); });
+        trackBtns.forEach(b => b.addEventListener('click', () => {
+            if (localStorage.getItem('mousie_muted') === '1') { SpaceAudio.setMuted(false); window.__applyGlobalMute?.(false); syncSnd(); }
+            SpaceAudio.setMusicTrack(b.dataset.trackId);
+            syncTracks();
+        }));
         dbgBtn.addEventListener('click', () => { SpaceNetDebug.setEnabled(!SpaceNetDebug.enabled); syncDbg(); });
         el.querySelector('#shSaveSetBtn').addEventListener('click', () => { if (nickIn.value.trim()) { PlayerProfile.setNickname(nickIn.value.trim()); SpaceNetwork.broadcastNow(); } modal.classList.remove('visible'); });
     }

@@ -49,7 +49,8 @@ class PlayerProfileStore {
             storedCheese: typeof prog.cheeseBank === 'number' ? prog.cheeseBank : 50,
             equippedSkinId: prog.currentSkin || 'blue',
             unlockedSkins: Array.isArray(prog.skinsUnlocked) ? prog.skinsUnlocked : ['blue'],
-            planetAppearance: null
+            planetAppearance: null,
+            musicTrackId: 'space_chill'
         });
 
         this.playerId = space.playerId || defId;
@@ -60,6 +61,7 @@ class PlayerProfileStore {
         this.pocketCheese = Math.max(0, Math.round(space.pocketCheese || 0));
         this.storedCheese = Math.max(prog.cheeseBank || 0, space.storedCheese || 0);
         this.planetAppearance = space.planetAppearance || getDefaultAppearance(this.playerId, this.nickname);
+        this.musicTrackId = space.musicTrackId || 'space_chill';
         this._persist();
     }
 
@@ -68,7 +70,7 @@ class PlayerProfileStore {
             playerId: this.playerId, nickname: this.nickname,
             equippedSkinId: this.equippedSkinId, unlockedSkins: this.unlockedSkins,
             pocketCheese: this.pocketCheese, storedCheese: this.storedCheese,
-            planetAppearance: this.planetAppearance
+            planetAppearance: this.planetAppearance, musicTrackId: this.musicTrackId
         });
         try { localStorage.setItem('mousie_nickname', this.nickname); } catch (_) {}
         const prog = _readJson(PROGRESS_KEY, {});
@@ -88,6 +90,12 @@ class PlayerProfileStore {
 
     setPlanetAppearance(app) {
         this.planetAppearance = { ...this.planetAppearance, ...app };
+        this._persist();
+    }
+
+    setMusicTrack(trackId) {
+        if (!trackId) return;
+        this.musicTrackId = String(trackId);
         this._persist();
     }
 
