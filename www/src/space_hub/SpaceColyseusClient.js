@@ -13,17 +13,45 @@ const FRIENDS_CACHE_KEY = 'mousiePi.friendsHomes.v1';
 
 export class SpaceColyseusClient {
     constructor() {
+        let tabSid = 'tab_' + Math.random().toString(36).slice(2, 8);
+        try { tabSid = sessionStorage.getItem('mpi_tab_sid') || tabSid; sessionStorage.setItem('mpi_tab_sid', tabSid); } catch (_) {}
         Object.assign(this, {
             peers: new Map(), cachedHomes: new Map(), smoother: new SpaceSmoothRender(),
-            client: null, room: null, connected: false, connecting: false,
-            lastSendAt: 0, lastStatusSent: '', onFunEvent: null, onFxEvent: null,
+            client: null, room: null, connected: false, connecting: false, tabSid,
+            lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastStatusSent: '', onFunEvent: null, onFxEvent: null,
             onServerImpulse: null, onInviteEvent: null, pushSubscription: null,
             localMotion: { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, homeAngle: 0, facing: 1, moving: false }
         });
         this._loadCachedHomes();
-        const boot = () => setTimeout(() => { this._connect(); this._fetchServerHomes(); }, 350);
-        if (typeof document !== 'undefined' && document.readyState !== 'complete') window.addEventListener('load', boot, { once: true });
-        else boot();
+        this._initLocalChannel();
+        setTimeout(() => { this._connect(); this._fetchServerHomes(); }, 50);
+    }
+
+    _mySid() { return this.room?.sessionId || this.tabSid; }
+
+    _initLocalChannel() {
+        try {
+            this.bc = new BroadcastChannel('mousie_pi_space_v1');
+            this.bc.onmessage = (e) => {
+                if (e.data && e.data.sessionId !== this._mySid() && e.data.tabSid !== this.tabSid) {
+                    this.smoother.onExternalPeer(e.data, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid);
+                    if (this.connected && this.room && !this.room.state?.players?.has?.(e.data.sessionId)) {
+                        try { this.room.send('peer_bridge', [e.data]); } catch (_) {}
+                    }
+                }
+            };
+        } catch (_) {}
+    }
+
+    _buildLocalPkt() {
+        const m = this.localMotion, snap = PlayerProfile.getHomeSnapshot();
+        return {
+            sessionId: this._mySid(), tabSid: this.tabSid, playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
+            skinId: PlayerProfile.equippedSkinId, activityStatus: PlayerProfile.currentLocation || 'space',
+            storedCheese: PlayerProfile.storedCheese, planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
+            x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
+            angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo), homeSnapshot: snap
+        };
     }
 
     _loadCachedHomes() {
@@ -70,7 +98,7 @@ export class SpaceColyseusClient {
             this.client = new Colyseus.Client(this._getEndpoint());
             const snap = PlayerProfile.getHomeSnapshot();
             this.room = await this.client.joinOrCreate('space_hub', {
-                playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
+                tabSid: this.tabSid, playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
                 skinId: PlayerProfile.equippedSkinId, activityStatus: PlayerProfile.currentLocation || 'space',
                 storedCheese: PlayerProfile.storedCheese,
                 planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
@@ -89,7 +117,7 @@ export class SpaceColyseusClient {
         const room = this.room;
         if (!room) return;
         const applyState = (state) => {
-            if (state) this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt));
+            if (state) this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt), this.tabSid);
         };
         if (room.state) applyState(room.state);
         room.onStateChange(applyState);
@@ -118,16 +146,37 @@ export class SpaceColyseusClient {
     }
 
     broadcastNow() {
+        const pkt = this._buildLocalPkt();
+        try { this.bc?.postMessage(pkt); } catch (_) {}
         if (!this.connected || !this.room) return;
-        const snap = PlayerProfile.getHomeSnapshot();
         try {
-            this.room.send('status', {
-                nickname: PlayerProfile.nickname, skinId: PlayerProfile.equippedSkinId,
-                activityStatus: PlayerProfile.currentLocation || 'space', storedCheese: PlayerProfile.storedCheese,
-                planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
-                homeSnapshot: snap, pushSubscription: this.pushSubscription || null
-            });
+            this.room.send('status', { ...pkt, pushSubscription: this.pushSubscription || null });
         } catch (_) {}
+    }
+
+    async _syncCrossContainer() {
+        if (this.syncBusy || typeof fetch === 'undefined') return;
+        this.syncBusy = true;
+        try {
+            const res = await fetch('/api/space-sync', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player: this._buildLocalPkt() })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data?.players)) {
+                    const missing = [];
+                    for (const p of data.players) {
+                        if (!p || p.sessionId === this._mySid() || p.sessionId === this.tabSid || p.tabSid === this.tabSid) continue;
+                        this.smoother.onExternalPeer(p, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid);
+                        if (this.connected && this.room && !this.room.state?.players?.has?.(p.sessionId)) missing.push(p);
+                    }
+                    if (missing.length && this.connected && this.room) {
+                        try { this.room.send('peer_bridge', missing); } catch (_) {}
+                    }
+                }
+            }
+        } catch (_) {} finally { this.syncBusy = false; }
     }
 
     shootPaint(shot) {
@@ -139,19 +188,23 @@ export class SpaceColyseusClient {
         if (motionPatch) Object.assign(this.localMotion, motionPatch);
         const now = performance.now();
         // Строгий троттлинг отправки движения: ровно 20 раз в секунду (каждые 50 мс)
-        if (this.connected && this.room && now - this.lastSendAt >= 50) {
+        if (now - this.lastSendAt >= 50) {
             this.lastSendAt = now;
-            const m = this.localMotion;
-            try {
-                this.room.send('move', {
-                    x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
-                    angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
-                    homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving)
-                });
-            } catch (_) {}
-            const curStatus = `${PlayerProfile.currentLocation}|${PlayerProfile.equippedSkinId}|${PlayerProfile.nickname}|${PlayerProfile.storedCheese}`;
-            if (curStatus !== this.lastStatusSent) { this.lastStatusSent = curStatus; this.broadcastNow(); }
+            try { this.bc?.postMessage(this._buildLocalPkt()); } catch (_) {}
+            if (this.connected && this.room) {
+                const m = this.localMotion;
+                try {
+                    this.room.send('move', {
+                        x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
+                        angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
+                        homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving)
+                    });
+                } catch (_) {}
+                const curStatus = `${PlayerProfile.currentLocation}|${PlayerProfile.equippedSkinId}|${PlayerProfile.nickname}|${PlayerProfile.storedCheese}`;
+                if (curStatus !== this.lastStatusSent) { this.lastStatusSent = curStatus; this.broadcastNow(); }
+            }
         }
+        if (now - this.lastSyncAt >= 280) { this.lastSyncAt = now; this._syncCrossContainer(); }
         this.smoother.update60Fps(dt, this.peers);
     }
 

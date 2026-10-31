@@ -15,15 +15,15 @@ export class SpaceSmoothRender {
         this.smoothCheese = new Map();
     }
 
-    onColyseusState(state, mySessionId, peersMap, onSaveHome) {
+    onColyseusState(state, mySessionId, peersMap, onSaveHome, myTabSid = '') {
         if (!state) return;
         const entities = [];
         const activePlayerIds = new Set();
 
         if (state.players) {
             state.players.forEach((p, sessionId) => {
-                // ЖЕЛЕЗНОЕ ПРАВИЛО: свою ракету (mySessionId) НИКОГДА не берем из state.players!
-                if (sessionId === mySessionId) return;
+                // ЖЕЛЕЗНОЕ ПРАВИЛО: свою ракету (mySessionId / myTabSid) НИКОГДА не берем из state.players!
+                if (sessionId === mySessionId || (myTabSid && sessionId === myTabSid)) return;
                 const rawId = p.id || sessionId;
                 const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${sessionId.slice(0, 4)}` : rawId;
                 activePlayerIds.add(pid);
@@ -68,8 +68,16 @@ export class SpaceSmoothRender {
             });
         }
 
-        for (const pid of Array.from(peersMap.keys())) {
-            if (!activePlayerIds.has(pid)) peersMap.delete(pid);
+        for (const [pid, peer] of Array.from(peersMap.entries())) {
+            if (!activePlayerIds.has(pid)) {
+                if (peer.isExternal && Date.now() - (peer.lastSeen || 0) < 6000) {
+                    entities.push({ id: `p_${pid}`, x: Number(peer.targetX) || 0, y: Number(peer.targetY) || 0, angle: Number(peer.targetAngle) || 0 });
+                } else {
+                    peersMap.delete(pid);
+                }
+            } else {
+                peer.isExternal = false;
+            }
         }
 
         if (state.ball) {
@@ -106,6 +114,32 @@ export class SpaceSmoothRender {
         if (entities.length > 0) {
             const snapshot = this.SI.snapshot.create(entities);
             this.SI.addSnapshot(snapshot);
+        }
+    }
+
+    onExternalPeer(pkt, mySessionId, peersMap, onSaveHome, isColyseusConnected = false, myTabSid = '') {
+        if (!pkt || (pkt.sessionId && (pkt.sessionId === mySessionId || pkt.sessionId === myTabSid)) || (myTabSid && pkt.tabSid === myTabSid)) return;
+        const rawId = pkt.playerId || pkt.sessionId;
+        if (!rawId) return;
+        const sid = pkt.sessionId || rawId;
+        const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${ String(sid).slice(0, 4)}` : rawId;
+        let peer = peersMap.get(pid);
+        if (peer && !peer.isExternal && isColyseusConnected) return;
+        const fullPkt = {
+            ...pkt, playerId: pid, sessionId: sid,
+            equippedSkinId: pkt.skinId || pkt.equippedSkinId || 'blue',
+            currentLocation: pkt.activityStatus || pkt.currentLocation || 'space',
+            homeSnapshot: pkt.homeSnapshot || { storedCheese: Number(pkt.storedCheese) || 50, unlockedSkins: ['blue'], planetAppearance: { biome: pkt.planetBiome || 'cheese', ringType: pkt.planetRing || 'none' } }
+        };
+        if (!peer) { peer = new RemotePlayerEntity(fullPkt); peersMap.set(pid, peer); }
+        else peer.applyPacket(fullPkt);
+        peer.isExternal = true;
+        peer.sessionId = sid;
+        if (onSaveHome) onSaveHome(fullPkt);
+        if (!isColyseusConnected) {
+            const ents = [];
+            for (const [k, pr] of peersMap) ents.push({ id: `p_${k}`, x: Number(pr.targetX) || 0, y: Number(pr.targetY) || 0, angle: Number(pr.targetAngle) || 0 });
+            if (ents.length > 0) this.SI.addSnapshot(this.SI.snapshot.create(ents));
         }
     }
 

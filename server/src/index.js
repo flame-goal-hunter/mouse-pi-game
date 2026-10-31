@@ -1,4 +1,4 @@
-import { Server } from '@colyseus/core';
+import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { monitor } from '@colyseus/monitor';
 import express from 'express';
@@ -91,8 +91,36 @@ app.post('/api/invite', async (req, res) => {
     res.json({ ok: true, ...pushRes });
 });
 
+app.post('/api/space-sync', (req, res) => {
+    if (activeSpaceRoom) {
+        if (req.body?.player) activeSpaceRoom.syncExternalPlayer(req.body.player);
+        if (Array.isArray(req.body?.peers)) req.body.peers.forEach(p => activeSpaceRoom.syncExternalPlayer(p));
+        return res.json({ ok: true, players: activeSpaceRoom.getSyncSnapshot() });
+    }
+    res.json({ ok: true, players: [] });
+});
+
 const httpServer = createServer(app);
 const wsTransport = new WebSocketTransport({ server: httpServer });
+const origOnConn = wsTransport.onConnection.bind(wsTransport);
+wsTransport.wss.removeAllListeners('connection');
+wsTransport.wss.on('connection', async (rawClient, req) => {
+    try {
+        const upgradeReq = req || rawClient.upgradeReq;
+        const parsedURL = new URL(`ws://server/${upgradeReq.url}`);
+        const sessionId = parsedURL.searchParams.get('sessionId');
+        const m = parsedURL.pathname.match(/\/([a-zA-Z0-9_\-]+)\/([a-zA-Z0-9_\-]+)$/);
+        const roomId = m && m[2];
+        const room = roomId && matchMaker.getRoomById(roomId);
+        if ((!room || !room.hasReservedSeat(sessionId)) && sessionId && activeSpaceRoom) {
+            await activeSpaceRoom._reserveSeat(sessionId, {});
+            if (roomId && roomId !== activeSpaceRoom.roomId) {
+                upgradeReq.url = upgradeReq.url.replace(`/${roomId}`, `/${activeSpaceRoom.roomId}`);
+            }
+        }
+    } catch (_) {}
+    return origOnConn(rawClient, req);
+});
 
 const gameServer = new Server({
     transport: wsTransport
@@ -103,7 +131,8 @@ gameServer.define('snowball', SnowballRoom)
 
 gameServer.define('space_hub', SpaceRoom);
 
-gameServer.listen(PORT, HOST).then(() => {
+gameServer.listen(PORT, HOST).then(async () => {
+    try { await matchMaker.createRoom('space_hub', {}); } catch (_) {}
     console.log(`[server] Mousie Pi snowball server listening on http://${HOST}:${PORT}`);
     console.log(`[server] Game + multiplayer on http://${HOST}:${PORT}`);
     console.log(`[server] Monitor: http://${HOST}:${PORT}/colyseus`);
