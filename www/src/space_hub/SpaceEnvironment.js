@@ -58,17 +58,17 @@ export class SpaceEnvironment {
     }
 
     onServerCheesePicked(ev) {
-        const cb = SpaceNetwork.worldSync?.world?.cheese?.get(Number(ev.id));
+        const cid = Number(ev.id), now = performance.now();
+        if (!this.pickedAtById) this.pickedAtById = new Map();
+        if (now - (this.pickedAtById.get(cid) || 0) < 3000) return;
+        this.pickedAtById.set(cid, now);
+        const cb = SpaceNetwork.worldSync?.world?.cheese?.get(cid);
         if (cb && cb.respawn <= 0) cb.respawn = 14;
-        if (ev.byPlayerId === PlayerProfile.playerId) {
-            const now = performance.now();
-            if (now - (this.lastCheesePickAt || 0) > 150) {
-                this.lastCheesePickAt = now;
-                PlayerProfile.addPocketCheese(1);
-                SpaceAudio.playCheesePickup();
-                this.onCheeseCollected?.();
-                try { navigator.vibrate?.(10); } catch (_) {}
-            }
+        if (ev.byPlayerId === PlayerProfile.playerId || ev.byPlayerId === '__local__') {
+            PlayerProfile.addPocketCheese(1);
+            SpaceAudio.playCheesePickup();
+            this.onCheeseCollected?.();
+            try { navigator.vibrate?.(10); } catch (_) {}
         }
         this.popups.push({ x: ev.hitX ?? ev.x ?? cb?.renderX ?? 0, y: (ev.hitY ?? ev.y ?? cb?.renderY ?? 0) - 24, life: 0.85, maxLife: 0.85 });
     }

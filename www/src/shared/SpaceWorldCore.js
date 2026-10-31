@@ -200,8 +200,9 @@ export function stepWorld(world, dt = FIXED_DT, opts = {}) {
         for (const r of activeRockets) {
             const dx = r.x - ch.x, dy = r.y - ch.y, d = Math.hypot(dx, dy);
             if (d < 36) {
-                ch.respawn = 14; ch.vx = ch.vy = 0;
-                events.push({ type: 'cheese_picked', id: ch.cid, byPlayerId: r.playerId || r.id, hitX: ch.x, hitY: ch.y });
+                const hitX = ch.x, hitY = ch.y;
+                ch.respawn = 14; ch.vx = ch.vy = 0; ch.x = ch.prevX = ch.homeX; ch.y = ch.prevY = ch.homeY;
+                events.push({ type: 'cheese_picked', id: ch.cid, byPlayerId: r.playerId || r.id, hitX, hitY });
                 break;
             } else if (d < 155 && d > 0.1) {
                 const pull = (1 - d / 155) * 520;

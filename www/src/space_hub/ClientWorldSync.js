@@ -125,7 +125,7 @@ export class ClientWorldSync {
             cIter((ch, cid) => {
                 activeCheese.add(cid);
                 const cb = this.world.cheese.get(cid);
-                if (cb) cb.respawn = 0;
+                if (cb && cb.respawn <= 1.5) cb.respawn = 0;
             });
             for (const [cid, cb] of this.world.cheese.entries()) {
                 if (!activeCheese.has(cid) && cb.respawn <= 0) cb.respawn = 14;
