@@ -50,16 +50,21 @@ export class SpaceFun {
         }
     }
 
-    _applyPaintToRocket(targetId, color, x, y) {
+    _applyPaintToRocket(targetId, color, x, y, targetSid = '') {
         this._spawnSplat(x, y, color, 20, false); SpaceAudio.playPaintSplat();
-        if (targetId === PlayerProfile.playerId) Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65 });
-        else { const peer = SpaceNetwork.peers.get(targetId); if (peer) Object.assign(peer, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0 }); }
+        const mySid = SpaceNetwork._mySid?.() || '';
+        if ((targetSid && targetSid === mySid) || (!targetSid && targetId === PlayerProfile.playerId)) {
+            Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65 });
+        } else {
+            const peer = SpaceNetwork.peers.get(targetId) || Array.from(SpaceNetwork.peers.values()).find(p => p.sessionId === targetSid || p.playerId === targetId);
+            if (peer) Object.assign(peer, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0 });
+        }
     }
 
     _onServerFx(ev) {
         if (!ev?.type) return;
         if (ev.type === 'paint_splat') {
-            if (ev.targetId) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y);
+            if (ev.targetId || ev.targetSid) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y, ev.targetSid);
             else { this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
         } else if (ev.type === 'bumper_hit') {
             this._spawnSplat(ev.x, ev.y, '#fde047', 8, false, 3.5);
@@ -123,23 +128,54 @@ export class SpaceFun {
         if (b.x - b.r < minX && !inGoal) { b.x = minX + b.r; b.vx = Math.abs(b.vx) * 0.85; }
         else if (b.x + b.r > maxX && !inGoal) { b.x = maxX - b.r; b.vx = -Math.abs(b.vx) * 0.85; }
 
-        if (this.env?.asteroids) {
-            const netProjs = SpaceNetwork.smoother?.smoothProjectiles || [];
-            for (let i = netProjs.length - 1; i >= 0; i--) {
-                const s = netProjs[i];
-                const hitAst = this.env.asteroids.find(a => Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8);
-                if (hitAst) {
-                    hitAst.hitFlash = 1;
-                    try { SpaceNetwork.room?.send('hit_asteroid', { id: s.id, x: s.x, y: s.y }); } catch (_) {}
-                    netProjs.splice(i, 1);
-                }
+        const peers = SpaceNetwork.getOnlinePeers().filter(p => p.currentLocation === 'space');
+        for (const p of peers) {
+            const px = p.renderX ?? p.rx ?? p.x, py = p.renderY ?? p.ry ?? p.y;
+            const dx = r.x - px, dy = r.y - py, d = Math.hypot(dx, dy);
+            if (d < 52 && d > 0.001 && performance.now() - this.lastBumpAt > 280) {
+                this.lastBumpAt = performance.now();
+                const nx = dx / d, ny = dy / d, mx = (r.x + px) / 2, my = (r.y + py) / 2;
+                r.bounceOff(nx, ny, 310); this.shakeTime = 0.22; SpaceAudio.playBumperBounce();
+                this._spawnSplat(mx, my, '#fde047', 14, false);
+                try { SpaceNetwork.room?.send('bumper_hit', { targetSid: p.sessionId, targetId: p.playerId, nx: -nx, ny: -ny, x: Math.round(mx), y: Math.round(my) }); } catch (_) {}
+            }
+        }
+
+        const netProjs = SpaceNetwork.smoother?.smoothProjectiles || [];
+        const mySid = SpaceNetwork._mySid?.() || '';
+        for (let i = netProjs.length - 1; i >= 0; i--) {
+            const s = netProjs[i];
+            if (s.ownerId !== mySid && Math.hypot(s.x - r.x, s.y - r.y) < 36) {
+                this._applyPaintToRocket(PlayerProfile.playerId, s.color, r.x, r.y, mySid);
+                try { SpaceNetwork.room?.send('hit_player', { id: s.id, targetSid: mySid, targetId: PlayerProfile.playerId, color: s.color, x: Math.round(r.x), y: Math.round(r.y) }); } catch (_) {}
+                netProjs.splice(i, 1);
+                continue;
+            }
+            const hitPeer = peers.find(p => p.sessionId !== s.ownerId && p.playerId !== s.ownerId && Math.hypot(s.x - (p.renderX ?? p.x), s.y - (p.renderY ?? p.y)) < 36);
+            if (hitPeer) {
+                const hx = hitPeer.renderX ?? hitPeer.x, hy = hitPeer.renderY ?? hitPeer.y;
+                this._applyPaintToRocket(hitPeer.playerId, s.color, hx, hy, hitPeer.sessionId);
+                try { SpaceNetwork.room?.send('hit_player', { id: s.id, targetSid: hitPeer.sessionId, targetId: hitPeer.playerId, color: s.color, x: Math.round(hx), y: Math.round(hy) }); } catch (_) {}
+                netProjs.splice(i, 1);
+                continue;
+            }
+            const hitAst = this.env?.asteroids?.find(a => Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8);
+            if (hitAst) {
+                hitAst.hitFlash = 1;
+                try { SpaceNetwork.room?.send('hit_asteroid', { id: s.id, x: s.x, y: s.y }); } catch (_) {}
+                netProjs.splice(i, 1);
             }
         }
 
         for (let i = this.shots.length - 1; i >= 0; i--) {
             const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
             let hit = false;
-            if (this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) {
+            const hitPeer = peers.find(p => p.playerId !== s.ownerId && Math.hypot(s.x - (p.renderX ?? p.x), s.y - (p.renderY ?? p.y)) < 36);
+            if (hitPeer) {
+                this._applyPaintToRocket(hitPeer.playerId, s.color, hitPeer.renderX ?? hitPeer.x, hitPeer.renderY ?? hitPeer.y, hitPeer.sessionId);
+                hit = true;
+            }
+            if (!hit && this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) {
                 a.hitFlash = 1; this._spawnSplat(s.x, s.y, s.color, 12, false); SpaceAudio.playPaintSplat(); hit = true; break;
             }
             if (hit || s.life <= 0) this.shots.splice(i, 1);
