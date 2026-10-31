@@ -148,3 +148,4 @@ export class DifficultyModal {
 
 export const difficultyModal = new DifficultyModal();
 if (typeof window !== 'undefined') window.difficultyModal = difficultyModal;
+

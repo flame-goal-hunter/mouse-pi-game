@@ -158,3 +158,4 @@ export const DifficultyConfig = {
 };
 
 if (typeof window !== 'undefined') window.DifficultyConfig = DifficultyConfig;
+

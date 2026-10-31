@@ -224,7 +224,7 @@ export class SpaceColyseusClient {
     sendAction(type, data) {
         const payload = { ...data, actId: Math.random().toString(36).slice(2, 9) };
         if (this.connected && this.room) {
-            try { this.room.send(type, payload); } catch (_) {}
+            try { this.room.send(type, payload); return; } catch (_) {}
         }
         this.pendingActions.push({ type, data: payload });
     }

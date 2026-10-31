@@ -110,7 +110,10 @@ export class SpaceFun {
                 if (ev.bodyA?.id === '__local__' || ev.bodyB?.id === '__local__') {
                     if (SpaceNetwork.worldSync) SpaceNetwork.worldSync.lastLocalBallKickAt = now;
                     const b = SpaceNetwork.worldSync?.world?.ball;
-                    if (b) SpaceNetwork.sendAction('ball_kick', { x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) });
+                    if (b && now - (this.lastKickSentAt || 0) > 110) {
+                        this.lastKickSentAt = now;
+                        SpaceNetwork.sendAction('ball_kick', { x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) });
+                    }
                 }
             } else if (ev.type === 'asteroid_bump') {
                 this._spawnSplat(ev.hitX, ev.hitY, '#fde047', 8, false, 3.5);

@@ -134,10 +134,12 @@ export function stepWorld(world, dt = FIXED_DT, opts = {}) {
         const inGoal = Math.abs(b.y - FIELD.cy) < FIELD.goalH;
         if (b.x - b.radius < minX) {
             if (inGoal && opts.authoritativeGoals) { world.score.pink++; b.x = b.prevX = FIELD.cx; b.y = b.prevY = FIELD.cy; b.vx = b.vy = 0; events.push({ type: 'goal', team: 'pink', score: { ...world.score }, hitX: FIELD.cx, hitY: FIELD.cy }); }
-            else if (!inGoal) { b.x = minX + b.radius; if (b.vx < 0) b.vx = -b.vx * 0.85; }
+            else if (inGoal) { if (b.x - b.radius < minX - 28) { b.x = minX - 28 + b.radius; b.vx = 0; b.vy = 0; } }
+            else { b.x = minX + b.radius; if (b.vx < 0) b.vx = -b.vx * 0.85; }
         } else if (b.x + b.radius > maxX) {
             if (inGoal && opts.authoritativeGoals) { world.score.blue++; b.x = b.prevX = FIELD.cx; b.y = b.prevY = FIELD.cy; b.vx = b.vy = 0; events.push({ type: 'goal', team: 'blue', score: { ...world.score }, hitX: FIELD.cx, hitY: FIELD.cy }); }
-            else if (!inGoal) { b.x = maxX - b.radius; if (b.vx > 0) b.vx = -b.vx * 0.85; }
+            else if (inGoal) { if (b.x + b.radius > maxX + 28) { b.x = maxX + 28 - b.radius; b.vx = 0; b.vy = 0; } }
+            else { b.x = maxX - b.radius; if (b.vx > 0) b.vx = -b.vx * 0.85; }
         }
     }
 
@@ -156,7 +158,7 @@ export function stepWorld(world, dt = FIXED_DT, opts = {}) {
             const col = resolveBodyCollision(rA, activeRockets[j]);
             if (col) events.push({ type: 'bumper_hit', ...col });
         }
-        if (b && !opts.authoritativeGoals) {
+        if (b && !opts.authoritativeGoals && rA.id === '__local__') {
             const colB = resolveBodyCollision(rA, b);
             if (colB) events.push({ type: 'ball_kick', ...colB });
         }

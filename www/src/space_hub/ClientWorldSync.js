@@ -123,15 +123,14 @@ export class ClientWorldSync {
             if (typeof sb.scoreBlue === 'number') this.world.score = { blue: sb.scoreBlue, pink: sb.scorePink || 0 };
             const sx = Number(sb.x) || 0, sy = Number(sb.y) || 0, svx = Number(sb.vx) || 0, svy = Number(sb.vy) || 0;
             wb.rawX = sx; wb.rawY = sy;
-            const projX = sx + svx * 0.06, projY = sy + svy * 0.06;
             const idleAgo = performance.now() - (this.lastLocalBallKickAt || 0);
-            const errDist = Math.hypot(projX - wb.x, projY - wb.y);
-            const bothSlow = Math.hypot(svx, svy) < 16 && Math.hypot(wb.vx, wb.vy) < 16;
+            const errDist = Math.hypot(sx - wb.x, sy - wb.y);
+            const velDiff = Math.hypot(svx - wb.vx, svy - wb.vy);
             if (!this._ballSynced) {
                 this._ballSynced = true;
                 this._applyServerBody(wb, sb, true);
-            } else if (idleAgo > 1800 && (errDist > 220 || (bothSlow && errDist > 8))) {
-                this._applyServerBody(wb, { x: projX, y: projY, vx: svx, vy: svy, angle: sb.angle }, false);
+            } else if (idleAgo > 320 && (errDist >= 3 || velDiff >= 6)) {
+                this._applyServerBody(wb, sb, false);
             }
         }
         if (state.spaceCheese) {
