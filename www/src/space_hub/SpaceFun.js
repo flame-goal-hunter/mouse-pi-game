@@ -24,9 +24,10 @@ export class SpaceFun {
             SpaceNetwork.worldSync.onWorldEvents = (evs) => this._onLocalWorldEvents(evs);
         }
         SpaceNetwork.onServerImpulse = (imp) => {
-            if (performance.now() - this.lastBumpAt > 550) {
+            if (performance.now() - this.lastBumpAt > 350) {
                 this.lastBumpAt = performance.now();
                 this.rocket.applyServerImpulse(imp);
+                Object.assign(this.rocket, { hopScale: 0.35, spinTimer: 0.7, waveTimer: 0.5 });
                 this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 14, false);
                 this.shakeTime = 0.22;
                 SpaceAudio.playBumperBounce();
@@ -73,10 +74,11 @@ export class SpaceFun {
         this._spawnSplat(x, y, color, 20, false); SpaceAudio.playPaintSplat();
         const mySid = SpaceNetwork._mySid?.() || '', myPid = PlayerProfile.playerId;
         if (targetId === '__local__' || (targetSid && (targetSid === mySid || targetSid === SpaceNetwork.tabSid)) || (targetId && (targetId === myPid || String(targetId).startsWith(myPid + '_')))) {
-            Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65 });
+            Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65, hopScale: 0.35, waveTimer: 0.55 });
+            this.shakeTime = 0.2;
         } else {
-            const peer = SpaceNetwork.peers.get(targetId) || Array.from(SpaceNetwork.peers.values()).find(p => p.sessionId === targetSid || p.playerId === targetId);
-            if (peer) Object.assign(peer, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0 });
+            const peer = SpaceNetwork.peers.get(targetId) || Array.from(SpaceNetwork.peers.values()).find(p => p.sessionId === targetSid || p.playerId === targetId || (targetId && (p.playerId.startsWith(targetId + '_') || String(targetId).startsWith(p.playerId + '_'))));
+            if (peer) Object.assign(peer, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, hopScale: 0.35, waveTimer: 0.55 });
         }
     }
 
@@ -88,6 +90,11 @@ export class SpaceFun {
                 this.shakeTime = 0.22;
                 SpaceAudio.playBumperBounce();
                 try { navigator.vibrate?.(15); } catch (_) {}
+                for (const b of [ev.bodyA, ev.bodyB]) {
+                    if (!b) continue;
+                    if (b.id === '__local__') Object.assign(this.rocket, { hopScale: 0.35, spinTimer: 0.65, waveTimer: 0.5 });
+                    else { const peer = SpaceNetwork.peers.get(b.id) || SpaceNetwork.peers.get(b.playerId); if (peer) Object.assign(peer, { hopScale: 0.35, spinTimer: 0.65, waveTimer: 0.5 }); }
+                }
                 if (now - this.lastBumpAt > 180 && (ev.bodyA?.id === '__local__' || ev.bodyB?.id === '__local__')) {
                     this.lastBumpAt = now;
                     const other = ev.bodyA.id === '__local__' ? ev.bodyB : ev.bodyA;
@@ -143,12 +150,17 @@ export class SpaceFun {
             }
         } else if (ev.type === 'bumper_hit') {
             if ((ev.targetSid && (ev.targetSid === mySid || ev.targetSid === SpaceNetwork.tabSid)) || (ev.targetId && (ev.targetId === myPid || String(ev.targetId).startsWith(myPid + '_')))) {
-                if (now - this.lastBumpAt > 550) {
+                if (now - this.lastBumpAt > 350) {
                     this.lastBumpAt = now;
                     if (ev.nx || ev.ny) this.rocket.bounceOff(ev.nx, ev.ny, 310);
+                    Object.assign(this.rocket, { hopScale: 0.35, spinTimer: 0.7, waveTimer: 0.5 });
                 }
+            } else {
+                const peer = SpaceNetwork.peers.get(ev.targetId) || Array.from(SpaceNetwork.peers.values()).find(p => p.sessionId === ev.targetSid || p.playerId === ev.targetId);
+                if (peer) Object.assign(peer, { hopScale: 0.35, spinTimer: 0.7, waveTimer: 0.5 });
             }
-            if (now - (this.lastBumpAt || 0) > 350 && now - (this.lastKickAt || 0) > 350) {
+            if (now - (this.lastBumpFxAt || 0) > 220) {
+                this.lastBumpFxAt = now;
                 this._spawnSplat(ev.x, ev.y, '#fde047', 12, false, 3.5);
                 this.shakeTime = Math.max(this.shakeTime, 0.16);
                 SpaceAudio.playBumperBounce();

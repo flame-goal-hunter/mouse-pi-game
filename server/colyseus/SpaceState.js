@@ -27,6 +27,7 @@ export class PlayerState extends Schema {
         this.homeAngle = 0;
         this.facing = 1;
         this.moving = false;
+        this.unlockedSkins = 'blue';
     }
 }
 type('string')(PlayerState.prototype, 'id');
@@ -49,6 +50,7 @@ type('string')(PlayerState.prototype, 'planetRing');
 type('number')(PlayerState.prototype, 'homeAngle');
 type('number')(PlayerState.prototype, 'facing');
 type('boolean')(PlayerState.prototype, 'moving');
+type('string')(PlayerState.prototype, 'unlockedSkins');
 
 export class BallState extends Schema {
     constructor() {

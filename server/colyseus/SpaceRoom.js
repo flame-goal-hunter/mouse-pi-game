@@ -77,10 +77,16 @@ export class SpaceRoom extends Room {
             if (s.nickname) p.nickname = String(s.nickname).slice(0, 18);
             for (const k of ['skinId', 'activityStatus', 'planetBiome', 'planetRing']) if (s[k]) p[k] = String(s[k]);
             if (typeof s.storedCheese === 'number') p.storedCheese = s.storedCheese;
+            const skins = Array.isArray(s.unlockedSkins) ? s.unlockedSkins : s.homeSnapshot?.unlockedSkins;
+            if (Array.isArray(skins) && skins.length) p.unlockedSkins = skins.join(',');
+            else if (typeof s.unlockedSkins === 'string' && s.unlockedSkins) p.unlockedSkins = s.unlockedSkins;
+            if (typeof s.homeAngle === 'number') p.homeAngle = Number(s.homeAngle.toFixed(3));
+            if (typeof s.facing === 'number') p.facing = s.facing;
+            if (typeof s.moving === 'boolean') p.moving = s.moving;
             this._ensureRocketBody(client.sessionId, p);
             upsertPlayerFromPacket({
                 playerId: p.id, nickname: p.nickname, skinId: p.skinId, equippedSkinId: p.skinId,
-                homeSnapshot: s.homeSnapshot || { storedCheese: p.storedCheese, planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } },
+                homeSnapshot: s.homeSnapshot || { storedCheese: p.storedCheese, unlockedSkins: p.unlockedSkins.split(','), planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } },
                 pushSubscription: s.pushSubscription || null
             });
         });
@@ -134,16 +140,16 @@ export class SpaceRoom extends Room {
             const id = String(d.id || '');
             const pb = this.world.projectiles.get(id);
             this.world.projectiles.delete(id); this.state.projectiles.delete(id);
-            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => (p.id === d.targetId || p.id.startsWith(d.targetId + '_')) && p.sessionId !== sessionId);
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId || (d.targetId && p.id.startsWith(d.targetId + '_')));
             const color = d.color || pb?.color || '#f472b6';
             if (target) { target.paintColor = color; target.paintTimer = 6.0; }
             this._emitFx({ type: 'paint_splat', x: Math.round(Number(d.x) || target?.x || 0), y: Math.round(Number(d.y) || target?.y || 0), color, targetId: d.targetId || target?.id || '', targetSid: target?.sessionId || d.targetSid || '' });
         } else if (type === 'bumper_hit') {
-            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => (p.id === d.targetId || p.id.startsWith(d.targetId + '_')) && p.sessionId !== sessionId);
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId || (d.targetId && p.id.startsWith(d.targetId + '_')));
             const tSid = target?.sessionId || d.targetSid || d.targetId || '';
             const nx = Number(d.nx) || 0, ny = Number(d.ny) || 0;
             if (target) this._sendImpulse(target, target.vx * 0.4 + nx * 310, target.vy * 0.4 + ny * 310, target.x + nx * 18, target.y + ny * 18, nx, ny);
-            this._emitFx({ type: 'bumper_hit', x: Math.round(Number(d.x) || target?.x || 0), y: Math.round(Number(d.y) || target?.y || 0), targetId: d.targetId || target?.id || '', targetSid: tSid, nx, ny });
+            this._emitFx({ type: 'bumper_hit', bySid: sessionId, x: Math.round(Number(d.x) || target?.x || 0), y: Math.round(Number(d.y) || target?.y || 0), targetId: d.targetId || target?.id || '', targetSid: tSid, nx, ny });
         } else if (type === 'cheese_pick') {
             const cid = Number(d.id), cb = this.world.cheese.get(cid), p = this.state.players.get(sessionId);
             if (cb && cb.respawn <= 0) {
@@ -162,7 +168,8 @@ export class SpaceRoom extends Room {
             if (esid === sid) continue;
             const sameTab = tabSid && (esid === tabSid || this.playerTabs.get(esid) === tabSid);
             const samePid = ep.id === pid || ep.id.startsWith(pid + '_');
-            if (sameTab || (samePid && now - (this.externalSeen.get(esid) || 0) > 2500)) {
+            const isLiveWs = this.clients.some(c => c.sessionId === esid);
+            if (sameTab || (samePid && !isLiveWs && now - (this.externalSeen.get(esid) || 0) > 6000)) {
                 this.removePlayer(esid);
             } else if (ep.id === pid) {
                 pid = `${pid}_${sid.slice(0, 4)}`;
@@ -174,11 +181,13 @@ export class SpaceRoom extends Room {
     onJoin(client, opts = {}) {
         const pid = this._resolvePlayerId(client.sessionId, opts.playerId || client.sessionId, opts.tabSid);
         const p = new PlayerState();
+        const skins = Array.isArray(opts.unlockedSkins) ? opts.unlockedSkins : opts.homeSnapshot?.unlockedSkins;
         Object.assign(p, {
             sessionId: client.sessionId, id: pid,
             nickname: String(opts.nickname || 'Мышонок Пи').slice(0, 18), skinId: String(opts.skinId || 'blue'),
             activityStatus: String(opts.activityStatus || 'space'), storedCheese: Number(opts.storedCheese) || 50,
             planetBiome: String(opts.planetBiome || 'cheese'), planetRing: String(opts.planetRing || 'none'),
+            unlockedSkins: Array.isArray(skins) && skins.length ? skins.join(',') : 'blue',
             x: Number(opts.x) || 0, y: Number(opts.y) || 165
         });
         this.state.players.set(client.sessionId, p);
@@ -186,7 +195,7 @@ export class SpaceRoom extends Room {
         this._ensureRocketBody(client.sessionId, p);
         upsertPlayerFromPacket({
             playerId: p.id, nickname: p.nickname, skinId: p.skinId, equippedSkinId: p.skinId,
-            homeSnapshot: opts.homeSnapshot || { storedCheese: p.storedCheese, planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } }
+            homeSnapshot: opts.homeSnapshot || { storedCheese: p.storedCheese, unlockedSkins: p.unlockedSkins.split(','), planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } }
         });
         this.clock.setTimeout(() => client.send('saved_homes', getAllSavedPlayers()), 120);
     }
@@ -216,6 +225,13 @@ export class SpaceRoom extends Room {
             this.externalSeen.set(wsSid, Date.now());
             if (pkt.sessionId !== wsSid && this.state.players.has(pkt.sessionId)) this.removePlayer(pkt.sessionId);
             if (typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { wp.paintColor = String(pkt.paintColor); wp.paintTimer = Number(pkt.paintTimer); }
+            for (const k of ['skinId', 'activityStatus', 'planetBiome', 'planetRing']) if (pkt[k]) wp[k] = String(pkt[k]);
+            if (typeof pkt.storedCheese === 'number') wp.storedCheese = pkt.storedCheese;
+            if (typeof pkt.homeAngle === 'number') wp.homeAngle = Number(pkt.homeAngle.toFixed(3));
+            if (typeof pkt.facing === 'number') wp.facing = pkt.facing;
+            if (typeof pkt.moving === 'boolean') wp.moving = pkt.moving;
+            const skins = Array.isArray(pkt.unlockedSkins) ? pkt.unlockedSkins : pkt.homeSnapshot?.unlockedSkins;
+            if (Array.isArray(skins) && skins.length) wp.unlockedSkins = skins.join(',');
             return;
         }
         this.externalSeen.set(pkt.sessionId, Date.now());
@@ -227,6 +243,8 @@ export class SpaceRoom extends Room {
         }
         if (pkt.nickname) p.nickname = String(pkt.nickname).slice(0, 18);
         for (const k of ['skinId', 'activityStatus', 'planetBiome', 'planetRing']) if (pkt[k]) p[k] = String(pkt[k]);
+        const skins = Array.isArray(pkt.unlockedSkins) ? pkt.unlockedSkins : pkt.homeSnapshot?.unlockedSkins;
+        if (Array.isArray(skins) && skins.length) p.unlockedSkins = skins.join(',');
         const rb = this._ensureRocketBody(pkt.sessionId, p);
         for (const k of ['x', 'y', 'vx', 'vy']) if (typeof pkt[k] === 'number') { p[k] = Math.round(pkt[k]); rb[k] = pkt[k]; }
         if (typeof pkt.angle === 'number') { p.angle = Number(pkt.angle.toFixed(3)); rb.angle = p.angle; }
@@ -234,15 +252,23 @@ export class SpaceRoom extends Room {
         if (typeof pkt.isTurbo === 'boolean') { p.isTurbo = pkt.isTurbo; rb.isTurbo = pkt.isTurbo; }
         if (typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { p.paintColor = String(pkt.paintColor); p.paintTimer = Number(pkt.paintTimer); }
         if (typeof pkt.storedCheese === 'number') p.storedCheese = pkt.storedCheese;
+        if (typeof pkt.homeAngle === 'number') p.homeAngle = Number(pkt.homeAngle.toFixed(3));
+        if (typeof pkt.facing === 'number') p.facing = pkt.facing;
+        if (typeof pkt.moving === 'boolean') p.moving = pkt.moving;
     }
 
     getSyncSnapshot() {
         const out = [];
-        this.state.players.forEach((p, sid) => out.push({
-            sessionId: sid, playerId: p.id, nickname: p.nickname, skinId: p.skinId, activityStatus: p.activityStatus,
-            x: p.x, y: p.y, vx: p.vx, vy: p.vy, angle: p.angle, isThrusting: p.isThrusting, isTurbo: p.isTurbo,
-            paintColor: p.paintColor, paintTimer: p.paintTimer, storedCheese: p.storedCheese, planetBiome: p.planetBiome, planetRing: p.planetRing
-        }));
+        this.state.players.forEach((p, sid) => {
+            const unlockedSkins = p.unlockedSkins ? p.unlockedSkins.split(',').filter(Boolean) : ['blue'];
+            out.push({
+                sessionId: sid, playerId: p.id, nickname: p.nickname, skinId: p.skinId, activityStatus: p.activityStatus,
+                x: p.x, y: p.y, vx: p.vx, vy: p.vy, angle: p.angle, isThrusting: p.isThrusting, isTurbo: p.isTurbo,
+                paintColor: p.paintColor, paintTimer: p.paintTimer, storedCheese: p.storedCheese, planetBiome: p.planetBiome, planetRing: p.planetRing,
+                homeAngle: p.homeAngle, facing: p.facing, moving: p.moving, unlockedSkins,
+                homeSnapshot: { storedCheese: p.storedCheese, unlockedSkins, planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } }
+            });
+        });
         return out;
     }
 
@@ -270,10 +296,9 @@ export class SpaceRoom extends Room {
         this.state.serverTick = (this.state.serverTick + 1) % 1000000;
         const now = Date.now();
         for (const sid of Array.from(this.state.players.keys())) {
-            if (now - (this.externalSeen.get(sid) || 0) > 4500) {
+            const isLiveWs = this.clients.some(c => c.sessionId === sid);
+            if (!isLiveWs && now - (this.externalSeen.get(sid) || 0) > 12000) {
                 this.removePlayer(sid);
-                const deadClient = this.clients.find(c => c.sessionId === sid);
-                if (deadClient) { try { deadClient.leave(); } catch (_) {} }
             }
         }
         for (const [sid, p] of this.state.players.entries()) {

@@ -10,7 +10,9 @@ import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceNetwork } from '../space_hub/SpaceNetwork.js';
 import { normalizeAppearance } from '../space_hub/PersonalPlanetSystem.js';
 import { BIOME_CATALOG, RING_CATALOG } from '../space_hub/PlanetStyleRenderer.js';
+import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
+import { PushInviteManager } from '../ui/PushInviteManager.js';
 
 export class HomePlanetScene {
     constructor({ onTakeOff } = {}) {
@@ -33,13 +35,13 @@ export class HomePlanetScene {
         el.id = 'homePlanetOverlay';
         el.innerHTML = `
             <style>
-                #homePlanetOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 9995; overflow: hidden; display: none; font-family: 'Nunito', sans-serif; touch-action: none; user-select: none; }
+                #homePlanetOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 9995; overflow: hidden; display: none; font-family: 'Nunito', sans-serif; touch-action: none; user-select: none; }
                 #homePlanetCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
                 .hp-hud-bar { position: fixed; top: max(12px, env(safe-area-inset-top, 12px)); left: max(16px, env(safe-area-inset-left, 16px)); right: max(16px, env(safe-area-inset-right, 16px)); display: flex; align-items: center; justify-content: space-between; gap: 8px; z-index: 9996; pointer-events: none; flex-wrap: wrap; }
                 .hp-pill { pointer-events: auto; background: rgba(15, 23, 42, 0.88); border: 2px solid #facc15; border-radius: 999px; padding: 7px 14px; color: #fef08a; font-weight: 900; font-size: clamp(11.5px, 2.4vw, 13.5px); box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
                 .hp-paint-btn { cursor: pointer; border-color: #f472b6; color: #fbcfe8; background: linear-gradient(135deg, #4c1d95, #1e1b4b); }
-                .hp-zone-banner { position: fixed; bottom: max(22px, env(safe-area-inset-bottom, 22px)); left: 50%; transform: translate(-50%, 140%); background: rgba(15, 23, 42, 0.92); border: 2.5px solid #4ade80; border-radius: 20px; padding: 10px 20px; text-align: center; color: #fff; min-width: 240px; transition: transform 0.22s ease; z-index: 9996; pointer-events: none; }
-                .hp-zone-banner.visible { transform: translate(-50%, 0%); }
+                .hp-zone-banner { position: fixed; bottom: max(22px, env(safe-area-inset-bottom, 22px)); left: 50%; transform: translate(-50%, calc(100% + 48px)); opacity: 0; pointer-events: none; background: rgba(15, 23, 42, 0.92); border: 2.5px solid #4ade80; border-radius: 20px; padding: 10px 20px; text-align: center; color: #fff; min-width: 240px; transition: transform 0.22s ease, opacity 0.2s ease; z-index: 9996; }
+                .hp-zone-banner.visible { transform: translate(-50%, 0%); opacity: 1; }
                 .hp-style-modal { position: fixed; inset: 0; z-index: 9998; background: rgba(8, 12, 28, 0.78); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 14px; pointer-events: auto; }
                 .hp-style-modal.visible { display: flex; }
                 .hp-style-card { width: min(94vw, 440px); background: linear-gradient(180deg, #1e293b, #0f172a); border: 2.5px solid #f472b6; border-radius: 24px; padding: 16px 18px; color: #f8fafc; box-shadow: 0 20px 50px rgba(0,0,0,0.85); }
@@ -53,6 +55,7 @@ export class HomePlanetScene {
                 <div class="hp-pill" id="hpTitlePill">🏠 МОЙ ДОМ</div>
                 <div class="hp-pill" id="hpCheeseHud">🎒 0 🧀 · 🏛 0 🧀</div>
                 <button type="button" class="hp-pill hp-paint-btn" id="hpQuickPaintBtn">🎨 Красить планету</button>
+                <button type="button" class="pim-invite-btn" id="hpInviteOwnerBtn" style="display:none;margin-top:0;">📲 ПОЗВАТЬ В ИГРУ!</button>
             </div>
             <div class="hp-zone-banner" id="hpZoneBanner">
                 <div style="font-weight:900;font-size:16px;color:#fef08a;" id="hpBannerTitle"></div>
@@ -72,17 +75,27 @@ export class HomePlanetScene {
             </div>
         `;
         document.body.appendChild(el);
-        Object.assign(this, { overlay: el, canvas: el.querySelector('#homePlanetCanvas'), titlePill: el.querySelector('#hpTitlePill'), hudEl: el.querySelector('#hpCheeseHud'), paintBtn: el.querySelector('#hpQuickPaintBtn'), banner: el.querySelector('#hpZoneBanner'), bannerTitle: el.querySelector('#hpBannerTitle'), bannerSub: el.querySelector('#hpBannerSub'), styleModal: el.querySelector('#hpStyleModal') });
+        Object.assign(this, { overlay: el, canvas: el.querySelector('#homePlanetCanvas'), titlePill: el.querySelector('#hpTitlePill'), hudEl: el.querySelector('#hpCheeseHud'), paintBtn: el.querySelector('#hpQuickPaintBtn'), inviteBtn: el.querySelector('#hpInviteOwnerBtn'), banner: el.querySelector('#hpZoneBanner'), bannerTitle: el.querySelector('#hpBannerTitle'), bannerSub: el.querySelector('#hpBannerSub'), styleModal: el.querySelector('#hpStyleModal') });
         this.ctx = this.canvas.getContext('2d');
         this.paintBtn.addEventListener('click', () => this._openStyleEditor());
+        this.inviteBtn.addEventListener('click', () => {
+            if (this.state.isVisiting && this.state.visitData) {
+                PushInviteManager.sendInvite(this.state.visitData.ownerId, this.state.visitData.ownerNick, this.inviteBtn);
+            }
+        });
         el.querySelector('#hpCloseStyleBtn').addEventListener('click', () => this.styleModal.classList.remove('visible'));
         el.querySelector('.hp-hud-bar').appendChild(AutoUpdater.createReloadButton());
     }
 
     _resize() {
-        this.dpr = Math.min(2, window.devicePixelRatio || 1);
-        this.viewW = window.innerWidth; this.viewH = window.innerHeight;
-        this.canvas.width = Math.round(this.viewW * this.dpr); this.canvas.height = Math.round(this.viewH * this.dpr);
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const rect = this.canvas?.getBoundingClientRect?.();
+        const w = Math.max(1, Math.round(rect?.width || window.innerWidth || 800));
+        const h = Math.max(1, Math.round(rect?.height || window.innerHeight || 480));
+        if (w !== this.viewW || h !== this.viewH || dpr !== this.dpr) {
+            this.dpr = dpr; this.viewW = w; this.viewH = h;
+            this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
+        }
     }
 
     _openStyleEditor() {
@@ -111,15 +124,20 @@ export class HomePlanetScene {
             this.titlePill.textContent = `🛸 Планета ${this.state.visitData.ownerNick}`;
             this.hudEl.textContent = `🧀 Склад хозяина: ${snap.storedCheese || 0}  |  👗 Скинов: ${(snap.unlockedSkins || ['blue']).length}`;
             this.paintBtn.style.display = 'none';
+            this.inviteBtn.dataset.inviteTargetId = this.state.visitData.ownerId;
+            this.inviteBtn.style.display = 'inline-flex';
+            PushInviteManager._tickCooldowns();
         } else {
             this.titlePill.textContent = `🏠 МОЙ ДОМ · Планета ${PlayerProfile.nickname}`;
             this.hudEl.textContent = `🎒 В кармане: ${PlayerProfile.pocketCheese} 🧀  |  🏛 Склад: ${PlayerProfile.storedCheese} 🧀`;
             this.paintBtn.style.display = 'inline-flex';
+            this.inviteBtn.style.display = 'none';
         }
     }
 
     start(visitData = null) {
         if (this.running) return;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
         PlayerProfile._syncFromStorage();
         this.state.isVisiting = Boolean(visitData); this.state.visitData = visitData || null;
         PlayerProfile.setLocation(visitData ? `home:${visitData.ownerId}` : 'home');
@@ -127,18 +145,26 @@ export class HomePlanetScene {
         Object.assign(this.state, { playerAngle: -0.25, launchProgress: 0, launching: false, unloading: false, activeZone: null, flyingCheese: [] });
         this._updateHUD();
         this.overlay.style.display = 'block';
+        this._resize();
+        SpaceAudio.setMode('home');
         this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
-            if (!this.running) return;
+            if (!this.running) { this.rafId = null; return; }
             const dt = Math.min(0.05, (now - this.lastTime) / 1000);
             this.lastTime = now;
             this._step(dt, now / 1000);
-            requestAnimationFrame(loop);
+            if (this.running) this.rafId = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        this.rafId = requestAnimationFrame(loop);
     }
 
-    stop() { this.running = false; this.wardrobe.close(); this.styleModal.classList.remove('visible'); this.overlay.style.display = 'none'; }
+    stop() {
+        this.running = false;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+        this.wardrobe.close();
+        this.styleModal.classList.remove('visible');
+        this.overlay.style.display = 'none';
+    }
 
     _handleZoneAction() {
         const z = this.state.activeZone;
@@ -154,6 +180,7 @@ export class HomePlanetScene {
     }
 
     _step(dt, timeSec) {
+        this._resize();
         const st = this.state;
         if (st.launching) {
             if ((st.launchProgress += dt * 1.15) >= 1) { const back = st.visitData; this.stop(); this.onTakeOff(back); return; }
@@ -166,10 +193,15 @@ export class HomePlanetScene {
 
         SpaceNetwork.step(dt, { homeAngle: st.playerAngle, facing: st.facing, moving: st.moving });
         const targetOwnerId = st.isVisiting ? st.visitData?.ownerId : PlayerProfile.playerId;
-        const peersOnPlanet = SpaceNetwork.getOnlinePeers().filter(p => (p.playerId === targetOwnerId && p.currentLocation === 'home') || p.currentLocation === `home:${targetOwnerId}`);
+        const isOwnerMatch = (pid) => pid === targetOwnerId || (targetOwnerId && (String(pid).startsWith(targetOwnerId + '_') || String(targetOwnerId).startsWith(String(pid) + '_')));
+        const peersOnPlanet = SpaceNetwork.getOnlinePeers().filter(p => (isOwnerMatch(p.playerId) && (p.currentLocation === 'home' || String(p.currentLocation).startsWith('home:'))) || (p.currentLocation && String(p.currentLocation).startsWith('home:') && isOwnerMatch(String(p.currentLocation).slice(5))));
         if (st.isVisiting && st.visitData) {
-            const liveOwner = SpaceNetwork.peers.get(targetOwnerId);
-            if (liveOwner?.homeSnapshot) { st.visitData.homeSnapshot = liveOwner.homeSnapshot; if (liveOwner.homeSnapshot.planetAppearance) st.visitData.planetAppearance = liveOwner.homeSnapshot.planetAppearance; }
+            const liveOwner = SpaceNetwork.peers.get(targetOwnerId) || SpaceNetwork.getOnlinePeers().find(p => isOwnerMatch(p.playerId));
+            if (liveOwner) {
+                st.visitData.ownerSkinId = liveOwner.equippedSkinId || liveOwner.skinId || st.visitData.ownerSkinId;
+                if (liveOwner.homeSnapshot) { st.visitData.homeSnapshot = liveOwner.homeSnapshot; if (liveOwner.homeSnapshot.planetAppearance) st.visitData.planetAppearance = liveOwner.homeSnapshot.planetAppearance; }
+                this._updateHUD();
+            }
         }
 
         const nearest = HOME_ZONES.find(z => (!st.isVisiting || z.id !== 'paint') && Math.abs(st.playerAngle - z.angle) < 0.24) || null;
@@ -185,7 +217,7 @@ export class HomePlanetScene {
 
         if (st.unloading && st.activeZone?.id === 'storage' && !st.isVisiting && (st.unloadCooldown -= dt) <= 0) {
             st.unloadCooldown = 0.09;
-            if (PlayerProfile.depositOnePocketCheese()) { st.flyingCheese.push({ startAngle: st.playerAngle, t: 0 }); this._updateHUD(); SpaceNetwork.broadcastNow(); }
+            if (PlayerProfile.depositOnePocketCheese()) { st.flyingCheese.push({ startAngle: st.playerAngle, t: 0 }); SpaceAudio.playCheeseUnload(); this._updateHUD(); SpaceNetwork.broadcastNow(); }
             else { st.unloading = false; this.bannerSub.textContent = '✅ Весь сыр выгружен на Склад!'; }
         }
         for (let i = st.flyingCheese.length - 1; i >= 0; i--) if ((st.flyingCheese[i].t += dt * 2.4) >= 1) st.flyingCheese.splice(i, 1);

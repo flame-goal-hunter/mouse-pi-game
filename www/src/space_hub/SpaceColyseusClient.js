@@ -64,9 +64,12 @@ export class SpaceColyseusClient {
             sessionId: this._mySid(), tabSid: this.tabSid, playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
             skinId: PlayerProfile.equippedSkinId, activityStatus: PlayerProfile.currentLocation || 'space',
             storedCheese: PlayerProfile.storedCheese, planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
+            unlockedSkins: PlayerProfile.unlockedSkins || ['blue'],
             x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
             angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
-            paintColor: m.paintColor || '', paintTimer: Number(m.paintTimer) || 0, homeSnapshot: snap
+            paintColor: m.paintColor || '', paintTimer: Number(m.paintTimer) || 0,
+            homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving),
+            homeSnapshot: snap
         };
     }
 
@@ -117,7 +120,7 @@ export class SpaceColyseusClient {
             this.room = await this.client.joinOrCreate('space_hub', {
                 tabSid: this.tabSid, playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
                 skinId: PlayerProfile.equippedSkinId, activityStatus: PlayerProfile.currentLocation || 'space',
-                storedCheese: PlayerProfile.storedCheese,
+                storedCheese: PlayerProfile.storedCheese, unlockedSkins: PlayerProfile.unlockedSkins || ['blue'],
                 planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
                 homeSnapshot: snap, x: Math.round(this.localMotion.x), y: Math.round(this.localMotion.y)
             });
@@ -254,7 +257,7 @@ export class SpaceColyseusClient {
                     });
                     SpaceNetDebug.onSend();
                 } catch (_) {}
-                const curStatus = `${PlayerProfile.currentLocation}|${PlayerProfile.equippedSkinId}|${PlayerProfile.nickname}|${PlayerProfile.storedCheese}`;
+                const curStatus = `${PlayerProfile.currentLocation}|${PlayerProfile.equippedSkinId}|${PlayerProfile.nickname}|${PlayerProfile.storedCheese}|${(PlayerProfile.unlockedSkins || []).join(',')}`;
                 if (curStatus !== this.lastStatusSent) { this.lastStatusSent = curStatus; this.broadcastNow(); }
             }
         }

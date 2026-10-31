@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { PlayerProfile, SKIN_CATALOG, getPlayerSkinSprite } from '../core/PlayerProfile.js';
+import { SpaceNetwork } from '../space_hub/SpaceNetwork.js';
 
 export class HomeWardrobeModal {
     constructor(parentEl, onSkinChanged) {
@@ -73,10 +74,13 @@ export class HomeWardrobeModal {
         this.titleEl = modal.querySelector('#hpWardrobeTitle');
         this.balanceEl = modal.querySelector('#hpWardrobeBalance');
         modal.querySelector('#hpWardrobeClose').addEventListener('click', () => this.close());
-        modal.addEventListener('click', (e) => { if (e.target === modal) this.close(); });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && performance.now() - (this._openedAt || 0) > 350) this.close();
+        });
     }
 
     open(visitData = null) {
+        this._openedAt = performance.now();
         this.visitData = visitData;
         PlayerProfile._syncFromStorage();
         this._renderItems();
@@ -87,6 +91,14 @@ export class HomeWardrobeModal {
 
     _renderItems() {
         const isGuest = Boolean(this.visitData);
+        if (isGuest && this.visitData?.ownerId) {
+            const oid = this.visitData.ownerId;
+            const liveOwner = SpaceNetwork.peers.get(oid) || SpaceNetwork.getOnlinePeers().find(p => p.playerId === oid || String(p.playerId).startsWith(oid + '_')) || SpaceNetwork.cachedHomes.get(oid);
+            if (liveOwner) {
+                this.visitData.ownerSkinId = liveOwner.equippedSkinId || liveOwner.skinId || this.visitData.ownerSkinId;
+                if (liveOwner.homeSnapshot) this.visitData.homeSnapshot = liveOwner.homeSnapshot;
+            }
+        }
         const ownerSkins = isGuest ? (this.visitData.homeSnapshot?.unlockedSkins || ['blue']) : PlayerProfile.unlockedSkins;
         this.titleEl.textContent = isGuest ? `👗 Коллекция скинов игрока ${this.visitData.ownerNick}` : '👗 Космо-Гардероб Мышонка Пи';
         this.balanceEl.textContent = isGuest
@@ -124,6 +136,7 @@ export class HomeWardrobeModal {
                     const res = PlayerProfile.buyAndEquipSkin(skin.id);
                     if (res.ok) {
                         try { navigator.vibrate?.(18); } catch (_) {}
+                        SpaceNetwork.broadcastNow();
                         this.onSkinChanged(skin.id);
                         this._renderItems();
                     }

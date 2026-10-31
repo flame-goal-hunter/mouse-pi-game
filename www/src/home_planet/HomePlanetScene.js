@@ -193,10 +193,15 @@ export class HomePlanetScene {
 
         SpaceNetwork.step(dt, { homeAngle: st.playerAngle, facing: st.facing, moving: st.moving });
         const targetOwnerId = st.isVisiting ? st.visitData?.ownerId : PlayerProfile.playerId;
-        const peersOnPlanet = SpaceNetwork.getOnlinePeers().filter(p => (p.playerId === targetOwnerId && p.currentLocation === 'home') || p.currentLocation === `home:${targetOwnerId}`);
+        const isOwnerMatch = (pid) => pid === targetOwnerId || (targetOwnerId && (String(pid).startsWith(targetOwnerId + '_') || String(targetOwnerId).startsWith(String(pid) + '_')));
+        const peersOnPlanet = SpaceNetwork.getOnlinePeers().filter(p => (isOwnerMatch(p.playerId) && (p.currentLocation === 'home' || String(p.currentLocation).startsWith('home:'))) || (p.currentLocation && String(p.currentLocation).startsWith('home:') && isOwnerMatch(String(p.currentLocation).slice(5))));
         if (st.isVisiting && st.visitData) {
-            const liveOwner = SpaceNetwork.peers.get(targetOwnerId);
-            if (liveOwner?.homeSnapshot) { st.visitData.homeSnapshot = liveOwner.homeSnapshot; if (liveOwner.homeSnapshot.planetAppearance) st.visitData.planetAppearance = liveOwner.homeSnapshot.planetAppearance; }
+            const liveOwner = SpaceNetwork.peers.get(targetOwnerId) || SpaceNetwork.getOnlinePeers().find(p => isOwnerMatch(p.playerId));
+            if (liveOwner) {
+                st.visitData.ownerSkinId = liveOwner.equippedSkinId || liveOwner.skinId || st.visitData.ownerSkinId;
+                if (liveOwner.homeSnapshot) { st.visitData.homeSnapshot = liveOwner.homeSnapshot; if (liveOwner.homeSnapshot.planetAppearance) st.visitData.planetAppearance = liveOwner.homeSnapshot.planetAppearance; }
+                this._updateHUD();
+            }
         }
 
         const nearest = HOME_ZONES.find(z => (!st.isVisiting || z.id !== 'paint') && Math.abs(st.playerAngle - z.angle) < 0.24) || null;

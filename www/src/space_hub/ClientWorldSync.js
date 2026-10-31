@@ -69,6 +69,7 @@ export class ClientWorldSync {
             }
             return null;
         }
+        const rawSkins = Array.isArray(p.unlockedSkins) ? p.unlockedSkins : (typeof p.unlockedSkins === 'string' && p.unlockedSkins ? p.unlockedSkins.split(',').filter(Boolean) : (p.homeSnapshot?.unlockedSkins || ['blue']));
         const pkt = {
             playerId: pid, sessionId, nickname: p.nickname || 'Пи',
             skinId: p.skinId || p.equippedSkinId || 'blue', equippedSkinId: p.skinId || p.equippedSkinId || 'blue',
@@ -77,7 +78,7 @@ export class ClientWorldSync {
             isThrusting: Boolean(p.isThrusting), isTurbo: Boolean(p.isTurbo),
             paintColor: p.paintColor || null, paintTimer: Number(p.paintTimer) || 0,
             homeAngle: Number(p.homeAngle) || 0, facing: Number(p.facing) || 1, moving: Boolean(p.moving),
-            homeSnapshot: p.homeSnapshot || { storedCheese: Number(p.storedCheese) || 50, unlockedSkins: ['blue'], planetAppearance: { biome: p.planetBiome || 'cheese', ringType: p.planetRing || 'none' } }
+            homeSnapshot: { storedCheese: Number(p.storedCheese ?? p.homeSnapshot?.storedCheese) || 50, unlockedSkins: rawSkins, planetAppearance: p.homeSnapshot?.planetAppearance || { biome: p.planetBiome || 'cheese', ringType: p.planetRing || 'none' } }
         };
         let peer = peersMap.get(pid);
         const isFirst = !peer;
@@ -112,7 +113,8 @@ export class ClientWorldSync {
         }
         const nowMs = Date.now();
         for (const [pid, peer] of Array.from(peersMap.entries())) {
-            if (!activePids.has(pid) && nowMs - (peer.lastSeen || 0) > 3500) {
+            if (activePids.has(pid)) peer.lastSeen = nowMs;
+            else if (nowMs - (peer.lastSeen || 0) > 10000) {
                 peersMap.delete(pid); this.world.rockets.delete(pid);
             }
         }
@@ -121,14 +123,15 @@ export class ClientWorldSync {
             if (typeof sb.scoreBlue === 'number') this.world.score = { blue: sb.scoreBlue, pink: sb.scorePink || 0 };
             const sx = Number(sb.x) || 0, sy = Number(sb.y) || 0, svx = Number(sb.vx) || 0, svy = Number(sb.vy) || 0;
             wb.rawX = sx; wb.rawY = sy;
+            const projX = sx + svx * 0.06, projY = sy + svy * 0.06;
             const idleAgo = performance.now() - (this.lastLocalBallKickAt || 0);
-            const errDist = Math.hypot(sx - wb.x, sy - wb.y);
-            const bothSlow = Math.hypot(svx, svy) < 18 && Math.hypot(wb.vx, wb.vy) < 18;
+            const errDist = Math.hypot(projX - wb.x, projY - wb.y);
+            const bothSlow = Math.hypot(svx, svy) < 16 && Math.hypot(wb.vx, wb.vy) < 16;
             if (!this._ballSynced) {
                 this._ballSynced = true;
                 this._applyServerBody(wb, sb, true);
-            } else if (idleAgo > 1200 && (errDist > 180 || (bothSlow && errDist > 6))) {
-                this._applyServerBody(wb, sb, false);
+            } else if (idleAgo > 1800 && (errDist > 220 || (bothSlow && errDist > 8))) {
+                this._applyServerBody(wb, { x: projX, y: projY, vx: svx, vy: svy, angle: sb.angle }, false);
             }
         }
         if (state.spaceCheese) {
@@ -156,16 +159,16 @@ export class ClientWorldSync {
             if (evs.length && this.onWorldEvents) this.onWorldEvents(evs);
         }
         const alpha = this.accumulator / FIXED_DT;
-        const decay = Math.exp(-15 * clampedDt);
-        const stepVisual = (b) => {
-            b.errorX *= decay; b.errorY *= decay; b.errorAngle *= decay;
+        const decay = Math.exp(-15 * clampedDt), ballDecay = Math.exp(-8 * clampedDt);
+        const stepVisual = (b, d = decay) => {
+            b.errorX *= d; b.errorY *= d; b.errorAngle *= d;
             b.renderX = b.prevX + (b.x - b.prevX) * alpha + b.errorX;
             b.renderY = b.prevY + (b.y - b.prevY) * alpha + b.errorY;
             b.renderAngle = b.prevAngle + shortAngleDist(b.prevAngle, b.angle) * alpha + b.errorAngle;
         };
         stepVisual(this.myBody);
         if (this.world.ball) {
-            stepVisual(this.world.ball);
+            stepVisual(this.world.ball, ballDecay);
             if (SpaceNetDebug.enabled) SpaceNetDebug.recordEntityFrame('ball', this.world.ball.rawX, this.world.ball.rawY, this.world.ball.renderX, this.world.ball.renderY, this.world.ball.renderAngle, clampedDt, Math.hypot(this.world.ball.errorX || 0, this.world.ball.errorY || 0), this.world.rockets.size + 1);
         }
         for (const a of this.world.asteroids) stepVisual(a);
