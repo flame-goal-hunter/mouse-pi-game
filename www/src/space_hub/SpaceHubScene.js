@@ -45,7 +45,8 @@ export class SpaceHubScene {
     _placeRocketOnOrbit(planet) {
         if (!planet) return;
         const sx = planet.x, sy = planet.y - ((planet.radius || 75) + 75);
-        Object.assign(this.rocket, { x: sx, y: sy, vx: 0, vy: -90, angle: -Math.PI / 2, camX: sx, camY: sy, camZoom: 1 });
+        this.rocket.setPosition(sx, sy, 0, -90, -Math.PI / 2);
+        this.rocket.camZoom = 1;
     }
 
     _buildDOM() {
@@ -132,6 +133,7 @@ export class SpaceHubScene {
 
     start() {
         if (this.running) return;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
         PlayerProfile._syncFromStorage();
         if (!this.hasSpawnedOnce) { this.hasSpawnedOnce = true; this._placeRocketOnOrbit(this.remoteRenderer.getMyHomePlanet()); }
         else if (this.lastOrbitPlanet) { this._placeRocketOnOrbit(this.lastOrbitPlanet); this.lastOrbitPlanet = null; }
@@ -142,18 +144,24 @@ export class SpaceHubScene {
         this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
         SpaceAudio.setMode('space');
         this.running = true; this.lastTime = performance.now();
-        SpaceNetDebug.activeRAFLoopsCount++;
+        SpaceNetDebug.activeRAFLoopsCount = 1;
         const loop = (now) => {
-            if (!this.running) { SpaceNetDebug.activeRAFLoopsCount = Math.max(0, SpaceNetDebug.activeRAFLoopsCount - 1); return; }
+            if (!this.running) { SpaceNetDebug.activeRAFLoopsCount = 0; this.rafId = null; return; }
             const dt = Math.min(0.05, (now - this.lastTime) / 1000);
             this.lastTime = now;
             this._step(dt, now / 1000, now);
-            requestAnimationFrame(loop);
+            if (this.running) this.rafId = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        this.rafId = requestAnimationFrame(loop);
     }
 
-    stop() { this.running = false; SpaceAudio.setMode('off'); this.overlay.style.display = 'none'; }
+    stop() {
+        this.running = false;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+        SpaceNetDebug.activeRAFLoopsCount = 0;
+        SpaceAudio.setMode('off');
+        this.overlay.style.display = 'none';
+    }
 
     _renderBannerExtras(planet) {
         if (!planet || planet.isMyHome) { this.bannerPlayers.dataset.friendId = ''; this.bannerPlayers.innerHTML = ''; return; }
@@ -185,16 +193,14 @@ export class SpaceHubScene {
         this._resize();
         const inp = this.controls.getInput();
         const zoomDone = this.rocket.update(dt, inp);
-        SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);
-        this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
-        this.fun.update(dt, inp.turboHeld);
-        const prevRx = this.rocket.x, prevRy = this.rocket.y;
         SpaceNetwork.step(dt, {
-            x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle,
             isThrusting: this.rocket.isThrusting, isTurbo: this.rocket.isTurbo,
             trailStyle: this.rocket.trailStyle || 'stars', paintColor: this.rocket.paintColor, paintTimer: this.rocket.paintTimer
         });
-        SpaceNetDebug.checkMyRocketOverride(prevRx, prevRy, this.rocket.x, this.rocket.y, 'SpaceNetwork.step');
+        this.rocket.syncAfterPhysics(dt);
+        SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);
+        this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
+        this.fun.update(dt);
         this.onlineHud.update();
 
         if (zoomDone && this.dockingPlanet) {

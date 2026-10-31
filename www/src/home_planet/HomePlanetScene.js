@@ -137,6 +137,7 @@ export class HomePlanetScene {
 
     start(visitData = null) {
         if (this.running) return;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
         PlayerProfile._syncFromStorage();
         this.state.isVisiting = Boolean(visitData); this.state.visitData = visitData || null;
         PlayerProfile.setLocation(visitData ? `home:${visitData.ownerId}` : 'home');
@@ -148,16 +149,22 @@ export class HomePlanetScene {
         SpaceAudio.setMode('home');
         this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
-            if (!this.running) return;
+            if (!this.running) { this.rafId = null; return; }
             const dt = Math.min(0.05, (now - this.lastTime) / 1000);
             this.lastTime = now;
             this._step(dt, now / 1000);
-            requestAnimationFrame(loop);
+            if (this.running) this.rafId = requestAnimationFrame(loop);
         };
-        requestAnimationFrame(loop);
+        this.rafId = requestAnimationFrame(loop);
     }
 
-    stop() { this.running = false; this.wardrobe.close(); this.styleModal.classList.remove('visible'); this.overlay.style.display = 'none'; }
+    stop() {
+        this.running = false;
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+        this.wardrobe.close();
+        this.styleModal.classList.remove('visible');
+        this.overlay.style.display = 'none';
+    }
 
     _handleZoneAction() {
         const z = this.state.activeZone;

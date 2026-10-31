@@ -1,12 +1,12 @@
 // ============================================================================
-// SpaceColyseusClient.js — Чистый клиент сети Космоса на официальном colyseus.js
-// Подключение к комнате 'space_hub', живой activityStatus и троттлинг 20 Hz (50 мс)
+// SpaceColyseusClient.js — Сетевой транспорт Космоса на официальном colyseus.js
+// Комната 'space_hub' (20 Hz) + единая физика ClientWorldSync (Teeworlds-style)
 // ============================================================================
 
 import * as ColyseusMod from '../../lib/colyseus.esm.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { getPersonalPlanetCoords } from './PersonalPlanetSystem.js';
-import { SpaceSmoothRender } from './SpaceSmoothRender.js';
+import { ClientWorldSync } from './ClientWorldSync.js';
 import { SpaceNetDebug } from './SpaceNetDebug.js';
 
 const Colyseus = ColyseusMod.default || ColyseusMod;
@@ -16,9 +16,10 @@ export class SpaceColyseusClient {
     constructor() {
         let tabSid = 'tab_' + Math.random().toString(36).slice(2, 8);
         try { tabSid = sessionStorage.getItem('mpi_tab_sid') || tabSid; sessionStorage.setItem('mpi_tab_sid', tabSid); } catch (_) {}
+        const worldSync = new ClientWorldSync();
         Object.assign(this, {
-            peers: new Map(), cachedHomes: new Map(), smoother: new SpaceSmoothRender(),
-            client: null, room: null, connected: false, connecting: false, tabSid,
+            peers: new Map(), cachedHomes: new Map(), worldSync, smoother: worldSync,
+            client: null, room: null, connected: false, connecting: false, tabSid, reconnTimer: null,
             lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastFxSeq: 0, seenFx: new Set(), pendingActions: [],
             lastStatusSent: '', onFunEvent: null, onFxEvent: null,
             onServerImpulse: null, onInviteEvent: null, pushSubscription: null,
@@ -42,6 +43,7 @@ export class SpaceColyseusClient {
     _sendLeave() {
         const body = JSON.stringify({ leave: true, sessionId: this._mySid(), tabSid: this.tabSid, playerId: PlayerProfile.playerId });
         try { navigator.sendBeacon?.('/api/space-sync', new Blob([body], { type: 'application/json' })); } catch (_) {}
+        if (this.reconnTimer) { clearTimeout(this.reconnTimer); this.reconnTimer = null; }
         if (this.room) { try { this.room.leave(); } catch (_) {} this.room = null; this.connected = false; }
     }
 
@@ -50,7 +52,7 @@ export class SpaceColyseusClient {
             this.bc = new BroadcastChannel('mousie_pi_space_v1');
             this.bc.onmessage = (e) => {
                 if (e.data && e.data.sessionId !== this._mySid() && e.data.tabSid !== this.tabSid) {
-                    this.smoother.onExternalPeer(e.data, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid);
+                    this.worldSync._syncPeer(e.data, e.data.sessionId || e.data.playerId, this._mySid(), this.tabSid, this.peers, (h) => this._saveCachedHome(h));
                 }
             };
         } catch (_) {}
@@ -107,6 +109,7 @@ export class SpaceColyseusClient {
 
     async _connect() {
         if (this.connecting || this.connected || !Colyseus?.Client) return;
+        if (this.reconnTimer) { clearTimeout(this.reconnTimer); this.reconnTimer = null; }
         this.connecting = true;
         try {
             this.client = new Colyseus.Client(this._getEndpoint());
@@ -127,7 +130,7 @@ export class SpaceColyseusClient {
                 this._wsErrLogged = true;
                 SpaceNetDebug._pushAnomaly('WS_FALLBACK', `Colyseus WS joinOrCreate failed (${err?.message || err || 'blocked'}), using fast HTTP sync`);
             }
-            setTimeout(() => this._connect(), 2500);
+            this.reconnTimer = setTimeout(() => this._connect(), 2500);
         }
     }
 
@@ -137,7 +140,7 @@ export class SpaceColyseusClient {
         const applyState = (state) => {
             if (state) {
                 SpaceNetDebug.onPatch('colyseus');
-                this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt), this.tabSid);
+                this.worldSync.onServerState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt), this.tabSid);
             }
         };
         if (room.state) applyState(room.state);
@@ -152,7 +155,8 @@ export class SpaceColyseusClient {
         room.onMessage('fx_event', (ev) => this._handleFxEvent(ev));
         room.onLeave(() => {
             this.connected = false; this.room = null;
-            setTimeout(() => this._connect(), 2000);
+            if (this.reconnTimer) clearTimeout(this.reconnTimer);
+            this.reconnTimer = setTimeout(() => this._connect(), 2000);
         });
     }
 
@@ -202,20 +206,7 @@ export class SpaceColyseusClient {
                 if (typeof data?.fxSeq === 'number') this.lastFxSeq = data.fxSeq;
                 if (data?.impulse && this.onServerImpulse) this.onServerImpulse(data.impulse);
                 if (Array.isArray(data?.players)) {
-                    const seenSids = new Set();
-                    for (const p of data.players) {
-                        if (!p || p.sessionId === this._mySid() || p.sessionId === this.tabSid || p.tabSid === this.tabSid) continue;
-                        seenSids.add(p.sessionId || p.playerId);
-                        this.smoother.onExternalPeer(p, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid, true);
-                    }
-                    for (const [k, pr] of Array.from(this.peers.entries())) {
-                        if ((pr.isExternal || !this.connected) && !seenSids.has(pr.sessionId) && !seenSids.has(k) && Date.now() - (pr.lastSeen || 0) > 1500) {
-                            this.peers.delete(k);
-                        }
-                    }
-                    if (!this.connected) {
-                        this.smoother.commitExternalSnapshot(this.peers, data.ball, data.projectiles, data.spaceCheese);
-                    }
+                    this.worldSync.onServerState(data, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.tabSid);
                 }
             }
         } catch (_) {} finally { this.syncBusy = false; }
@@ -235,8 +226,14 @@ export class SpaceColyseusClient {
 
     step(dt, motionPatch) {
         if (motionPatch) Object.assign(this.localMotion, motionPatch);
+        this.worldSync.stepFrame(dt, this.peers);
+        const mb = this.worldSync.myBody;
+        if (mb && !mb.docking) {
+            this.localMotion.x = mb.x; this.localMotion.y = mb.y;
+            this.localMotion.vx = mb.vx; this.localMotion.vy = mb.vy;
+            this.localMotion.angle = mb.angle;
+        }
         const now = performance.now();
-        // Строгий троттлинг отправки движения: ровно 20 раз в секунду (каждые 50 мс)
         if (now - this.lastSendAt >= 50) {
             this.lastSendAt = now;
             try { this.bc?.postMessage(this._buildLocalPkt()); } catch (_) {}
@@ -257,7 +254,6 @@ export class SpaceColyseusClient {
         }
         const syncInterval = this.connected ? 280 : 65;
         if (now - this.lastSyncAt >= syncInterval) { this.lastSyncAt = now; this._syncCrossContainer(); }
-        this.smoother.update60Fps(dt, this.peers);
     }
 
     getOnlinePeers() { return Array.from(this.peers.values()); }

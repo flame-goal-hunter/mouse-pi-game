@@ -136,19 +136,21 @@ export class RemotePlayerEntity {
         if (pkt.activeEmoji) { this.activeEmoji = pkt.activeEmoji; this.emojiTimer = Math.max(this.emojiTimer, 0.5); }
     }
 
-    update(dt, interp = null) {
-        if (interp) {
-            this.targetX = interp.x; this.targetY = interp.y;
-            this.targetVx = interp.vx || 0; this.targetVy = interp.vy || 0;
-            this.targetAngle = interp.angle || 0;
-            this.isThrusting = Boolean(interp.isThrusting); this.isTurbo = Boolean(interp.isTurbo);
-        }
-        const k = 1 - Math.exp(-22 * dt);
-        this.renderX += (this.targetX - this.renderX) * k; this.renderY += (this.targetY - this.renderY) * k;
-        const da = Math.atan2(Math.sin(this.targetAngle - this.renderAngle), Math.cos(this.targetAngle - this.renderAngle));
-        this.renderAngle += da * (1 - Math.exp(-20 * dt));
-        this.rHomeAngle += ((this.homeAngle || 0) - this.rHomeAngle) * k;
-        this.rx = this.x = this.renderX; this.ry = this.y = this.renderY; this.rAngle = this.renderAngle;
+    syncFromBody(dt, body) {
+        this.renderX = body.renderX;
+        this.renderY = body.renderY;
+        this.renderAngle = body.renderAngle;
+        this.targetX = body.x;
+        this.targetY = body.y;
+        this.targetAngle = body.angle;
+        this.targetVx = body.vx;
+        this.targetVy = body.vy;
+        this.rawX = body.rawX;
+        this.rawY = body.rawY;
+        this.rx = this.x = this.renderX;
+        this.ry = this.y = this.renderY;
+        this.rAngle = this.renderAngle;
+        this.rHomeAngle += ((this.homeAngle || 0) - this.rHomeAngle) * (1 - Math.exp(-20 * dt));
 
         if (this.paintTimer > 0 && (this.paintTimer = Math.max(0, this.paintTimer - dt)) === 0) this.paintColor = null;
         if (this.spinTimer > 0) this.spinTimer = Math.max(0, this.spinTimer - dt * 1.5);
