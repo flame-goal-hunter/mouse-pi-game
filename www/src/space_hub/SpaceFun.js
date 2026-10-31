@@ -5,6 +5,7 @@
 
 import { SpaceNetwork } from './SpaceNetwork.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
+import { SpaceAudio } from '../core/SpaceAudio.js';
 
 const FIELD = { cx: 0, cy: 110, hw: 295, hh: 175, goalH: 72, ballR: 32 };
 const PAINT_COLORS = ['#f472b6', '#a3e635', '#38bdf8', '#facc15', '#c084fc', '#fb923c'];
@@ -16,25 +17,11 @@ export class SpaceFun {
         SpaceNetwork.onFunEvent = (ev) => this._onNetEvent(ev);
     }
 
-    _beep(freq = 540, dur = 0.14) {
-        if (localStorage.getItem('mousie_muted') === '1') return;
-        try {
-            const Ctx = window.AudioContext || window.webkitAudioContext;
-            if (!Ctx) return;
-            this.ac = this.ac || new Ctx();
-            const o = this.ac.createOscillator(), g = this.ac.createGain();
-            o.type = 'triangle'; o.frequency.setValueAtTime(freq, this.ac.currentTime);
-            o.frequency.exponentialRampToValueAtTime(freq * 1.45, this.ac.currentTime + dur);
-            g.gain.setValueAtTime(0.16, this.ac.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, this.ac.currentTime + dur);
-            o.connect(g); g.connect(this.ac.destination);
-            o.start(); o.stop(this.ac.currentTime + dur);
-        } catch (_) {}
-    }
-
     firePaint() {
         const r = this.rocket, color = PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)], emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-        r.hopScale = 0.32; this._beep(580, 0.13);
+        r.hopScale = 0.32;
+        SpaceAudio.playHorn();
+        SpaceAudio.playPaintShoot();
         const sx = r.x + Math.cos(r.angle) * 30, sy = r.y + Math.sin(r.angle) * 30;
         const shot = { ownerId: PlayerProfile.playerId, x: sx, y: sy, vx: r.vx * 0.35 + Math.cos(r.angle) * 690, vy: r.vy * 0.35 + Math.sin(r.angle) * 690, color, emoji, life: 1.35 };
         this._spawnShot(shot);
@@ -54,7 +41,7 @@ export class SpaceFun {
     }
 
     _applyPaintToRocket(targetId, color, x, y) {
-        this._spawnSplat(x, y, color, 20, false); this._beep(420, 0.18);
+        this._spawnSplat(x, y, color, 20, false); SpaceAudio.playPaintSplat();
         if (targetId === PlayerProfile.playerId) Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, flipTimer: 0.65 });
         else { const peer = SpaceNetwork.peers.get(targetId); if (peer) Object.assign(peer, { paintColor: color, paintUntil: Date.now() + 6000, flipStart: performance.now() }); }
     }
@@ -62,10 +49,10 @@ export class SpaceFun {
     _onNetEvent(ev) {
         if (!ev?.type) return;
         if (ev.type === 'ballKick') { Object.assign(this.ball, { x: ev.x, y: ev.y, vx: ev.vx, vy: ev.vy }); if (ev.score) this.score = ev.score; }
-        else if (ev.type === 'goal') { if (ev.score) this.score = ev.score; Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 }); this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); this._beep(740, 0.28); }
+        else if (ev.type === 'goal') { if (ev.score) this.score = ev.score; Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 }); this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); SpaceAudio.playGoalFanfare(); }
         else if (ev.type === 'paintShot') this._spawnShot(ev);
         else if (ev.type === 'paintHit') this._applyPaintToRocket(ev.targetId, ev.color, ev.x, ev.y);
-        else if (ev.type === 'bumperHit' && ev.targetId === PlayerProfile.playerId) { this.rocket.bounceOff(ev.nx, ev.ny, 320); this.shakeTime = 0.22; this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 12, false); }
+        else if (ev.type === 'bumperHit' && ev.targetId === PlayerProfile.playerId) { this.rocket.bounceOff(ev.nx, ev.ny, 320); this.shakeTime = 0.22; SpaceAudio.playBumperBounce(); this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 12, false); }
     }
 
     update(dt, turboHeld) {
@@ -88,7 +75,7 @@ export class SpaceFun {
             const nx = dxB / distB, ny = dyB / distB, boost = turboHeld ? 1.55 : 1.25;
             b.vx = r.vx * boost + nx * (turboHeld ? 360 : 230); b.vy = r.vy * boost + ny * (turboHeld ? 360 : 230);
             b.x = r.x + nx * (b.r + 28); b.y = r.y + ny * (b.r + 28); r.vx *= 0.7; r.vy *= 0.7;
-            this._spawnSplat(b.x - nx * b.r, b.y - ny * b.r, '#fde047', 10, false); this._beep(480, 0.09);
+            this._spawnSplat(b.x - nx * b.r, b.y - ny * b.r, '#fde047', 10, false); SpaceAudio.playBumperBounce();
             SpaceNetwork.sendFunEvent({ type: 'ballKick', x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy), score: this.score });
         }
 
@@ -98,7 +85,7 @@ export class SpaceFun {
             if (d < 52 && d > 0.001 && performance.now() - this.lastBumpAt > 280) {
                 this.lastBumpAt = performance.now();
                 const nx = dx / d, ny = dy / d;
-                r.bounceOff(nx, ny, 310); this.shakeTime = 0.22; this._beep(320, 0.12);
+                r.bounceOff(nx, ny, 310); this.shakeTime = 0.22; SpaceAudio.playBumperBounce();
                 this._spawnSplat((r.x + p.rx) / 2, (r.y + p.ry) / 2, '#fde047', 14, false);
                 SpaceNetwork.sendFunEvent({ type: 'bumperHit', targetId: p.playerId, nx: -nx, ny: -ny });
                 SpaceNetwork.broadcastNow();
@@ -109,7 +96,7 @@ export class SpaceFun {
             const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
             let hit = false;
             if (Math.hypot(s.x - b.x, s.y - b.y) < b.r + 10) {
-                b.vx += s.vx * 0.45; b.vy += s.vy * 0.45; this._spawnSplat(s.x, s.y, s.color, 14, false);
+                b.vx += s.vx * 0.45; b.vy += s.vy * 0.45; this._spawnSplat(s.x, s.y, s.color, 14, false); SpaceAudio.playPaintSplat();
                 if (s.ownerId === PlayerProfile.playerId) SpaceNetwork.sendFunEvent({ type: 'ballKick', x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy), score: this.score });
                 hit = true;
             }
@@ -120,7 +107,7 @@ export class SpaceFun {
                     hit = true; break;
                 }
             }
-            if (!hit && this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) { this._spawnSplat(s.x, s.y, s.color, 12, false); hit = true; break; }
+            if (!hit && this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) { this._spawnSplat(s.x, s.y, s.color, 12, false); SpaceAudio.playPaintSplat(); hit = true; break; }
             if (hit || s.life <= 0) this.shots.splice(i, 1);
         }
 
@@ -131,7 +118,7 @@ export class SpaceFun {
     _triggerGoal(team) {
         this.score[team] = (this.score[team] || 0) + 1;
         Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 });
-        this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); this._beep(740, 0.28);
+        this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); SpaceAudio.playGoalFanfare();
         SpaceNetwork.sendFunEvent({ type: 'goal', score: this.score });
     }
 

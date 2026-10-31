@@ -10,6 +10,7 @@ import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceNetwork } from '../space_hub/SpaceNetwork.js';
 import { normalizeAppearance } from '../space_hub/PersonalPlanetSystem.js';
 import { BIOME_CATALOG, RING_CATALOG } from '../space_hub/PlanetStyleRenderer.js';
+import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
 
 export class HomePlanetScene {
@@ -127,6 +128,7 @@ export class HomePlanetScene {
         Object.assign(this.state, { playerAngle: -0.25, launchProgress: 0, launching: false, unloading: false, activeZone: null, flyingCheese: [] });
         this._updateHUD();
         this.overlay.style.display = 'block';
+        SpaceAudio.setMode('home');
         this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
             if (!this.running) return;
@@ -185,7 +187,7 @@ export class HomePlanetScene {
 
         if (st.unloading && st.activeZone?.id === 'storage' && !st.isVisiting && (st.unloadCooldown -= dt) <= 0) {
             st.unloadCooldown = 0.09;
-            if (PlayerProfile.depositOnePocketCheese()) { st.flyingCheese.push({ startAngle: st.playerAngle, t: 0 }); this._updateHUD(); SpaceNetwork.broadcastNow(); }
+            if (PlayerProfile.depositOnePocketCheese()) { st.flyingCheese.push({ startAngle: st.playerAngle, t: 0 }); SpaceAudio.playCheeseUnload(); this._updateHUD(); SpaceNetwork.broadcastNow(); }
             else { st.unloading = false; this.bannerSub.textContent = '✅ Весь сыр выгружен на Склад!'; }
         }
         for (let i = st.flyingCheese.length - 1; i >= 0; i--) if ((st.flyingCheese[i].t += dt * 2.4) >= 1) st.flyingCheese.splice(i, 1);

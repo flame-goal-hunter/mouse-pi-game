@@ -16,6 +16,7 @@ import { RemoteSpaceRenderer } from './RemoteSpaceRenderer.js';
 import { SpaceFun } from './SpaceFun.js';
 import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
+import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
 
 export class SpaceHubScene {
@@ -98,7 +99,7 @@ export class SpaceHubScene {
         const syncSnd = () => { sndBtn.textContent = localStorage.getItem('mousie_muted') === '1' ? '🔇 Звук и музыка: ВЫКЛ' : '🔊 Звук и музыка: ВКЛ'; };
         el.querySelector('#shSettingsBtn').addEventListener('click', () => { nickIn.value = PlayerProfile.nickname; syncSnd(); modal.classList.add('visible'); });
         el.querySelector('#shCloseSetBtn').addEventListener('click', () => modal.classList.remove('visible'));
-        sndBtn.addEventListener('click', () => { const next = localStorage.getItem('mousie_muted') === '1' ? '0' : '1'; localStorage.setItem('mousie_muted', next); window.__applyGlobalMute?.(next === '1'); syncSnd(); });
+        sndBtn.addEventListener('click', () => { const next = localStorage.getItem('mousie_muted') === '1' ? '0' : '1'; SpaceAudio.setMuted(next === '1'); window.__applyGlobalMute?.(next === '1'); syncSnd(); });
         el.querySelector('#shSaveSetBtn').addEventListener('click', () => { if (nickIn.value.trim()) { PlayerProfile.setNickname(nickIn.value.trim()); SpaceNetwork.broadcastNow(); } modal.classList.remove('visible'); });
     }
 
@@ -126,6 +127,7 @@ export class SpaceHubScene {
         const ss = document.getElementById('startScreen'); if (ss) { ss.classList.remove('visible'); ss.style.display = 'none'; }
         this.overlay.style.display = 'block';
         this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
+        SpaceAudio.setMode('space');
         this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
             if (!this.running) return;
@@ -137,7 +139,7 @@ export class SpaceHubScene {
         requestAnimationFrame(loop);
     }
 
-    stop() { this.running = false; this.overlay.style.display = 'none'; }
+    stop() { this.running = false; SpaceAudio.setMode('off'); this.overlay.style.display = 'none'; }
 
     _renderBannerExtras(planet) {
         if (!planet || planet.isMyHome) { this.bannerPlayers.innerHTML = ''; return; }
@@ -155,6 +157,7 @@ export class SpaceHubScene {
     _step(dt, timeSec) {
         const inp = this.controls.getInput();
         const zoomDone = this.rocket.update(dt, inp);
+        SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);
         this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
         this.fun.update(dt, inp.turboHeld);
         SpaceNetwork.step(dt, { x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle });

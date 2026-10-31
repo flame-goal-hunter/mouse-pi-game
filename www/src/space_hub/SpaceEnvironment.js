@@ -5,6 +5,7 @@
 
 import { SPACE_CONFIG } from './SpaceConfig.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
+import { SpaceAudio } from '../core/SpaceAudio.js';
 
 export class SpaceEnvironment {
     constructor() {
@@ -99,6 +100,7 @@ export class SpaceEnvironment {
                 rocket.y = a.y + ny * (minDist + 2);
                 rocket.bounceOff(nx, ny, 290);
                 a.vx -= nx * 45; a.vy -= ny * 45; a.hitFlash = 1;
+                SpaceAudio.playBumperBounce();
                 try { navigator.vibrate?.(12); } catch (_) {}
             }
         }
@@ -124,6 +126,7 @@ export class SpaceEnvironment {
             if (dist < envCfg.cheeseCollectRadius) {
                 ch.respawnTimer = 18;
                 PlayerProfile.addPocketCheese(1);
+                SpaceAudio.playCheesePickup();
                 if (onCheeseCollected) onCheeseCollected();
                 try { navigator.vibrate?.(10); } catch (_) {}
                 this.popups.push({ x: rocket.x, y: rocket.y - 24, life: 0.85, maxLife: 0.85 });
