@@ -1,9 +1,9 @@
 // ============================================================================
 // SpaceFun.js — Космический Футбол с воротами и табло, Сырный Краскомёт (салки)
-// и упругие бампер-столкновения ракет (до 190 строк)
+// и упругие бампер-столкновения ракет (синхронизация с авторитетным сервером)
 // ============================================================================
 
-import { SpaceNetwork } from './SpaceNetwork.js';
+import { SpaceNetwork } from './SpaceNetworkClient.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
 
@@ -13,19 +13,29 @@ const EMOJIS = ['😜', '🧀', '❤️', '😂'];
 
 export class SpaceFun {
     constructor(rocket, env) {
-        Object.assign(this, { rocket, env, ball: { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0, r: FIELD.ballR, angle: 0 }, score: { blue: 0, pink: 0 }, goalBannerTimer: 0, shots: [], fx: [], Emotes: [], shakeTime: 0, lastKickAt: 0, lastBumpAt: 0 });
+        Object.assign(this, {
+            rocket, env, ball: { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0, r: FIELD.ballR, angle: 0 },
+            score: { blue: 0, pink: 0 }, goalBannerTimer: 0, shots: [], fx: [], Emotes: [],
+            shakeTime: 0, lastKickAt: 0, lastBumpAt: 0
+        });
         SpaceNetwork.onFunEvent = (ev) => this._onNetEvent(ev);
+        SpaceNetwork.onFxEvent = (ev) => this._onServerFx(ev);
+        SpaceNetwork.onServerImpulse = (imp) => {
+            this.rocket.applyServerImpulse(imp);
+            this.shakeTime = 0.22;
+            SpaceAudio.playBumperBounce();
+        };
     }
 
     firePaint() {
         const r = this.rocket, color = PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)], emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-        r.hopScale = 0.32;
+        r.triggerHorn(emoji);
         SpaceAudio.playHorn();
         SpaceAudio.playPaintShoot();
         const sx = r.x + Math.cos(r.angle) * 30, sy = r.y + Math.sin(r.angle) * 30;
-        const shot = { ownerId: PlayerProfile.playerId, x: sx, y: sy, vx: r.vx * 0.35 + Math.cos(r.angle) * 690, vy: r.vy * 0.35 + Math.sin(r.angle) * 690, color, emoji, life: 1.35 };
-        this._spawnShot(shot);
-        SpaceNetwork.sendFunEvent({ type: 'paintShot', ...shot, rx: r.x, ry: r.y });
+        const shot = { ownerId: PlayerProfile.playerId, x: Math.round(sx), y: Math.round(sy), vx: Math.round(r.vx * 0.35 + Math.cos(r.angle) * 690), vy: Math.round(r.vy * 0.35 + Math.sin(r.angle) * 690), color, emoji, life: 1.35 };
+        if (!SpaceNetwork.interpolator.hasServerWorld) this._spawnShot(shot);
+        SpaceNetwork.shootPaint(shot);
     }
 
     _spawnShot(s) {
@@ -42,14 +52,37 @@ export class SpaceFun {
 
     _applyPaintToRocket(targetId, color, x, y) {
         this._spawnSplat(x, y, color, 20, false); SpaceAudio.playPaintSplat();
-        if (targetId === PlayerProfile.playerId) Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, flipTimer: 0.65 });
-        else { const peer = SpaceNetwork.peers.get(targetId); if (peer) Object.assign(peer, { paintColor: color, paintUntil: Date.now() + 6000, flipStart: performance.now() }); }
+        if (targetId === PlayerProfile.playerId) Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65 });
+        else { const peer = SpaceNetwork.peers.get(targetId); if (peer) Object.assign(peer, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0 }); }
+    }
+
+    _onServerFx(ev) {
+        if (!ev?.type) return;
+        if (ev.type === 'paint_splat') {
+            if (ev.targetId) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y);
+            else { this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
+        } else if (ev.type === 'bumper_hit') {
+            this._spawnSplat(ev.x, ev.y, '#fde047', 14, false);
+            this.shakeTime = Math.max(this.shakeTime, 0.16);
+            SpaceAudio.playBumperBounce();
+        } else if (ev.type === 'goal') {
+            if (ev.score) this.score = ev.score;
+            Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 });
+            this.goalBannerTimer = 2.6;
+            this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true);
+            SpaceAudio.playGoalFanfare();
+        } else if (ev.type === 'cheese_picked') {
+            this.env?.onServerCheesePicked(ev);
+        } else if (ev.type === 'horn') {
+            if (ev.playerId !== PlayerProfile.playerId) SpaceAudio.playHorn();
+            this.Emotes.push({ x: ev.x || 0, y: (ev.y || 0) - 36, text: ev.emoji || '😜', life: 1.2 });
+        }
     }
 
     _onNetEvent(ev) {
         if (!ev?.type) return;
         if (ev.type === 'ballKick') { Object.assign(this.ball, { x: ev.x, y: ev.y, vx: ev.vx, vy: ev.vy }); if (ev.score) this.score = ev.score; }
-        else if (ev.type === 'goal') { if (ev.score) this.score = ev.score; Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 }); this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); SpaceAudio.playGoalFanfare(); }
+        else if (ev.type === 'goal') this._onServerFx({ type: 'goal', score: ev.score });
         else if (ev.type === 'paintShot') this._spawnShot(ev);
         else if (ev.type === 'paintHit') this._applyPaintToRocket(ev.targetId, ev.color, ev.x, ev.y);
         else if (ev.type === 'bumperHit' && ev.targetId === PlayerProfile.playerId) { this.rocket.bounceOff(ev.nx, ev.ny, 320); this.shakeTime = 0.22; SpaceAudio.playBumperBounce(); this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 12, false); }
@@ -59,15 +92,17 @@ export class SpaceFun {
         if (this.shakeTime > 0) this.shakeTime = Math.max(0, this.shakeTime - dt);
         if (this.goalBannerTimer > 0) this.goalBannerTimer = Math.max(0, this.goalBannerTimer - dt);
         const b = this.ball, r = this.rocket;
-        b.x += b.vx * dt; b.y += b.vy * dt; b.angle += Math.hypot(b.vx, b.vy) * 0.012 * dt;
-        const drag = Math.pow(0.985, dt * 60); b.vx *= drag; b.vy *= drag;
-
-        const minX = FIELD.cx - FIELD.hw, maxX = FIELD.cx + FIELD.hw, minY = FIELD.cy - FIELD.hh, maxY = FIELD.cy + FIELD.hh;
-        if (b.y - b.r < minY) { b.y = minY + b.r; b.vy = Math.abs(b.vy) * 0.85; }
-        if (b.y + b.r > maxY) { b.y = maxY - b.r; b.vy = -Math.abs(b.vy) * 0.85; }
-        const inGoal = Math.abs(b.y - FIELD.cy) < FIELD.goalH;
-        if (b.x - b.r < minX) { if (inGoal) this._triggerGoal('pink'); else { b.x = minX + b.r; b.vx = Math.abs(b.vx) * 0.85; } }
-        else if (b.x + b.r > maxX) { if (inGoal) this._triggerGoal('blue'); else { b.x = maxX - b.r; b.vx = -Math.abs(b.vx) * 0.85; } }
+        const srvBall = SpaceNetwork.interpolator.getInterpolatedBall();
+        if (srvBall) {
+            if (srvBall.score) this.score = srvBall.score;
+            const k = 1 - Math.exp(-16 * dt);
+            if (Math.hypot(srvBall.x - b.x, srvBall.y - b.y) > 220) { b.x = srvBall.x; b.y = srvBall.y; }
+            else { b.x += (srvBall.x - b.x) * k; b.y += (srvBall.y - b.y) * k; }
+            b.vx = srvBall.vx; b.vy = srvBall.vy; b.angle = srvBall.angle;
+        } else {
+            b.x += b.vx * dt; b.y += b.vy * dt; b.angle += Math.hypot(b.vx, b.vy) * 0.012 * dt;
+            const drag = Math.pow(0.985, dt * 60); b.vx *= drag; b.vy *= drag;
+        }
 
         const dxB = b.x - r.x, dyB = b.y - r.y, distB = Math.hypot(dxB, dyB);
         if (distB < b.r + 26 && distB > 0.001 && performance.now() - this.lastKickAt > 110) {
@@ -76,50 +111,14 @@ export class SpaceFun {
             b.vx = r.vx * boost + nx * (turboHeld ? 360 : 230); b.vy = r.vy * boost + ny * (turboHeld ? 360 : 230);
             b.x = r.x + nx * (b.r + 28); b.y = r.y + ny * (b.r + 28); r.vx *= 0.7; r.vy *= 0.7;
             this._spawnSplat(b.x - nx * b.r, b.y - ny * b.r, '#fde047', 10, false); SpaceAudio.playBumperBounce();
-            SpaceNetwork.sendFunEvent({ type: 'ballKick', x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy), score: this.score });
-        }
-
-        const peers = SpaceNetwork.getOnlinePeers().filter(p => p.currentLocation === 'space');
-        for (const p of peers) {
-            const dx = r.x - p.rx, dy = r.y - p.ry, d = Math.hypot(dx, dy);
-            if (d < 52 && d > 0.001 && performance.now() - this.lastBumpAt > 280) {
-                this.lastBumpAt = performance.now();
-                const nx = dx / d, ny = dy / d;
-                r.bounceOff(nx, ny, 310); this.shakeTime = 0.22; SpaceAudio.playBumperBounce();
-                this._spawnSplat((r.x + p.rx) / 2, (r.y + p.ry) / 2, '#fde047', 14, false);
-                SpaceNetwork.sendFunEvent({ type: 'bumperHit', targetId: p.playerId, nx: -nx, ny: -ny });
-                SpaceNetwork.broadcastNow();
-            }
         }
 
         for (let i = this.shots.length - 1; i >= 0; i--) {
-            const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
-            let hit = false;
-            if (Math.hypot(s.x - b.x, s.y - b.y) < b.r + 10) {
-                b.vx += s.vx * 0.45; b.vy += s.vy * 0.45; this._spawnSplat(s.x, s.y, s.color, 14, false); SpaceAudio.playPaintSplat();
-                if (s.ownerId === PlayerProfile.playerId) SpaceNetwork.sendFunEvent({ type: 'ballKick', x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy), score: this.score });
-                hit = true;
-            }
-            if (!hit && s.ownerId === PlayerProfile.playerId) {
-                for (const p of peers) if (Math.hypot(s.x - p.rx, s.y - p.ry) < 32) {
-                    this._applyPaintToRocket(p.playerId, s.color, p.rx, p.ry);
-                    SpaceNetwork.sendFunEvent({ type: 'paintHit', targetId: p.playerId, color: s.color, x: Math.round(p.rx), y: Math.round(p.ry) });
-                    hit = true; break;
-                }
-            }
-            if (!hit && this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) { this._spawnSplat(s.x, s.y, s.color, 12, false); SpaceAudio.playPaintSplat(); hit = true; break; }
-            if (hit || s.life <= 0) this.shots.splice(i, 1);
+            const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt;
+            if ((s.life -= dt) <= 0) this.shots.splice(i, 1);
         }
-
         for (let i = this.fx.length - 1; i >= 0; i--) { const f = this.fx[i]; f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.94; f.vy *= 0.94; if ((f.life -= dt * 1.45) <= 0) this.fx.splice(i, 1); }
         for (let i = this.Emotes.length - 1; i >= 0; i--) { const em = this.Emotes[i]; em.y -= 36 * dt; if ((em.life -= dt) <= 0) this.Emotes.splice(i, 1); }
-    }
-
-    _triggerGoal(team) {
-        this.score[team] = (this.score[team] || 0) + 1;
-        Object.assign(this.ball, { x: FIELD.cx, y: FIELD.cy, vx: 0, vy: 0 });
-        this.goalBannerTimer = 2.6; this._spawnSplat(FIELD.cx, FIELD.cy, '#facc15', 36, true); SpaceAudio.playGoalFanfare();
-        SpaceNetwork.sendFunEvent({ type: 'goal', score: this.score });
     }
 
     drawWorld(ctx) {
@@ -148,7 +147,9 @@ export class SpaceFun {
         ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        for (const s of this.shots) { ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+        const netProjectiles = SpaceNetwork.interpolator.getInterpolatedProjectiles();
+        const allShots = netProjectiles.length ? netProjectiles : this.shots;
+        for (const s of allShots) { ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
         for (const f of this.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * f.life, 0, Math.PI * 2); ctx.fill(); }
         ctx.globalAlpha = 1;
         for (const em of this.Emotes) { ctx.globalAlpha = Math.min(1, em.life); ctx.font = '24px "Nunito", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(em.text, em.x, em.y); }

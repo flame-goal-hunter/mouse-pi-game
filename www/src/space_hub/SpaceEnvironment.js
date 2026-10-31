@@ -6,6 +6,7 @@
 import { SPACE_CONFIG } from './SpaceConfig.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
+import { SpaceNetwork } from './SpaceNetworkClient.js';
 
 export class SpaceEnvironment {
     constructor() {
@@ -45,7 +46,7 @@ export class SpaceEnvironment {
                 return { x: Math.cos(a) * rad, y: Math.sin(a) * rad };
             });
             this.asteroids.push({
-                x, y, r, verts,
+                id: i, x, y, r, verts,
                 vx: (i % 2 === 0 ? 1 : -1) * (12 + (i % 5) * 4),
                 vy: (i % 3 === 0 ? 1 : -1) * (10 + (i % 4) * 4),
                 rot: i, rotSpd: (i % 2 === 0 ? 1 : -1) * 0.55,
@@ -72,22 +73,43 @@ export class SpaceEnvironment {
     }
 
     _initCheese() {
+        let cid = 1;
         SPACE_CONFIG.environment.cheeseClusters.forEach((cl, ci) => {
             for (let i = 0; i < cl.count; i++) {
                 const a = (i / cl.count) * Math.PI * 2 + ci;
                 const d = 18 + (i % 3) * (cl.spread * 0.38);
                 const x = cl.x + Math.cos(a) * d, y = cl.y + Math.sin(a) * d;
-                this.cheeseItems.push({ x, y, homeX: x, homeY: y, vx: 0, vy: 0, phase: ci + i * 0.7, respawnTimer: 0 });
+                this.cheeseItems.push({ id: cid++, x, y, homeX: x, homeY: y, vx: 0, vy: 0, phase: ci + i * 0.7, respawnTimer: 0 });
             }
         });
     }
 
+    onServerCheesePicked(ev) {
+        const ch = this.cheeseItems.find(c => c.id === ev.id);
+        if (ch && ch.respawnTimer <= 0) {
+            ch.respawnTimer = 14;
+            if (ev.byPlayerId === PlayerProfile.playerId) {
+                PlayerProfile.addPocketCheese(1);
+                SpaceAudio.playCheesePickup();
+                this.onCheeseCollected?.();
+            }
+        }
+        this.popups.push({ x: ev.x || ch?.x || 0, y: (ev.y || ch?.y || 0) - 24, life: 0.85, maxLife: 0.85 });
+    }
+
     update(dt, rocket, onCheeseCollected) {
+        this.onCheeseCollected = onCheeseCollected;
         const { halfWidth: hw, halfHeight: hh } = SPACE_CONFIG.world;
         const envCfg = SPACE_CONFIG.environment;
+        const srvSnap = SpaceNetwork.interpolator.getLatestWorldEntities();
 
         for (const a of this.asteroids) {
             a.x += a.vx * dt; a.y += a.vy * dt; a.rot += a.rotSpd * dt;
+            const sa = srvSnap?.asteroids?.get(a.id);
+            if (sa) {
+                if (Math.hypot(sa.x - a.x, sa.y - a.y) > 300) { a.x = sa.x; a.y = sa.y; }
+                else { a.x += (sa.x - a.x) * Math.min(1, dt * 8); a.y += (sa.y - a.y) * Math.min(1, dt * 8); }
+            }
             if (a.hitFlash > 0) a.hitFlash = Math.max(0, a.hitFlash - dt * 4);
             if (a.x < -hw) a.x = hw; else if (a.x > hw) a.x = -hw;
             if (a.y < -hh) a.y = hh; else if (a.y > hh) a.y = -hh;
@@ -99,7 +121,7 @@ export class SpaceEnvironment {
                 rocket.x = a.x + nx * (minDist + 2);
                 rocket.y = a.y + ny * (minDist + 2);
                 rocket.bounceOff(nx, ny, 290);
-                a.vx -= nx * 45; a.vy -= ny * 45; a.hitFlash = 1;
+                a.hitFlash = 1;
                 SpaceAudio.playBumperBounce();
                 try { navigator.vibrate?.(12); } catch (_) {}
             }
@@ -111,7 +133,13 @@ export class SpaceEnvironment {
         }
 
         for (const ch of this.cheeseItems) {
-            if (ch.respawnTimer > 0) {
+            if (srvSnap?.spaceCheese) {
+                const sc = srvSnap.spaceCheese.get(ch.id);
+                if (!sc) { ch.respawnTimer = Math.max(0.5, ch.respawnTimer); continue; }
+                ch.respawnTimer = 0;
+                ch.x += (sc.x - ch.x) * Math.min(1, dt * 10);
+                ch.y += (sc.y - ch.y) * Math.min(1, dt * 10);
+            } else if (ch.respawnTimer > 0) {
                 if ((ch.respawnTimer -= dt) <= 0) { ch.x = ch.homeX; ch.y = ch.homeY; ch.vx = 0; ch.vy = 0; }
                 continue;
             }
@@ -124,7 +152,7 @@ export class SpaceEnvironment {
             ch.x += ch.vx * dt; ch.y += ch.vy * dt;
 
             if (dist < envCfg.cheeseCollectRadius) {
-                ch.respawnTimer = 18;
+                ch.respawnTimer = 14;
                 PlayerProfile.addPocketCheese(1);
                 SpaceAudio.playCheesePickup();
                 if (onCheeseCollected) onCheeseCollected();

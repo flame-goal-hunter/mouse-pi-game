@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SnowballRoom } from './rooms/SnowballRoom.js';
-import { getVapidPublicKey, upsertPlayerFromPacket, savePushSubscription, getAllSavedPlayers, sendInvitePush } from '../pushService.js';
+import { getVapidPublicKey, savePushSubscription, getAllSavedPlayers, sendInvitePush } from '../pushService.js';
+import { spaceWorld } from '../spaceWorldServer.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = '0.0.0.0';
@@ -63,43 +64,9 @@ app.get('/version', (_req, res) => {
 app.use('/colyseus', monitor());
 
 // ============================================================================
-// Space Hub Realtime Relay (/space-ws WebSocket + /api/space-sync HTTP fallback)
+// Space Hub Authoritative World (/space-ws WebSocket + /api/space-sync fallback)
 // ============================================================================
-const spacePeers = new Map();
-const spaceSockets = new Set();
 const pendingInvites = new Map();
-let lastBallEvent = null;
-
-function pruneSpacePeers() {
-    const cutoff = Date.now() - 16000;
-    for (const [id, entry] of spacePeers) {
-        if (entry.updatedAt < cutoff) spacePeers.delete(id);
-    }
-}
-
-function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
-    if (pkt?.funEvent) {
-        if (pkt.funEvent.type === 'ballKick' || pkt.funEvent.type === 'goal') lastBallEvent = pkt;
-        const raw = JSON.stringify(pkt);
-        for (const sock of spaceSockets) {
-            if (sock !== senderWs && sock.readyState === 1) {
-                try { sock.send(raw); } catch (_) {}
-            }
-        }
-        return;
-    }
-    if (!pkt || typeof pkt.playerId !== 'string' || !pkt.playerId) return;
-    upsertPlayerFromPacket(pkt);
-    delete pkt.pushSubscription;
-    pruneSpacePeers();
-    spacePeers.set(pkt.playerId, { pkt, updatedAt: Date.now() });
-    const raw = JSON.stringify(pkt);
-    for (const sock of spaceSockets) {
-        if (sock !== senderWs && sock.readyState === 1) {
-            try { sock.send(raw); } catch (_) {}
-        }
-    }
-}
 
 app.get('/api/space-homes', (_req, res) => {
     res.json({ ok: true, homes: getAllSavedPlayers() });
@@ -121,12 +88,7 @@ app.post('/api/invite', async (req, res) => {
     const senderName = (fromNickname || 'Друг Пи').slice(0, 24);
     const ev = { fromId, fromNickname: senderName, toId, ts: Date.now() };
     pendingInvites.set(toId, [...(pendingInvites.get(toId) || []).slice(-4), ev]);
-    const liveMsg = JSON.stringify({ inviteEvent: ev });
-    for (const sock of spaceSockets) {
-        if (sock.readyState === 1) {
-            try { sock.send(liveMsg); } catch (_) {}
-        }
-    }
+    spaceWorld.broadcast({ inviteEvent: ev });
     const pushRes = await sendInvitePush({ fromId, fromNickname: senderName, toId });
     res.json({ ok: true, ...pushRes });
 });
@@ -134,15 +96,13 @@ app.post('/api/invite', async (req, res) => {
 app.post('/api/space-sync', (req, res) => {
     const pkt = req.body;
     const myId = pkt?.playerId;
-    if (myId) recordAndBroadcastSpacePkt(pkt, null);
-    else pruneSpacePeers();
-    const peers = [];
-    for (const [id, entry] of spacePeers) {
-        if (id !== myId) peers.push(entry.pkt);
-    }
+    if (pkt) spaceWorld.handleMessage(pkt, null);
+    const snap = spaceWorld.buildSnapshot();
     const inviteEvents = myId ? (pendingInvites.get(myId) || []) : [];
     if (myId && inviteEvents.length) pendingInvites.delete(myId);
-    res.json({ ok: true, peers, savedHomes: getAllSavedPlayers(), inviteEvents });
+    const imp = myId ? spaceWorld.pendingImpulses.get(myId) : null;
+    if (myId && imp) spaceWorld.pendingImpulses.delete(myId);
+    res.json({ ok: true, snapshot: snap, peers: snap.players.filter(p => p.playerId !== myId), savedHomes: getAllSavedPlayers(), inviteEvents, impulse: imp || null });
 });
 
 const httpServer = createServer(app);
@@ -155,26 +115,20 @@ wsTransport.wss.on('connection', (rawClient, req) => {
         rawClient.pingCount = 0;
         rawClient.on('pong', () => { rawClient.pingCount = 0; });
         rawClient.on('error', () => {});
-        spaceSockets.add(rawClient);
-        pruneSpacePeers();
+        spaceWorld.sockets.add(rawClient);
         if (rawClient.readyState === 1) {
-            try { rawClient.send(JSON.stringify({ savedHomes: getAllSavedPlayers() })); } catch (_) {}
-        }
-        for (const { pkt } of spacePeers.values()) {
-            if (rawClient.readyState === 1) {
-                try { rawClient.send(JSON.stringify(pkt)); } catch (_) {}
-            }
-        }
-        if (lastBallEvent && rawClient.readyState === 1) {
-            try { rawClient.send(JSON.stringify(lastBallEvent)); } catch (_) {}
+            try {
+                rawClient.send(JSON.stringify({ savedHomes: getAllSavedPlayers() }));
+                rawClient.send(JSON.stringify(spaceWorld.buildSnapshot()));
+            } catch (_) {}
         }
         rawClient.on('message', (data) => {
             try {
                 const pkt = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
-                recordAndBroadcastSpacePkt(pkt, rawClient);
+                spaceWorld.handleMessage(pkt, rawClient);
             } catch (_) {}
         });
-        rawClient.on('close', () => spaceSockets.delete(rawClient));
+        rawClient.on('close', () => spaceWorld.sockets.delete(rawClient));
         return;
     }
     return origOnConnection(rawClient, req);
