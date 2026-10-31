@@ -63,7 +63,7 @@ export class ClientWorldSync {
         if (!p) return null;
         const pid = String(p.playerId || p.id || sessionId);
         const myPid = typeof window !== 'undefined' ? window.PlayerProfile?.playerId : '';
-        if (sessionId === mySessionId || (myTabSid && (sessionId === myTabSid || p.tabSid === myTabSid)) || (myPid && (pid === myPid || pid.startsWith(myPid + '_')))) {
+        if (sessionId === mySessionId || (myTabSid && (sessionId === myTabSid || p.tabSid === myTabSid)) || (myPid && pid === myPid)) {
             if (sessionId === mySessionId && !this.myBody.docking && Math.hypot((Number(p.x) || 0) - this.myBody.x, (Number(p.y) || 0) - this.myBody.y) > 300) {
                 this._applyServerBody(this.myBody, p, false);
             }
@@ -110,26 +110,25 @@ export class ClientWorldSync {
                 if (pid) activePids.add(pid);
             });
         }
-        for (const pid of Array.from(peersMap.keys())) {
-            if (!activePids.has(pid)) { peersMap.delete(pid); this.world.rockets.delete(pid); }
+        const nowMs = Date.now();
+        for (const [pid, peer] of Array.from(peersMap.entries())) {
+            if (!activePids.has(pid) && nowMs - (peer.lastSeen || 0) > 3500) {
+                peersMap.delete(pid); this.world.rockets.delete(pid);
+            }
         }
         if (state.ball && this.world.ball) {
             const sb = state.ball, wb = this.world.ball;
             if (typeof sb.scoreBlue === 'number') this.world.score = { blue: sb.scoreBlue, pink: sb.scorePink || 0 };
             const sx = Number(sb.x) || 0, sy = Number(sb.y) || 0, svx = Number(sb.vx) || 0, svy = Number(sb.vy) || 0;
             wb.rawX = sx; wb.rawY = sy;
-            const recentlyKicked = performance.now() - (this.lastLocalBallKickAt || 0) < 650;
+            const idleAgo = performance.now() - (this.lastLocalBallKickAt || 0);
             const errDist = Math.hypot(sx - wb.x, sy - wb.y);
-            const dv = Math.hypot(svx - wb.vx, svy - wb.vy);
-            if (errDist > 240 || (!recentlyKicked && (errDist > 95 || dv > 85))) {
+            const bothSlow = Math.hypot(svx, svy) < 18 && Math.hypot(wb.vx, wb.vy) < 18;
+            if (!this._ballSynced) {
+                this._ballSynced = true;
+                this._applyServerBody(wb, sb, true);
+            } else if (idleAgo > 1200 && (errDist > 180 || (bothSlow && errDist > 6))) {
                 this._applyServerBody(wb, sb, false);
-            } else if (!recentlyKicked && errDist > 2) {
-                const alpha = this.accumulator / FIXED_DT, oldVX = wb.renderX, oldVY = wb.renderY;
-                wb.x += (sx - wb.x) * 0.15; wb.y += (sy - wb.y) * 0.15;
-                wb.vx += (svx - wb.vx) * 0.2; wb.vy += (svy - wb.vy) * 0.2;
-                wb.prevX = wb.x - wb.vx * FIXED_DT; wb.prevY = wb.y - wb.vy * FIXED_DT;
-                wb.errorX = oldVX - (wb.prevX + (wb.x - wb.prevX) * alpha);
-                wb.errorY = oldVY - (wb.prevY + (wb.y - wb.prevY) * alpha);
             }
         }
         if (state.spaceCheese) {

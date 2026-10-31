@@ -18,7 +18,7 @@ export class SpaceRoom extends Room {
         this.setState(new SpaceState());
         this.setPatchRate(50);
         this.world = createWorldCore();
-        Object.assign(this, { externalSeen: new Map(), recentFx: [], fxSeq: 1, pendingImpulses: new Map(), processedActs: new Set(), nextProjId: 1 });
+        Object.assign(this, { externalSeen: new Map(), playerTabs: new Map(), recentFx: [], fxSeq: 1, pendingImpulses: new Map(), processedActs: new Set(), nextProjId: 1 });
         this._syncCheeseToSchema();
         this._registerMessages();
         this.setSimulationInterval(() => this.update(FIXED_DT), 20);
@@ -73,14 +73,7 @@ export class SpaceRoom extends Room {
             const p = this.state.players.get(client.sessionId);
             if (!p || !s) return;
             this.externalSeen.set(client.sessionId, Date.now());
-            if (s.tabSid && this.state.players.has(s.tabSid)) this.removePlayer(s.tabSid);
-            if (s.playerId) {
-                const pid = String(s.playerId);
-                for (const [esid, ep] of this.state.players.entries()) {
-                    if (ep !== p && (ep.id === pid || ep.id.startsWith(pid + '_'))) this.removePlayer(esid);
-                }
-                p.id = pid;
-            }
+            if (s.playerId || s.tabSid) p.id = this._resolvePlayerId(client.sessionId, s.playerId || p.id, s.tabSid);
             if (s.nickname) p.nickname = String(s.nickname).slice(0, 18);
             for (const k of ['skinId', 'activityStatus', 'planetBiome', 'planetRing']) if (s[k]) p[k] = String(s[k]);
             if (typeof s.storedCheese === 'number') p.storedCheese = s.storedCheese;
@@ -130,8 +123,8 @@ export class SpaceRoom extends Room {
             const b = this.world.ball;
             if (b && typeof d.vx === 'number' && typeof d.vy === 'number') {
                 b.vx = d.vx; b.vy = d.vy;
-                if (typeof d.x === 'number' && Math.hypot(d.x - b.x, d.y - b.y) < 120) { b.x = d.x; b.y = d.y; }
-                this._emitFx({ type: 'bumper_hit', x: Math.round(b.x), y: Math.round(b.y) });
+                if (typeof d.x === 'number' && Math.hypot(d.x - b.x, d.y - b.y) < 160) { b.x = b.prevX = d.x; b.y = b.prevY = d.y; }
+                this._emitFx({ type: 'ball_kick', bySid: sessionId, x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) });
             }
         } else if (type === 'hit_asteroid') {
             const id = String(d.id || '');
@@ -161,12 +154,25 @@ export class SpaceRoom extends Room {
         }
     }
 
-    onJoin(client, opts = {}) {
-        if (opts.tabSid && this.state.players.has(opts.tabSid)) this.removePlayer(opts.tabSid);
-        const pid = String(opts.playerId || client.sessionId);
+    _resolvePlayerId(sid, rawPid, tabSid = '') {
+        if (tabSid) this.playerTabs.set(sid, tabSid);
+        let pid = String(rawPid || sid);
+        const now = Date.now();
         for (const [esid, ep] of this.state.players.entries()) {
-            if (ep.id === pid || ep.id.startsWith(pid + '_')) this.removePlayer(esid);
+            if (esid === sid) continue;
+            const sameTab = tabSid && (esid === tabSid || this.playerTabs.get(esid) === tabSid);
+            const samePid = ep.id === pid || ep.id.startsWith(pid + '_');
+            if (sameTab || (samePid && now - (this.externalSeen.get(esid) || 0) > 2500)) {
+                this.removePlayer(esid);
+            } else if (ep.id === pid) {
+                pid = `${pid}_${sid.slice(0, 4)}`;
+            }
         }
+        return pid;
+    }
+
+    onJoin(client, opts = {}) {
+        const pid = this._resolvePlayerId(client.sessionId, opts.playerId || client.sessionId, opts.tabSid);
         const p = new PlayerState();
         Object.assign(p, {
             sessionId: client.sessionId, id: pid,
@@ -188,11 +194,15 @@ export class SpaceRoom extends Room {
     onLeave(client) { this.removePlayer(client.sessionId); }
 
     removePlayer(sid = '', pid = '', tabSid = '') {
-        for (const k of [sid, tabSid]) if (k) { this.state.players.delete(k); this.externalSeen.delete(k); this.world.rockets.delete(k); }
-        if (pid) {
+        for (const k of [sid, tabSid]) if (k) { this.state.players.delete(k); this.externalSeen.delete(k); this.world.rockets.delete(k); this.playerTabs.delete(k); }
+        if (tabSid) {
+            for (const [esid, t] of this.playerTabs.entries()) {
+                if (t === tabSid) { this.state.players.delete(esid); this.externalSeen.delete(esid); this.world.rockets.delete(esid); this.playerTabs.delete(esid); }
+            }
+        } else if (pid && !sid) {
             for (const [esid, ep] of this.state.players.entries()) {
                 if (ep.id === pid || ep.id.startsWith(pid + '_')) {
-                    this.state.players.delete(esid); this.externalSeen.delete(esid); this.world.rockets.delete(esid);
+                    this.state.players.delete(esid); this.externalSeen.delete(esid); this.world.rockets.delete(esid); this.playerTabs.delete(esid);
                 }
             }
         }
@@ -200,9 +210,7 @@ export class SpaceRoom extends Room {
 
     syncExternalPlayer(pkt) {
         if (!pkt?.sessionId) return;
-        const pid = String(pkt.playerId || pkt.sessionId);
-        if (pkt.tabSid && pkt.tabSid !== pkt.sessionId && this.state.players.has(pkt.tabSid)) this.removePlayer(pkt.tabSid);
-        const wsEntry = Array.from(this.state.players.entries()).find(([sid, ep]) => (sid === pkt.sessionId || ep.id === pid) && this.clients.some(c => c.sessionId === sid));
+        const wsEntry = Array.from(this.state.players.entries()).find(([sid]) => (sid === pkt.sessionId || (pkt.tabSid && this.playerTabs.get(sid) === pkt.tabSid)) && this.clients.some(c => c.sessionId === sid));
         if (wsEntry) {
             const [wsSid, wp] = wsEntry;
             this.externalSeen.set(wsSid, Date.now());
@@ -213,9 +221,7 @@ export class SpaceRoom extends Room {
         this.externalSeen.set(pkt.sessionId, Date.now());
         let p = this.state.players.get(pkt.sessionId);
         if (!p) {
-            for (const [esid, ep] of this.state.players.entries()) {
-                if (ep.id === pid || ep.id.startsWith(pid + '_')) this.removePlayer(esid);
-            }
+            const pid = this._resolvePlayerId(pkt.sessionId, pkt.playerId || pkt.sessionId, pkt.tabSid);
             p = new PlayerState(); p.sessionId = pkt.sessionId; p.id = pid;
             this.state.players.set(pkt.sessionId, p);
         }

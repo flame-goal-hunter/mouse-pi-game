@@ -134,6 +134,13 @@ export class SpaceFun {
         if (ev.type === 'paint_splat') {
             if (ev.targetId || ev.targetSid) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y, ev.targetSid);
             else if (now - (this.lastSplatAt || 0) > 250) { this.lastSplatAt = now; this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
+        } else if (ev.type === 'ball_kick') {
+            if (ev.bySid && ev.bySid !== mySid && ev.bySid !== SpaceNetwork.tabSid) {
+                const wb = SpaceNetwork.worldSync?.world?.ball;
+                if (wb) SpaceNetwork.worldSync._applyServerBody(wb, ev, false);
+                this._spawnSplat(ev.x, ev.y, '#fde047', 8, false, 3.5);
+                SpaceAudio.playBumperBounce();
+            }
         } else if (ev.type === 'bumper_hit') {
             if ((ev.targetSid && (ev.targetSid === mySid || ev.targetSid === SpaceNetwork.tabSid)) || (ev.targetId && (ev.targetId === myPid || String(ev.targetId).startsWith(myPid + '_')))) {
                 if (now - this.lastBumpAt > 550) {

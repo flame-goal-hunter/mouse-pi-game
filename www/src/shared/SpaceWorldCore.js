@@ -156,7 +156,7 @@ export function stepWorld(world, dt = FIXED_DT, opts = {}) {
             const col = resolveBodyCollision(rA, activeRockets[j]);
             if (col) events.push({ type: 'bumper_hit', ...col });
         }
-        if (b) {
+        if (b && !opts.authoritativeGoals && rA.id === '__local__') {
             const colB = resolveBodyCollision(rA, b);
             if (colB) events.push({ type: 'ball_kick', ...colB });
         }
