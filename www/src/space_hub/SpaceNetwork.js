@@ -5,6 +5,7 @@
 
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { getPersonalPlanetCoords } from './PersonalPlanetSystem.js';
+import { RemotePlayerEntity } from './RemotePlayerEntity.js';
 
 const FRIENDS_CACHE_KEY = 'mousiePi.friendsHomes.v1';
 
@@ -18,7 +19,7 @@ class SpaceNetworkManager {
         this.lastHttpSyncAt = 0;
         this.httpSyncInFlight = false;
         this.onFunEvent = null;
-        this.localMotion = { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, homeAngle: 0, facing: 1, moving: false };
+        this.localMotion = { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, trailStyle: 'stars', paintColor: null, paintTimer: 0, homeAngle: 0, facing: 1, moving: false };
         this._loadCachedHomes();
         this._initLocalChannel();
         this._connect();
@@ -91,10 +92,12 @@ class SpaceNetworkManager {
         const m = this.localMotion;
         return {
             playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname,
-            equippedSkinId: PlayerProfile.equippedSkinId, currentLocation: PlayerProfile.currentLocation,
+            skinId: PlayerProfile.equippedSkinId, equippedSkinId: PlayerProfile.equippedSkinId,
+            currentLocation: PlayerProfile.currentLocation,
             x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
-            angle: Number(m.angle.toFixed(2)), homeAngle: Number((m.homeAngle || 0).toFixed(3)),
-            facing: m.facing || 1, moving: Boolean(m.moving),
+            angle: Number(m.angle.toFixed(2)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
+            trailStyle: m.trailStyle || 'stars', paintColor: m.paintColor || null, paintTimer: Number((m.paintTimer || 0).toFixed(2)),
+            homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving),
             homeSnapshot: PlayerProfile.getHomeSnapshot(), ts: Date.now()
         };
     }
@@ -139,24 +142,20 @@ class SpaceNetworkManager {
             return;
         }
         if (!pkt?.playerId || pkt.playerId === PlayerProfile.playerId) return;
-        const peer = this.peers.get(pkt.playerId) || {
-            playerId: pkt.playerId, rx: pkt.x || 0, ry: pkt.y || 0,
-            rAngle: pkt.angle || 0, rHomeAngle: pkt.homeAngle || 0, lastPktTs: 0
-        };
-        if (peer.lastPktTs && pkt.ts && pkt.ts < peer.lastPktTs) return;
-        peer.lastPktTs = pkt.ts || peer.lastPktTs;
-        if (Math.hypot((pkt.x || 0) - peer.rx, (pkt.y || 0) - peer.ry) > 600) {
-            peer.rx = pkt.x || 0; peer.ry = pkt.y || 0;
+        let peer = this.peers.get(pkt.playerId);
+        if (!peer) {
+            peer = new RemotePlayerEntity(pkt);
+            this.peers.set(pkt.playerId, peer);
+        } else {
+            peer.applyPacket(pkt);
         }
-        Object.assign(peer, pkt, { lastSeen: Date.now() });
-        this.peers.set(pkt.playerId, peer);
         this._saveCachedHome(pkt);
     }
 
     step(dt, motionPatch) {
         if (motionPatch) Object.assign(this.localMotion, motionPatch);
         const now = performance.now();
-        if (now - this.lastSendAt > 50) {
+        if (now - this.lastSendAt > 55) {
             this.lastSendAt = now;
             this.broadcastNow();
         }
@@ -167,16 +166,7 @@ class SpaceNetworkManager {
         const nowWall = Date.now();
         for (const [id, p] of this.peers) {
             if (nowWall - p.lastSeen > 16000) { this.peers.delete(id); continue; }
-            if (nowWall - p.lastSeen < 350) {
-                p.x += (p.vx || 0) * dt; p.y += (p.vy || 0) * dt;
-            }
-            const k = Math.min(1, dt * 12);
-            p.rx += (p.x - p.rx) * k; p.ry += (p.y - p.ry) * k;
-            let da = (p.angle || 0) - p.rAngle;
-            while (da > Math.PI) da -= Math.PI * 2;
-            while (da < -Math.PI) da += Math.PI * 2;
-            p.rAngle += da * Math.min(1, dt * 14);
-            p.rHomeAngle += ((p.homeAngle || 0) - p.rHomeAngle) * k;
+            p.update(dt);
         }
     }
 

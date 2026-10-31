@@ -25,6 +25,9 @@ export class RocketController {
         this.paintTimer = 0;
         this.flipTimer = 0;
         this.hopScale = 0;
+        this.isThrusting = false;
+        this.isTurbo = false;
+        this.trailStyle = 'stars';
     }
 
     startPlanetZoom(planet) {
@@ -57,6 +60,8 @@ export class RocketController {
 
         const mag = Math.hypot(input.moveX, input.moveY);
         const moving = mag > 0.01;
+        this.isThrusting = moving;
+        this.isTurbo = Boolean(input.turboHeld);
         if (moving) {
             const targetAngle = Math.atan2(input.moveY, input.moveX);
             let diff = targetAngle - this.angle;
@@ -107,9 +112,9 @@ export class RocketController {
     }
 
     _spawnStarParticle(isTurbo) {
-        const colors = SPACE_CONFIG.rocket.exhaustColors;
-        const backX = this.x - Math.cos(this.angle) * 24;
-        const backY = this.y - Math.sin(this.angle) * 24;
+        const colors = isTurbo ? ['#38bdf8', '#fde047', '#f472b6', '#2dd4bf'] : SPACE_CONFIG.rocket.exhaustColors;
+        const backX = this.x - Math.cos(this.angle) * 26;
+        const backY = this.y - Math.sin(this.angle) * 26;
         const spread = (Math.random() - 0.5) * 0.7;
         const spd = (isTurbo ? 175 : 95) + Math.random() * 65;
         this.particles.push({
@@ -170,6 +175,21 @@ export class RocketController {
         const spin = this.flipTimer > 0 ? (1 - this.flipTimer / 0.65) * Math.PI * 2 : 0;
         ctx.save();
         ctx.rotate(this.angle + spin);
+
+        const vib = this.isTurbo ? (Math.random() - 0.5) * 2.2 : 0;
+        ctx.fillStyle = '#334155'; ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.roundRect(-27, -6 + vib, 8, 12, 3); ctx.fill(); ctx.stroke();
+
+        if (this.isThrusting || this.isTurbo || Math.hypot(this.vx, this.vy) > 45) {
+            const flLen = (this.isTurbo ? 38 : 20) + Math.sin(performance.now() * 0.036) * (this.isTurbo ? 9 : 5);
+            const fg = ctx.createLinearGradient(-25, 0, -25 - flLen, 0);
+            fg.addColorStop(0, '#ffffff');
+            fg.addColorStop(0.35, this.isTurbo ? '#38bdf8' : '#fde047');
+            fg.addColorStop(0.75, this.isTurbo ? '#f472b6' : '#fb923c');
+            fg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = fg;
+            ctx.beginPath(); ctx.moveTo(-25, -6.5); ctx.lineTo(-25 - flLen, vib); ctx.lineTo(-25, 6.5); ctx.closePath(); ctx.fill();
+        }
 
         ctx.fillStyle = this.paintColor || '#ef4444';
         ctx.beginPath();

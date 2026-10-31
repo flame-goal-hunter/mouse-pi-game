@@ -167,7 +167,11 @@ export class SpaceHubScene {
         SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);
         this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
         this.fun.update(dt, inp.turboHeld);
-        SpaceNetwork.step(dt, { x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle });
+        SpaceNetwork.step(dt, {
+            x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle,
+            isThrusting: this.rocket.isThrusting, isTurbo: this.rocket.isTurbo,
+            trailStyle: this.rocket.trailStyle || 'stars', paintColor: this.rocket.paintColor, paintTimer: this.rocket.paintTimer
+        });
         this.onlineHud.update();
 
         if (zoomDone && this.dockingPlanet) {
