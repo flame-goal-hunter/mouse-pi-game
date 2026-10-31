@@ -30,28 +30,33 @@ export class ClientWorldSync {
             body.errorX = 0; body.errorY = 0; body.errorAngle = 0;
             return;
         }
-        // 1. Запоминаем текущую точку на экране ДО обновления:
-        const oldVisualX = body.x + body.errorX;
-        const oldVisualY = body.y + body.errorY;
-        const oldVisualAngle = body.angle + body.errorAngle;
+        // 1. Запоминаем текущую точку на экране ДО обновления (с учетом внутритиковой фазы alpha):
+        const alpha = this.accumulator / FIXED_DT;
+        const oldVisualX = Number.isFinite(body.renderX) ? body.renderX : body.x + body.errorX;
+        const oldVisualY = Number.isFinite(body.renderY) ? body.renderY : body.y + body.errorY;
+        const oldVisualAngle = Number.isFinite(body.renderAngle) ? body.renderAngle : body.angle + body.errorAngle;
 
-        // 2. Обновляем физическое тело данными с сервера:
-        body.x = sx;
-        body.y = sy;
+        // 2. Обновляем физическое тело и сохраняем шаг скорости для плавной alpha-интерполяции:
         body.vx = Number(srv.vx) ?? body.vx;
         body.vy = Number(srv.vy) ?? body.vy;
-        body.prevX = body.x;
-        body.prevY = body.y;
+        body.x = sx;
+        body.y = sy;
+        body.prevX = sx - body.vx * FIXED_DT;
+        body.prevY = sy - body.vy * FIXED_DT;
         body.angle = sa;
-        body.prevAngle = body.angle;
+        body.prevAngle = sa;
 
         // 3. Компенсируем 100% разницы в визуальный оффсет (скачок на экране = 0.00px!):
-        body.errorX = oldVisualX - body.x;
-        body.errorY = oldVisualY - body.y;
+        const newBaseX = body.prevX + (body.x - body.prevX) * alpha;
+        const newBaseY = body.prevY + (body.y - body.prevY) * alpha;
+        body.errorX = oldVisualX - newBaseX;
+        body.errorY = oldVisualY - newBaseY;
         body.errorAngle = shortAngleDist(body.angle, oldVisualAngle);
         if (Math.hypot(body.errorX, body.errorY) > 800) {
             body.errorX = 0; body.errorY = 0; body.errorAngle = 0;
         }
+        body.renderX = newBaseX + body.errorX;
+        body.renderY = newBaseY + body.errorY;
     }
 
     _syncPeer(p, sessionId, mySessionId, myTabSid, peersMap, onSaveHome) {
@@ -109,13 +114,22 @@ export class ClientWorldSync {
             if (!activePids.has(pid)) { peersMap.delete(pid); this.world.rockets.delete(pid); }
         }
         if (state.ball && this.world.ball) {
-            const sb = state.ball;
+            const sb = state.ball, wb = this.world.ball;
             if (typeof sb.scoreBlue === 'number') this.world.score = { blue: sb.scoreBlue, pink: sb.scorePink || 0 };
-            const recentlyKicked = performance.now() - (this.lastLocalBallKickAt || 0) < 350;
-            if (!recentlyKicked && (Math.hypot((Number(sb.x) || 0) - this.myBody.x, (Number(sb.y) || 0) - this.myBody.y) > 72 || Math.hypot((Number(sb.x) || 0) - this.world.ball.x, (Number(sb.y) || 0) - this.world.ball.y) > 160)) {
-                this._applyServerBody(this.world.ball, sb, false);
-            } else {
-                this.world.ball.rawX = Number(sb.x) || 0; this.world.ball.rawY = Number(sb.y) || 0;
+            const sx = Number(sb.x) || 0, sy = Number(sb.y) || 0, svx = Number(sb.vx) || 0, svy = Number(sb.vy) || 0;
+            wb.rawX = sx; wb.rawY = sy;
+            const recentlyKicked = performance.now() - (this.lastLocalBallKickAt || 0) < 650;
+            const errDist = Math.hypot(sx - wb.x, sy - wb.y);
+            const dv = Math.hypot(svx - wb.vx, svy - wb.vy);
+            if (errDist > 240 || (!recentlyKicked && (errDist > 95 || dv > 85))) {
+                this._applyServerBody(wb, sb, false);
+            } else if (!recentlyKicked && errDist > 2) {
+                const alpha = this.accumulator / FIXED_DT, oldVX = wb.renderX, oldVY = wb.renderY;
+                wb.x += (sx - wb.x) * 0.15; wb.y += (sy - wb.y) * 0.15;
+                wb.vx += (svx - wb.vx) * 0.2; wb.vy += (svy - wb.vy) * 0.2;
+                wb.prevX = wb.x - wb.vx * FIXED_DT; wb.prevY = wb.y - wb.vy * FIXED_DT;
+                wb.errorX = oldVX - (wb.prevX + (wb.x - wb.prevX) * alpha);
+                wb.errorY = oldVY - (wb.prevY + (wb.y - wb.prevY) * alpha);
             }
         }
         if (state.spaceCheese) {

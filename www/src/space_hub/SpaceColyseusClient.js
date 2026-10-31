@@ -145,7 +145,6 @@ export class SpaceColyseusClient {
         };
         if (room.state) applyState(room.state);
         room.onStateChange(applyState);
-        room.onStateChange.once?.(applyState);
         room.onMessage('saved_homes', (homes) => {
             if (Array.isArray(homes)) homes.forEach(h => this._saveCachedHome(h));
         });
@@ -205,8 +204,15 @@ export class SpaceColyseusClient {
                 if (Array.isArray(data?.fxEvents)) data.fxEvents.forEach(ev => this._handleFxEvent(ev));
                 if (typeof data?.fxSeq === 'number') this.lastFxSeq = data.fxSeq;
                 if (data?.impulse && this.onServerImpulse) this.onServerImpulse(data.impulse);
-                if (Array.isArray(data?.players)) {
+                if (!this.connected && Array.isArray(data?.players)) {
                     this.worldSync.onServerState(data, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.tabSid);
+                } else if (this.connected && Array.isArray(data?.players)) {
+                    const wsPlayers = this.room?.state?.players;
+                    for (const p of data.players) {
+                        if (p && !wsPlayers?.has?.(p.sessionId)) {
+                            this.worldSync._syncPeer(p, p.sessionId || p.playerId, this._mySid(), this.tabSid, this.peers, (h) => this._saveCachedHome(h));
+                        }
+                    }
                 }
             }
         } catch (_) {} finally { this.syncBusy = false; }

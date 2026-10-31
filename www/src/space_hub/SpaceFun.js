@@ -95,10 +95,12 @@ export class SpaceFun {
                     SpaceNetwork.sendAction('bumper_hit', { targetSid: other.sessionId, targetId: other.playerId || other.id, nx: ev.nx * sign, ny: ev.ny * sign, x: Math.round(ev.hitX), y: Math.round(ev.hitY) });
                 }
             } else if (ev.type === 'ball_kick') {
-                this._spawnSplat(ev.hitX, ev.hitY, '#fde047', 8, false, 3.5);
-                SpaceAudio.playBumperBounce();
-                if (now - this.lastKickAt > 90 && (ev.bodyA?.id === '__local__' || ev.bodyB?.id === '__local__')) {
-                    this.lastKickAt = now;
+                if (now - this.lastKickAt > 80) {
+                    this._spawnSplat(ev.hitX, ev.hitY, '#fde047', 8, false, 3.5);
+                    SpaceAudio.playBumperBounce();
+                }
+                this.lastKickAt = now;
+                if (ev.bodyA?.id === '__local__' || ev.bodyB?.id === '__local__') {
                     if (SpaceNetwork.worldSync) SpaceNetwork.worldSync.lastLocalBallKickAt = now;
                     const b = SpaceNetwork.worldSync?.world?.ball;
                     if (b) SpaceNetwork.sendAction('ball_kick', { x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) });
