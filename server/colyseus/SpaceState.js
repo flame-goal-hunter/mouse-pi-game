@@ -105,13 +105,16 @@ type('number')(CheeseState.prototype, 'y');
 export class SpaceState extends Schema {
     constructor() {
         super();
+        this.serverTick = 0;
         this.players = new MapSchema();
         this.ball = new BallState();
         this.projectiles = new MapSchema();
         this.spaceCheese = new MapSchema();
     }
 }
+type('number')(SpaceState.prototype, 'serverTick');
 type({ map: PlayerState })(SpaceState.prototype, 'players');
 type(BallState)(SpaceState.prototype, 'ball');
 type({ map: ProjectileState })(SpaceState.prototype, 'projectiles');
 type({ map: CheeseState })(SpaceState.prototype, 'spaceCheese');
+

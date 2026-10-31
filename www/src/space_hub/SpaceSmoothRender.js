@@ -24,7 +24,8 @@ export class SpaceSmoothRender {
             state.players.forEach((p, sessionId) => {
                 // ЖЕЛЕЗНОЕ ПРАВИЛО: свою ракету (mySessionId) НИКОГДА не берем из state.players!
                 if (sessionId === mySessionId) return;
-                const pid = p.id || sessionId;
+                const rawId = p.id || sessionId;
+                const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${sessionId.slice(0, 4)}` : rawId;
                 activePlayerIds.add(pid);
 
                 entities.push({
@@ -134,3 +135,4 @@ export class SpaceSmoothRender {
         }
     }
 }
+

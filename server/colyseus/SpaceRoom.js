@@ -82,9 +82,11 @@ export class SpaceRoom extends Room {
     }
 
     onJoin(client, opts = {}) {
+        let pid = String(opts.playerId || client.sessionId);
+        for (const ep of this.state.players.values()) if (ep.id === pid) { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
         const p = new PlayerState();
         Object.assign(p, {
-            sessionId: client.sessionId, id: String(opts.playerId || client.sessionId),
+            sessionId: client.sessionId, id: pid,
             nickname: String(opts.nickname || 'Мышонок Пи').slice(0, 18), skinId: String(opts.skinId || 'blue'),
             activityStatus: String(opts.activityStatus || 'space'), storedCheese: Number(opts.storedCheese) || 50,
             planetBiome: String(opts.planetBiome || 'cheese'), planetRing: String(opts.planetRing || 'none'),
@@ -95,12 +97,13 @@ export class SpaceRoom extends Room {
             playerId: p.id, nickname: p.nickname, skinId: p.skinId, equippedSkinId: p.skinId,
             homeSnapshot: opts.homeSnapshot || { storedCheese: p.storedCheese, planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } }
         });
-        client.send('saved_homes', getAllSavedPlayers());
+        this.clock.setTimeout(() => client.send('saved_homes', getAllSavedPlayers()), 120);
     }
 
     onLeave(client) { this.state.players.delete(client.sessionId); }
 
     update(dt) {
+        this.state.serverTick = (this.state.serverTick + 1) % 1000000;
         const now = Date.now(), spacePlayers = [];
         for (const p of this.state.players.values()) {
             if (p.paintTimer > 0 && (p.paintTimer = Math.max(0, Number((p.paintTimer - dt).toFixed(2)))) === 0) p.paintColor = '';

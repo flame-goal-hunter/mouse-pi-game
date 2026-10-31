@@ -21,8 +21,9 @@ export class SpaceColyseusClient {
             localMotion: { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, homeAngle: 0, facing: 1, moving: false }
         });
         this._loadCachedHomes();
-        this._fetchServerHomes();
-        this._connect();
+        const boot = () => setTimeout(() => { this._connect(); this._fetchServerHomes(); }, 350);
+        if (typeof document !== 'undefined' && document.readyState !== 'complete') window.addEventListener('load', boot, { once: true });
+        else boot();
     }
 
     _loadCachedHomes() {
@@ -87,9 +88,12 @@ export class SpaceColyseusClient {
     _wireRoom() {
         const room = this.room;
         if (!room) return;
-        room.onStateChange((state) => {
-            this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt));
-        });
+        const applyState = (state) => {
+            if (state) this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt));
+        };
+        if (room.state) applyState(room.state);
+        room.onStateChange(applyState);
+        room.onStateChange.once?.(applyState);
         room.onMessage('saved_homes', (homes) => {
             if (Array.isArray(homes)) homes.forEach(h => this._saveCachedHome(h));
         });
