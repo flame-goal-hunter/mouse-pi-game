@@ -30,11 +30,12 @@ class SpaceAudioEngine {
 
     _bindUnlock() {
         if (typeof window === 'undefined') return;
-        const unlock = () => {
-            this._ensureCtx();
-            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
-        };
+        const unlock = () => { if (!document.hidden) { this._ensureCtx(); if (this.ctx?.state === 'suspended') this.ctx.resume().catch(() => {}); } };
         ['pointerdown', 'touchstart', 'keydown'].forEach(ev => window.addEventListener(ev, unlock, { passive: true }));
+        const syncVis = () => { if (!this.ctx) return; if (document.hidden) this.ctx.suspend().catch(() => {}); else if (this.mode !== 'off' && !this.isMuted()) this.ctx.resume().catch(() => {}); };
+        document.addEventListener('visibilitychange', syncVis);
+        ['pagehide', 'blur'].forEach(ev => window.addEventListener(ev, () => this.ctx?.suspend().catch(() => {})));
+        window.addEventListener('focus', syncVis);
     }
 
     _ensureCtx() {
@@ -115,7 +116,7 @@ class SpaceAudioEngine {
     }
 
     _tickMusic() {
-        if (this.mode === 'off' || this.isMuted() || !this.ctx || this.ctx.state !== 'running') return;
+        if (document.hidden || this.mode === 'off' || this.isMuted() || !this.ctx || this.ctx.state !== 'running') return;
         const s = this.stepIdx++;
         if (this.mode === 'space') {
             if (s % 8 === 0) {
