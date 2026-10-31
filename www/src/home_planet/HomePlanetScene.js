@@ -34,7 +34,7 @@ export class HomePlanetScene {
         el.id = 'homePlanetOverlay';
         el.innerHTML = `
             <style>
-                #homePlanetOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 9995; overflow: hidden; display: none; font-family: 'Nunito', sans-serif; touch-action: none; user-select: none; }
+                #homePlanetOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 9995; overflow: hidden; display: none; font-family: 'Nunito', sans-serif; touch-action: none; user-select: none; }
                 #homePlanetCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
                 .hp-hud-bar { position: fixed; top: max(12px, env(safe-area-inset-top, 12px)); left: max(16px, env(safe-area-inset-left, 16px)); right: max(16px, env(safe-area-inset-right, 16px)); display: flex; align-items: center; justify-content: space-between; gap: 8px; z-index: 9996; pointer-events: none; flex-wrap: wrap; }
                 .hp-pill { pointer-events: auto; background: rgba(15, 23, 42, 0.88); border: 2px solid #facc15; border-radius: 999px; padding: 7px 14px; color: #fef08a; font-weight: 900; font-size: clamp(11.5px, 2.4vw, 13.5px); box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
@@ -81,9 +81,14 @@ export class HomePlanetScene {
     }
 
     _resize() {
-        this.dpr = Math.min(2, window.devicePixelRatio || 1);
-        this.viewW = window.innerWidth; this.viewH = window.innerHeight;
-        this.canvas.width = Math.round(this.viewW * this.dpr); this.canvas.height = Math.round(this.viewH * this.dpr);
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const rect = this.canvas?.getBoundingClientRect?.();
+        const w = Math.max(1, Math.round(rect?.width || window.innerWidth || 800));
+        const h = Math.max(1, Math.round(rect?.height || window.innerHeight || 480));
+        if (w !== this.viewW || h !== this.viewH || dpr !== this.dpr) {
+            this.dpr = dpr; this.viewW = w; this.viewH = h;
+            this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
+        }
     }
 
     _openStyleEditor() {
@@ -128,6 +133,7 @@ export class HomePlanetScene {
         Object.assign(this.state, { playerAngle: -0.25, launchProgress: 0, launching: false, unloading: false, activeZone: null, flyingCheese: [] });
         this._updateHUD();
         this.overlay.style.display = 'block';
+        this._resize();
         SpaceAudio.setMode('home');
         this.running = true; this.lastTime = performance.now();
         const loop = (now) => {
@@ -156,6 +162,7 @@ export class HomePlanetScene {
     }
 
     _step(dt, timeSec) {
+        this._resize();
         const st = this.state;
         if (st.launching) {
             if ((st.launchProgress += dt * 1.15) >= 1) { const back = st.visitData; this.stop(); this.onTakeOff(back); return; }

@@ -51,7 +51,7 @@ export class SpaceHubScene {
         el.id = 'spaceHubOverlay';
         el.innerHTML = `
             <style>
-                #spaceHubOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 9990; overflow: hidden; display: none; touch-action: none; user-select: none; -webkit-user-select: none; font-family: 'Nunito', sans-serif; }
+                #spaceHubOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 9990; overflow: hidden; display: none; touch-action: none; user-select: none; -webkit-user-select: none; font-family: 'Nunito', sans-serif; }
                 #spaceHubCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
                 .sh-top-bar { position: fixed; top: max(10px, env(safe-area-inset-top, 10px)); left: max(14px, env(safe-area-inset-left, 14px)); right: max(14px, env(safe-area-inset-right, 14px)); display: flex; align-items: center; justify-content: space-between; gap: 8px; z-index: 9994; pointer-events: none; }
                 .sh-title-pill, .sh-gear-btn { pointer-events: auto; background: rgba(15, 23, 42, 0.88); border: 2px solid rgba(125, 211, 252, 0.55); border-radius: 999px; padding: 7px 14px; color: #f8fafc; font-weight: 900; font-size: clamp(11.5px, 2.4vw, 13.5px); display: flex; align-items: center; gap: 7px; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
@@ -105,9 +105,14 @@ export class SpaceHubScene {
 
     _updateCheeseHUD() { this.cheeseCounter.textContent = `🧀 Багажник: ${PlayerProfile.pocketCheese} (Склад: ${PlayerProfile.storedCheese})`; }
     _resize() {
-        this.dpr = Math.min(2, window.devicePixelRatio || 1);
-        this.viewW = window.innerWidth; this.viewH = window.innerHeight;
-        this.canvas.width = Math.round(this.viewW * this.dpr); this.canvas.height = Math.round(this.viewH * this.dpr);
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        const rect = this.canvas?.getBoundingClientRect?.();
+        const w = Math.max(1, Math.round(rect?.width || window.innerWidth || 800));
+        const h = Math.max(1, Math.round(rect?.height || window.innerHeight || 480));
+        if (w !== this.viewW || h !== this.viewH || dpr !== this.dpr) {
+            this.dpr = dpr; this.viewW = w; this.viewH = h;
+            this.canvas.width = Math.round(w * dpr); this.canvas.height = Math.round(h * dpr);
+        }
     }
 
     _handleLandTap() {
@@ -126,6 +131,7 @@ export class SpaceHubScene {
         PlayerProfile.setLocation('space'); SpaceNetwork.broadcastNow(); this._updateCheeseHUD();
         const ss = document.getElementById('startScreen'); if (ss) { ss.classList.remove('visible'); ss.style.display = 'none'; }
         this.overlay.style.display = 'block';
+        this._resize();
         this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
         SpaceAudio.setMode('space');
         this.running = true; this.lastTime = performance.now();
@@ -155,6 +161,7 @@ export class SpaceHubScene {
     }
 
     _step(dt, timeSec) {
+        this._resize();
         const inp = this.controls.getInput();
         const zoomDone = this.rocket.update(dt, inp);
         SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);

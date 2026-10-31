@@ -14,6 +14,7 @@ class AutoUpdaterService {
         this._buildToast();
         this.checkForUpdates(true);
 
+        setInterval(() => this.checkForUpdates(false), 12000);
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') this.checkForUpdates(false);
         });
@@ -107,6 +108,7 @@ class AutoUpdaterService {
             this.toastText.textContent = message;
             this.toast.classList.add('show');
         }
+        try { window.SpaceNetwork?.ws?.close?.(); } catch (_) {}
         try {
             if (window.caches && caches.keys) {
                 const keys = await caches.keys();

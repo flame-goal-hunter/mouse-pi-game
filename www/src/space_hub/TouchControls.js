@@ -75,13 +75,13 @@ export class TouchControls {
                     background: radial-gradient(circle at 30% 25%, #e879f9, #a855f7 70%, #581c87);
                     color: #fff; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 11px;
                     box-shadow: 0 8px 22px rgba(168, 85, 247, 0.55);
-                    display: ${this.onPaintTap ? 'flex' : 'none'}; flex-direction: column; align-items: center; justify-content: center;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
                     cursor: pointer; z-index: 9992; transition: transform 0.1s;
                 }
                 .sh-paint-btn:active { transform: scale(0.92); }
             </style>
             <div class="sh-joy-zone"><div class="sh-joy-knob"></div></div>
-            <button type="button" class="sh-paint-btn">
+            <button type="button" class="sh-paint-btn" style="display:${this.onPaintTap ? 'flex' : 'none'}">
                 <span style="font-size:20px;line-height:1">🎨</span>
                 <span>ПЛЮХ!</span>
             </button>
