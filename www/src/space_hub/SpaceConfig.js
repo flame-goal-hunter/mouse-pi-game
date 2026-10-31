@@ -49,7 +49,7 @@ export const SPACE_CONFIG = {
         ]
     },
     environment: {
-        asteroidCount: 34,
+        asteroidCount: 54,
         cometCount: 5,
         cheeseMagnetRadius: 155,
         cheeseCollectRadius: 36,

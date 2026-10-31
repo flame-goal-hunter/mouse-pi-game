@@ -86,21 +86,22 @@ class AutoUpdaterService {
             this.currentLabel = data.label || data.shortLabel || 'v1.05';
             this._updateBadges();
 
+            const urlVer = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('v') : null;
             const saved = localStorage.getItem(VERSION_STORAGE_KEY);
-            if (!saved) {
-                localStorage.setItem(VERSION_STORAGE_KEY, this.currentVersion);
+            if (!saved || urlVer === this.currentVersion) {
+                try { localStorage.setItem(VERSION_STORAGE_KEY, this.currentVersion); } catch (_) {}
                 return;
             }
             if (saved !== this.currentVersion) {
-                localStorage.setItem(VERSION_STORAGE_KEY, this.currentVersion);
-                await this.forceHardReload('Прилетело обновление галактики! 🚀', this.currentVersion);
+                try { localStorage.setItem(VERSION_STORAGE_KEY, this.currentVersion); } catch (_) {}
+                this.forceHardReload('Прилетело обновление галактики! 🚀', this.currentVersion);
             } else if (isInitialBoot && 'serviceWorker' in navigator) {
                 navigator.serviceWorker.getRegistration().then(r => r?.update()).catch(() => {});
             }
         } catch (_) {}
     }
 
-    async forceHardReload(message = 'Прилетело обновление галактики! 🚀', newVer = Date.now()) {
+    forceHardReload(message = 'Прилетело обновление галактики! 🚀', newVer = Date.now()) {
         if (this.updating) return;
         this.updating = true;
         try { navigator.vibrate?.(20); } catch (_) {}
@@ -108,22 +109,24 @@ class AutoUpdaterService {
             this.toastText.textContent = message;
             this.toast.classList.add('show');
         }
-        try { window.SpaceNetwork?.ws?.close?.(); } catch (_) {}
+        setTimeout(() => {
+            if (this.toast) this.toast.classList.remove('show');
+            this.updating = false;
+        }, 2200);
+        setTimeout(() => {
+            window.location.replace(`${window.location.pathname}?v=${encodeURIComponent(newVer)}`);
+        }, 650);
+        try { window.SpaceNetwork?.room?.leave?.(); } catch (_) {}
         try {
             if (window.caches && caches.keys) {
-                const keys = await caches.keys();
-                await Promise.all(keys.map(k => caches.delete(k)));
+                caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {});
             }
         } catch (_) {}
         try {
             if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                await Promise.all(regs.map(r => r.unregister()));
+                navigator.serviceWorker.getRegistrations().then(regs => Promise.all(regs.map(r => r.unregister()))).catch(() => {});
             }
         } catch (_) {}
-        setTimeout(() => {
-            window.location.replace(`${window.location.pathname}?v=${encodeURIComponent(newVer)}`);
-        }, 1000);
     }
 }
 

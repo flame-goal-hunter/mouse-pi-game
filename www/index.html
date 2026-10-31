@@ -11941,8 +11941,11 @@
     })();
     </script>
     <script type="module">
-        import { SpaceHubScene } from './src/space_hub/SpaceHubScene.js';
-        import { GameTopBar } from './src/ui/GameTopBar.js';
+        const _v = Date.now();
+        const [{ SpaceHubScene }, { GameTopBar }] = await Promise.all([
+            import('./src/space_hub/SpaceHubScene.js?v=' + _v),
+            import('./src/ui/GameTopBar.js?v=' + _v)
+        ]);
 
         window.__applyGlobalMute = (muted) => {
             try {
