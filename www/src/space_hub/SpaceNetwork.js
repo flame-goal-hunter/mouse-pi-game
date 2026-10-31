@@ -1,5 +1,5 @@
 // ============================================================================
-// SpaceNetwork.js — Реэкспорт единого клиента SpaceNetworkClient
+// SpaceNetwork.js — Реэкспорт единого клиента SpaceColyseusClient (Colyseus)
 // ============================================================================
 
-export { SpaceNetworkClient, SpaceNetwork } from './SpaceNetworkClient.js';
+export { SpaceColyseusClient, SpaceNetwork } from './SpaceColyseusClient.js';

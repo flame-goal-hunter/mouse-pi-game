@@ -6,7 +6,7 @@
 import { SPACE_CONFIG } from './SpaceConfig.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
-import { SpaceNetwork } from './SpaceNetworkClient.js';
+import { SpaceNetwork } from './SpaceNetwork.js';
 
 export class SpaceEnvironment {
     constructor() {
@@ -101,15 +101,10 @@ export class SpaceEnvironment {
         this.onCheeseCollected = onCheeseCollected;
         const { halfWidth: hw, halfHeight: hh } = SPACE_CONFIG.world;
         const envCfg = SPACE_CONFIG.environment;
-        const srvSnap = SpaceNetwork.interpolator.getLatestWorldEntities();
+        const srvCheese = SpaceNetwork.smoother?.smoothCheese;
 
         for (const a of this.asteroids) {
             a.x += a.vx * dt; a.y += a.vy * dt; a.rot += a.rotSpd * dt;
-            const sa = srvSnap?.asteroids?.get(a.id);
-            if (sa) {
-                if (Math.hypot(sa.x - a.x, sa.y - a.y) > 300) { a.x = sa.x; a.y = sa.y; }
-                else { a.x += (sa.x - a.x) * Math.min(1, dt * 8); a.y += (sa.y - a.y) * Math.min(1, dt * 8); }
-            }
             if (a.hitFlash > 0) a.hitFlash = Math.max(0, a.hitFlash - dt * 4);
             if (a.x < -hw) a.x = hw; else if (a.x > hw) a.x = -hw;
             if (a.y < -hh) a.y = hh; else if (a.y > hh) a.y = -hh;
@@ -133,8 +128,8 @@ export class SpaceEnvironment {
         }
 
         for (const ch of this.cheeseItems) {
-            if (srvSnap?.spaceCheese) {
-                const sc = srvSnap.spaceCheese.get(ch.id);
+            if (SpaceNetwork.connected && srvCheese && srvCheese.size > 0) {
+                const sc = srvCheese.get(ch.id);
                 if (!sc) { ch.respawnTimer = Math.max(0.5, ch.respawnTimer); continue; }
                 ch.respawnTimer = 0;
                 ch.x += (sc.x - ch.x) * Math.min(1, dt * 10);

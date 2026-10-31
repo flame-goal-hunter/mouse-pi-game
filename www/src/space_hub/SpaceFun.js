@@ -3,7 +3,7 @@
 // и упругие бампер-столкновения ракет (синхронизация с авторитетным сервером)
 // ============================================================================
 
-import { SpaceNetwork } from './SpaceNetworkClient.js';
+import { SpaceNetwork } from './SpaceNetwork.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
 
@@ -34,7 +34,7 @@ export class SpaceFun {
         SpaceAudio.playPaintShoot();
         const sx = r.x + Math.cos(r.angle) * 30, sy = r.y + Math.sin(r.angle) * 30;
         const shot = { ownerId: PlayerProfile.playerId, x: Math.round(sx), y: Math.round(sy), vx: Math.round(r.vx * 0.35 + Math.cos(r.angle) * 690), vy: Math.round(r.vy * 0.35 + Math.sin(r.angle) * 690), color, emoji, life: 1.35 };
-        if (!SpaceNetwork.interpolator.hasServerWorld) this._spawnShot(shot);
+        if (!SpaceNetwork.connected) this._spawnShot(shot);
         SpaceNetwork.shootPaint(shot);
     }
 
@@ -92,13 +92,14 @@ export class SpaceFun {
         if (this.shakeTime > 0) this.shakeTime = Math.max(0, this.shakeTime - dt);
         if (this.goalBannerTimer > 0) this.goalBannerTimer = Math.max(0, this.goalBannerTimer - dt);
         const b = this.ball, r = this.rocket;
-        const srvBall = SpaceNetwork.interpolator.getInterpolatedBall();
-        if (srvBall) {
+        const srvBall = SpaceNetwork.smoother?.smoothBall;
+        if (SpaceNetwork.connected && srvBall) {
             if (srvBall.score) this.score = srvBall.score;
-            const k = 1 - Math.exp(-16 * dt);
-            if (Math.hypot(srvBall.x - b.x, srvBall.y - b.y) > 220) { b.x = srvBall.x; b.y = srvBall.y; }
-            else { b.x += (srvBall.x - b.x) * k; b.y += (srvBall.y - b.y) * k; }
-            b.vx = srvBall.vx; b.vy = srvBall.vy; b.angle = srvBall.angle;
+            b.x = srvBall.x;
+            b.y = srvBall.y;
+            b.vx = srvBall.vx;
+            b.vy = srvBall.vy;
+            b.angle = srvBall.angle;
         } else {
             b.x += b.vx * dt; b.y += b.vy * dt; b.angle += Math.hypot(b.vx, b.vy) * 0.012 * dt;
             const drag = Math.pow(0.985, dt * 60); b.vx *= drag; b.vy *= drag;
@@ -147,7 +148,7 @@ export class SpaceFun {
         ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        const netProjectiles = SpaceNetwork.interpolator.getInterpolatedProjectiles();
+        const netProjectiles = SpaceNetwork.smoother?.smoothProjectiles || [];
         const allShots = netProjectiles.length ? netProjectiles : this.shots;
         for (const s of allShots) { ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
         for (const f of this.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * f.life, 0, Math.PI * 2); ctx.fill(); }
