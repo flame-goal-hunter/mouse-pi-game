@@ -93,9 +93,11 @@ app.post('/api/invite', async (req, res) => {
 
 app.post('/api/space-sync', (req, res) => {
     if (activeSpaceRoom) {
+        const sid = req.body?.player?.sessionId || '';
         if (req.body?.player) activeSpaceRoom.syncExternalPlayer(req.body.player);
         if (Array.isArray(req.body?.peers)) req.body.peers.forEach(p => activeSpaceRoom.syncExternalPlayer(p));
-        return res.json({ ok: true, players: activeSpaceRoom.getSyncSnapshot() });
+        if (Array.isArray(req.body?.actions)) req.body.actions.forEach(a => activeSpaceRoom.handleAction(sid, a.type, a.data));
+        return res.json({ ok: true, ...activeSpaceRoom.getFullSyncState(sid, Number(req.body?.fxSeq) || 0) });
     }
     res.json({ ok: true, players: [] });
 });
@@ -104,7 +106,7 @@ const httpServer = createServer(app);
 const wsTransport = new WebSocketTransport({ server: httpServer });
 const origOnConn = wsTransport.onConnection.bind(wsTransport);
 wsTransport.wss.removeAllListeners('connection');
-wsTransport.wss.on('connection', async (rawClient, req) => {
+wsTransport.wss.on('connection', (rawClient, req) => {
     try {
         const upgradeReq = req || rawClient.upgradeReq;
         const parsedURL = new URL(`ws://server/${upgradeReq.url}`);
@@ -113,10 +115,8 @@ wsTransport.wss.on('connection', async (rawClient, req) => {
         const roomId = m && m[2];
         const room = roomId && matchMaker.getRoomById(roomId);
         if ((!room || !room.hasReservedSeat(sessionId)) && sessionId && activeSpaceRoom) {
-            await activeSpaceRoom._reserveSeat(sessionId, {});
-            if (roomId && roomId !== activeSpaceRoom.roomId) {
-                upgradeReq.url = upgradeReq.url.replace(`/${roomId}`, `/${activeSpaceRoom.roomId}`);
-            }
+            activeSpaceRoom.reservedSeats[sessionId] = [{}, undefined, false, false];
+            if (m) upgradeReq.url = upgradeReq.url.replace(`/${m[1]}/${m[2]}`, `/${matchMaker.processId}/${activeSpaceRoom.roomId}`);
         }
     } catch (_) {}
     return origOnConn(rawClient, req);

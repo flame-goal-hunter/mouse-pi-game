@@ -19,7 +19,8 @@ export class SpaceColyseusClient {
         Object.assign(this, {
             peers: new Map(), cachedHomes: new Map(), smoother: new SpaceSmoothRender(),
             client: null, room: null, connected: false, connecting: false, tabSid,
-            lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastStatusSent: '', onFunEvent: null, onFxEvent: null,
+            lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastFxSeq: 0, pendingActions: [],
+            lastStatusSent: '', onFunEvent: null, onFxEvent: null,
             onServerImpulse: null, onInviteEvent: null, pushSubscription: null,
             localMotion: { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, homeAngle: 0, facing: 1, moving: false }
         });
@@ -108,8 +109,12 @@ export class SpaceColyseusClient {
             this.connected = true; this.connecting = false;
             this._wireRoom();
             this.broadcastNow();
-        } catch (_) {
+        } catch (err) {
             this.connected = false; this.connecting = false;
+            if (!this._wsErrLogged) {
+                this._wsErrLogged = true;
+                SpaceNetDebug._pushAnomaly('WS_FALLBACK', `Colyseus WS joinOrCreate failed (${err?.message || err || 'blocked'}), using fast HTTP sync`);
+            }
             setTimeout(() => this._connect(), 2500);
         }
     }
@@ -132,21 +137,23 @@ export class SpaceColyseusClient {
         room.onMessage('bumper_impulse', (imp) => {
             if (imp && this.onServerImpulse) this.onServerImpulse(imp);
         });
-        room.onMessage('fx_event', (ev) => {
-            if (!ev) return;
-            if (ev.type === 'invite') {
-                if (ev.toId === PlayerProfile.playerId && this.onInviteEvent) this.onInviteEvent(ev);
-                return;
-            }
-            if (ev.type === 'horn' && ev.playerId && ev.playerId !== PlayerProfile.playerId) {
-                this.peers.get(ev.playerId)?.triggerHorn(ev.emoji);
-            }
-            if (this.onFxEvent) this.onFxEvent(ev);
-        });
+        room.onMessage('fx_event', (ev) => this._handleFxEvent(ev));
         room.onLeave(() => {
             this.connected = false; this.room = null;
             setTimeout(() => this._connect(), 2000);
         });
+    }
+
+    _handleFxEvent(ev) {
+        if (!ev) return;
+        if (ev.type === 'invite') {
+            if (ev.toId === PlayerProfile.playerId && this.onInviteEvent) this.onInviteEvent(ev);
+            return;
+        }
+        if (ev.type === 'horn' && ev.playerId && ev.playerId !== PlayerProfile.playerId) {
+            this.peers.get(ev.playerId)?.triggerHorn(ev.emoji);
+        }
+        if (this.onFxEvent) this.onFxEvent(ev);
     }
 
     broadcastNow() {
@@ -159,21 +166,33 @@ export class SpaceColyseusClient {
     }
 
     async _syncCrossContainer() {
-        if (this.syncBusy || typeof fetch === 'undefined') return;
-        this.syncBusy = true;
+        const now = performance.now();
+        if ((this.syncBusy && now - (this.syncStartedAt || 0) < 450) || typeof fetch === 'undefined') return;
+        this.syncBusy = true; this.syncStartedAt = now;
         try {
+            if (!this.connected) SpaceNetDebug.onSend();
+            const actions = this.pendingActions.splice(0, 12);
             const res = await fetch('/api/space-sync', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player: this._buildLocalPkt() })
+                body: JSON.stringify({ player: this._buildLocalPkt(), actions, fxSeq: this.lastFxSeq })
             });
             if (res.ok) {
                 const data = await res.json();
+                if (!this.connected) SpaceNetDebug.onPatch('http_sync');
+                if (typeof data?.fxSeq === 'number') {
+                    if (this.lastFxSeq > 0 && Array.isArray(data.fxEvents)) data.fxEvents.forEach(ev => this._handleFxEvent(ev));
+                    this.lastFxSeq = data.fxSeq;
+                }
+                if (data?.impulse && this.onServerImpulse) this.onServerImpulse(data.impulse);
                 if (Array.isArray(data?.players)) {
                     const missing = [];
                     for (const p of data.players) {
                         if (!p || p.sessionId === this._mySid() || p.sessionId === this.tabSid || p.tabSid === this.tabSid) continue;
-                        this.smoother.onExternalPeer(p, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid);
+                        this.smoother.onExternalPeer(p, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid, true);
                         if (this.connected && this.room && !this.room.state?.players?.has?.(p.sessionId)) missing.push(p);
+                    }
+                    if (!this.connected) {
+                        this.smoother.commitExternalSnapshot(this.peers, data.ball, data.projectiles, data.spaceCheese);
                     }
                     if (missing.length && this.connected && this.room) {
                         try { this.room.send('peer_bridge', missing); } catch (_) {}
@@ -183,9 +202,15 @@ export class SpaceColyseusClient {
         } catch (_) {} finally { this.syncBusy = false; }
     }
 
+    sendAction(type, data) {
+        if (this.connected && this.room) {
+            try { this.room.send(type, data); return; } catch (_) {}
+        }
+        this.pendingActions.push({ type, data });
+    }
+
     shootPaint(shot) {
-        if (!this.connected || !this.room) return;
-        try { this.room.send('shoot_paint', shot); } catch (_) {}
+        this.sendAction('shoot_paint', shot);
     }
 
     step(dt, motionPatch) {
@@ -209,7 +234,8 @@ export class SpaceColyseusClient {
                 if (curStatus !== this.lastStatusSent) { this.lastStatusSent = curStatus; this.broadcastNow(); }
             }
         }
-        if (now - this.lastSyncAt >= 280) { this.lastSyncAt = now; this._syncCrossContainer(); }
+        const syncInterval = this.connected ? 280 : 65;
+        if (now - this.lastSyncAt >= syncInterval) { this.lastSyncAt = now; this._syncCrossContainer(); }
         this.smoother.update60Fps(dt, this.peers);
     }
 

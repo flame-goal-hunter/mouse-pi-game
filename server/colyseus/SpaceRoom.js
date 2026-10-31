@@ -23,7 +23,7 @@ export class SpaceRoom extends Room {
         this.maxClients = 64;
         this.setState(new SpaceState());
         this.setPatchRate(50);
-        Object.assign(this, { projMeta: new Map(), cheeseMeta: new Map(), bumpCooldowns: new Map(), kickCooldowns: new Map(), externalSeen: new Map(), nextProjId: 1 });
+        Object.assign(this, { projMeta: new Map(), cheeseMeta: new Map(), bumpCooldowns: new Map(), kickCooldowns: new Map(), externalSeen: new Map(), recentFx: [], fxSeq: 0, pendingImpulses: new Map(), nextProjId: 1 });
         this._initCheese();
         this._registerMessages();
         this.setSimulationInterval((dtMs) => this.update(dtMs / 1000), 33.3);
@@ -78,57 +78,61 @@ export class SpaceRoom extends Room {
             if (Array.isArray(list)) list.forEach(pkt => this.syncExternalPlayer(pkt));
         });
 
-        this.onMessage('shoot_paint', (client, d) => {
-            const p = this.state.players.get(client.sessionId);
-            if (!p || !d) return;
+        this.onMessage('shoot_paint', (client, d) => this.handleAction(client.sessionId, 'shoot_paint', d));
+        this.onMessage('hit_asteroid', (client, d) => this.handleAction(client.sessionId, 'hit_asteroid', d));
+        this.onMessage('hit_player', (client, d) => this.handleAction(client.sessionId, 'hit_player', d));
+        this.onMessage('bumper_hit', (client, d) => this.handleAction(client.sessionId, 'bumper_hit', d));
+    }
+
+    _emitFx(ev) {
+        this.broadcast('fx_event', ev);
+        this.recentFx.push({ ...ev, seq: ++this.fxSeq, ts: Date.now() });
+        if (this.recentFx.length > 30) this.recentFx.shift();
+    }
+
+    handleAction(sessionId, type, d) {
+        if (!d || !type) return;
+        if (type === 'shoot_paint') {
+            const p = this.state.players.get(sessionId);
+            if (!p) return;
             const id = String(this.nextProjId++), pr = new ProjectileState();
-            pr.id = id; pr.ownerId = client.sessionId;
+            pr.id = id; pr.ownerId = sessionId;
             pr.x = Math.round(Number(d.x) || p.x); pr.y = Math.round(Number(d.y) || p.y);
             pr.vx = Math.round(Number(d.vx) || 0); pr.vy = Math.round(Number(d.vy) || 0);
             pr.color = d.color || '#f472b6';
             this.state.projectiles.set(id, pr);
-            this.projMeta.set(id, { ttl: 1.35, sessionId: client.sessionId });
-            this.broadcast('fx_event', { type: 'horn', playerId: p.id, sessionId: client.sessionId, emoji: d.emoji || '😜', x: pr.x, y: pr.y });
-        });
-
-        this.onMessage('hit_asteroid', (_client, d) => {
-            const id = String(d?.id || '');
-            const pr = this.state.projectiles.get(id);
+            this.projMeta.set(id, { ttl: 1.35, sessionId });
+            this._emitFx({ type: 'horn', playerId: p.id, sessionId, emoji: d.emoji || '😜', x: pr.x, y: pr.y });
+        } else if (type === 'hit_asteroid') {
+            const id = String(d.id || ''), pr = this.state.projectiles.get(id);
             if (!pr) return;
-            this.state.projectiles.delete(id);
-            this.projMeta.delete(id);
-            this.broadcast('fx_event', { type: 'paint_splat', x: Math.round(Number(d.x) || pr.x), y: Math.round(Number(d.y) || pr.y), color: pr.color });
-        });
-
-        this.onMessage('hit_player', (client, d) => {
-            const id = String(d?.id || '');
-            const pr = this.state.projectiles.get(id);
+            this.state.projectiles.delete(id); this.projMeta.delete(id);
+            this._emitFx({ type: 'paint_splat', x: Math.round(Number(d.x) || pr.x), y: Math.round(Number(d.y) || pr.y), color: pr.color });
+        } else if (type === 'hit_player') {
+            const id = String(d.id || ''), pr = this.state.projectiles.get(id);
             if (pr) { this.state.projectiles.delete(id); this.projMeta.delete(id); }
-            const target = (d?.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d?.targetId && p.sessionId !== client.sessionId);
-            const color = d?.color || pr?.color || '#f472b6';
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId && p.sessionId !== sessionId);
+            const color = d.color || pr?.color || '#f472b6';
             if (target) { target.paintColor = color; target.paintTimer = 6.0; }
-            this.broadcast('fx_event', {
+            this._emitFx({
                 type: 'paint_splat',
-                x: Math.round(Number(d?.x) || target?.x || pr?.x || 0),
-                y: Math.round(Number(d?.y) || target?.y || pr?.y || 0),
+                x: Math.round(Number(d.x) || target?.x || pr?.x || 0),
+                y: Math.round(Number(d.y) || target?.y || pr?.y || 0),
                 color,
-                targetId: target?.id || d?.targetId || '',
-                targetSid: target?.sessionId || d?.targetSid || ''
+                targetId: target?.id || d.targetId || '',
+                targetSid: target?.sessionId || d.targetSid || ''
             });
-        });
-
-        this.onMessage('bumper_hit', (client, d) => {
-            if (!d) return;
+        } else if (type === 'bumper_hit') {
             const now = Date.now();
-            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId && p.sessionId !== client.sessionId);
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId && p.sessionId !== sessionId);
             if (target && now - (this.bumpCooldowns.get(target.sessionId) || 0) > 220) {
                 this.bumpCooldowns.set(target.sessionId, now);
-                this.bumpCooldowns.set(client.sessionId, now);
+                this.bumpCooldowns.set(sessionId, now);
                 const nx = Number(d.nx) || 0, ny = Number(d.ny) || 0;
                 this._sendImpulse(target, target.vx * 0.4 + nx * 320, target.vy * 0.4 + ny * 320, target.x + nx * 24, target.y + ny * 24);
-                this.broadcast('fx_event', { type: 'bumper_hit', x: Math.round(Number(d.x) || target.x), y: Math.round(Number(d.y) || target.y) });
+                this._emitFx({ type: 'bumper_hit', x: Math.round(Number(d.x) || target.x), y: Math.round(Number(d.y) || target.y) });
             }
-        });
+        }
     }
 
     onJoin(client, opts = {}) {
@@ -182,6 +186,23 @@ export class SpaceRoom extends Room {
         return out;
     }
 
+    getFullSyncState(mySid = '', sinceFxSeq = 0) {
+        const b = this.state.ball, projs = [], cheese = [];
+        this.state.projectiles.forEach((pr, id) => projs.push({ id, ownerId: pr.ownerId, x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, color: pr.color }));
+        this.state.spaceCheese.forEach((ch, id) => cheese.push({ id: Number(id), x: ch.x, y: ch.y }));
+        const imp = mySid ? (this.pendingImpulses.get(mySid) || null) : null;
+        if (mySid && imp) this.pendingImpulses.delete(mySid);
+        return {
+            players: this.getSyncSnapshot(),
+            ball: b ? { x: b.x, y: b.y, vx: b.vx, vy: b.vy, angle: b.angle, scoreBlue: b.scoreBlue, scorePink: b.scorePink } : null,
+            projectiles: projs,
+            spaceCheese: cheese,
+            fxEvents: sinceFxSeq > 0 ? this.recentFx.filter(e => e.seq > sinceFxSeq) : [],
+            fxSeq: this.fxSeq,
+            impulse: imp
+        };
+    }
+
     update(dt) {
         this.state.serverTick = (this.state.serverTick + 1) % 1000000;
         const now = Date.now(), spacePlayers = [];
@@ -202,7 +223,7 @@ export class SpaceRoom extends Room {
                     const nx = dx / d, ny = dy / d, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
                     this._sendImpulse(a, a.vx * 0.4 + nx * 320, a.vy * 0.4 + ny * 320, mx + nx * 28, my + ny * 28);
                     this._sendImpulse(b, b.vx * 0.4 - nx * 320, b.vy * 0.4 - ny * 320, mx - nx * 28, my - ny * 28);
-                    this.broadcast('fx_event', { type: 'bumper_hit', x: Math.round(mx), y: Math.round(my) });
+                    this._emitFx({ type: 'bumper_hit', x: Math.round(mx), y: Math.round(my) });
                 }
             }
         }
@@ -218,7 +239,7 @@ export class SpaceRoom extends Room {
                 const nx = dx / d, ny = dy / d, boost = p.isTurbo ? 1.55 : 1.25, kick = p.isTurbo ? 360 : 230;
                 b.vx = Math.round(p.vx * boost + nx * kick); b.vy = Math.round(p.vy * boost + ny * kick);
                 b.x = Math.round(p.x + nx * (FIELD.ballR + 28)); b.y = Math.round(p.y + ny * (FIELD.ballR + 28));
-                this.broadcast('fx_event', { type: 'bumper_hit', x: Math.round(b.x - nx * FIELD.ballR), y: Math.round(b.y - ny * FIELD.ballR) });
+                this._emitFx({ type: 'bumper_hit', x: Math.round(b.x - nx * FIELD.ballR), y: Math.round(b.y - ny * FIELD.ballR) });
             }
         }
 
@@ -235,11 +256,11 @@ export class SpaceRoom extends Room {
             let hit = false;
             if (Math.hypot(pr.x - b.x, pr.y - b.y) < FIELD.ballR + 10) {
                 b.vx += pr.vx * 0.45; b.vy += pr.vy * 0.45; hit = true;
-                this.broadcast('fx_event', { type: 'paint_splat', x: pr.x, y: pr.y, color: pr.color });
+                this._emitFx({ type: 'paint_splat', x: pr.x, y: pr.y, color: pr.color });
             }
             for (const p of spacePlayers) if (!hit && p.sessionId !== meta.sessionId && p.id !== pr.ownerId && Math.hypot(pr.x - p.x, pr.y - p.y) < 36) {
                 p.paintColor = pr.color; p.paintTimer = 6.0; hit = true;
-                this.broadcast('fx_event', { type: 'paint_splat', x: p.x, y: p.y, color: pr.color, targetId: p.id, targetSid: p.sessionId });
+                this._emitFx({ type: 'paint_splat', x: p.x, y: p.y, color: pr.color, targetId: p.id, targetSid: p.sessionId });
             }
             if (hit || meta.ttl <= 0) { this.state.projectiles.delete(id); this.projMeta.delete(id); }
         }
@@ -256,7 +277,7 @@ export class SpaceRoom extends Room {
             if (!ch) continue;
             for (const p of spacePlayers) if (Math.hypot(p.x - ch.x, p.y - ch.y) < 38) {
                 meta.respawn = 14; this.state.spaceCheese.delete(id);
-                this.broadcast('fx_event', { type: 'cheese_picked', id: Number(id), byPlayerId: p.id, x: ch.x, y: ch.y });
+                this._emitFx({ type: 'cheese_picked', id: Number(id), byPlayerId: p.id, x: ch.x, y: ch.y });
                 break;
             }
         }
@@ -264,14 +285,16 @@ export class SpaceRoom extends Room {
 
     _sendImpulse(p, vx, vy, x, y) {
         p.vx = Math.round(vx); p.vy = Math.round(vy); p.x = Math.round(x); p.y = Math.round(y);
+        const imp = { vx: p.vx, vy: p.vy, x: p.x, y: p.y };
+        this.pendingImpulses.set(p.sessionId, imp);
         const client = this.clients.find(c => c.sessionId === p.sessionId);
-        if (client) client.send('bumper_impulse', { vx: p.vx, vy: p.vy, x: p.x, y: p.y });
+        if (client) client.send('bumper_impulse', imp);
     }
 
     _goal(team) {
         const b = this.state.ball;
         if (team === 'blue') b.scoreBlue += 1; else b.scorePink += 1;
         b.x = FIELD.cx; b.y = FIELD.cy; b.vx = 0; b.vy = 0;
-        this.broadcast('fx_event', { type: 'goal', team, score: { blue: b.scoreBlue, pink: b.scorePink }, x: FIELD.cx, y: FIELD.cy });
+        this._emitFx({ type: 'goal', team, score: { blue: b.scoreBlue, pink: b.scorePink }, x: FIELD.cx, y: FIELD.cy });
     }
 }

@@ -98,7 +98,7 @@ export class SpaceFun {
         if (this.goalBannerTimer > 0) this.goalBannerTimer = Math.max(0, this.goalBannerTimer - dt);
         const b = this.ball, r = this.rocket;
         const srvBall = SpaceNetwork.smoother?.smoothBall;
-        if (SpaceNetwork.connected && srvBall) {
+        if (srvBall) {
             if (srvBall.score) this.score = srvBall.score;
             b.x = srvBall.x;
             b.y = srvBall.y;
@@ -137,7 +137,7 @@ export class SpaceFun {
                 const nx = dx / d, ny = dy / d, mx = (r.x + px) / 2, my = (r.y + py) / 2;
                 r.bounceOff(nx, ny, 310); this.shakeTime = 0.22; SpaceAudio.playBumperBounce();
                 this._spawnSplat(mx, my, '#fde047', 14, false);
-                try { SpaceNetwork.room?.send('bumper_hit', { targetSid: p.sessionId, targetId: p.playerId, nx: -nx, ny: -ny, x: Math.round(mx), y: Math.round(my) }); } catch (_) {}
+                SpaceNetwork.sendAction('bumper_hit', { targetSid: p.sessionId, targetId: p.playerId, nx: -nx, ny: -ny, x: Math.round(mx), y: Math.round(my) });
             }
         }
 
@@ -147,7 +147,7 @@ export class SpaceFun {
             const s = netProjs[i];
             if (s.ownerId !== mySid && Math.hypot(s.x - r.x, s.y - r.y) < 36) {
                 this._applyPaintToRocket(PlayerProfile.playerId, s.color, r.x, r.y, mySid);
-                try { SpaceNetwork.room?.send('hit_player', { id: s.id, targetSid: mySid, targetId: PlayerProfile.playerId, color: s.color, x: Math.round(r.x), y: Math.round(r.y) }); } catch (_) {}
+                SpaceNetwork.sendAction('hit_player', { id: s.id, targetSid: mySid, targetId: PlayerProfile.playerId, color: s.color, x: Math.round(r.x), y: Math.round(r.y) });
                 netProjs.splice(i, 1);
                 continue;
             }
@@ -155,14 +155,14 @@ export class SpaceFun {
             if (hitPeer) {
                 const hx = hitPeer.renderX ?? hitPeer.x, hy = hitPeer.renderY ?? hitPeer.y;
                 this._applyPaintToRocket(hitPeer.playerId, s.color, hx, hy, hitPeer.sessionId);
-                try { SpaceNetwork.room?.send('hit_player', { id: s.id, targetSid: hitPeer.sessionId, targetId: hitPeer.playerId, color: s.color, x: Math.round(hx), y: Math.round(hy) }); } catch (_) {}
+                SpaceNetwork.sendAction('hit_player', { id: s.id, targetSid: hitPeer.sessionId, targetId: hitPeer.playerId, color: s.color, x: Math.round(hx), y: Math.round(hy) });
                 netProjs.splice(i, 1);
                 continue;
             }
             const hitAst = this.env?.asteroids?.find(a => Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8);
             if (hitAst) {
                 hitAst.hitFlash = 1;
-                try { SpaceNetwork.room?.send('hit_asteroid', { id: s.id, x: s.x, y: s.y }); } catch (_) {}
+                SpaceNetwork.sendAction('hit_asteroid', { id: s.id, x: s.x, y: s.y });
                 netProjs.splice(i, 1);
             }
         }

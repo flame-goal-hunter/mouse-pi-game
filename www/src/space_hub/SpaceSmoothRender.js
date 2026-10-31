@@ -74,7 +74,7 @@ export class SpaceSmoothRender {
         for (const [pid, peer] of Array.from(peersMap.entries())) {
             if (!activePlayerIds.has(pid)) {
                 if (peer.isExternal && Date.now() - (peer.lastSeen || 0) < 6000) {
-                    entities.push({ id: `p_${pid}`, x: Number(peer.targetX) || 0, y: Number(peer.targetY) || 0, angle: Number(peer.targetAngle) || 0 });
+                    entities.push({ id: `p_${pid}`, x: Number(peer.rawX ?? peer.targetX) || 0, y: Number(peer.rawY ?? peer.targetY) || 0, angle: Number(peer.rawAngle ?? peer.targetAngle) || 0 });
                 } else {
                     peersMap.delete(pid);
                 }
@@ -124,12 +124,12 @@ export class SpaceSmoothRender {
         }
     }
 
-    onExternalPeer(pkt, mySessionId, peersMap, onSaveHome, isColyseusConnected = false, myTabSid = '') {
+    onExternalPeer(pkt, mySessionId, peersMap, onSaveHome, isColyseusConnected = false, myTabSid = '', deferSnapshot = false) {
         if (!pkt || (pkt.sessionId && (pkt.sessionId === mySessionId || pkt.sessionId === myTabSid)) || (myTabSid && pkt.tabSid === myTabSid)) return;
         const rawId = pkt.playerId || pkt.sessionId;
         if (!rawId) return;
         const sid = pkt.sessionId || rawId;
-        const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${ String(sid).slice(0, 4)}` : rawId;
+        const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${String(sid).slice(0, 4)}` : rawId;
         let peer = peersMap.get(pid);
         if (peer && !peer.isExternal && isColyseusConnected) return;
         const fullPkt = {
@@ -142,17 +142,65 @@ export class SpaceSmoothRender {
         else peer.applyPacket(fullPkt);
         peer.rawX = Number(pkt.x) || 0;
         peer.rawY = Number(pkt.y) || 0;
+        peer.rawAngle = Number(pkt.angle) || 0;
         peer.isExternal = true;
         peer.sessionId = sid;
         if (onSaveHome) onSaveHome(fullPkt);
-        if (!isColyseusConnected) {
-            const ents = [];
-            for (const [k, pr] of peersMap) ents.push({ id: `p_${k}`, x: Number(pr.targetX) || 0, y: Number(pr.targetY) || 0, angle: Number(pr.targetAngle) || 0 });
-            if (ents.length > 0) this.SI.addSnapshot(this.SI.snapshot.create(ents));
+        if (!isColyseusConnected && !deferSnapshot) {
+            this.commitExternalSnapshot(peersMap);
         }
     }
 
+    commitExternalSnapshot(peersMap, ballState = null, projectilesList = null, cheeseList = null) {
+        const ents = [];
+        for (const [k, pr] of peersMap) {
+            if (Date.now() - (pr.lastSeen || 0) > 6000) { peersMap.delete(k); continue; }
+            ents.push({ id: `p_${k}`, x: Number(pr.rawX ?? pr.targetX) || 0, y: Number(pr.rawY ?? pr.targetY) || 0, angle: Number(pr.rawAngle ?? pr.targetAngle) || 0 });
+        }
+        if (ballState) {
+            const rawBx = Number.isFinite(Number(ballState.x)) ? Number(ballState.x) : 0;
+            const rawBy = Number.isFinite(Number(ballState.y)) ? Number(ballState.y) : 110;
+            ents.push({ id: 'ball', x: rawBx, y: rawBy, angle: Number(ballState.angle) || 0 });
+            if (!this.smoothBall) {
+                this.smoothBall = { x: rawBx, y: rawBy, rawX: rawBx, rawY: rawBy, vx: ballState.vx || 0, vy: ballState.vy || 0, angle: ballState.angle || 0, score: { blue: ballState.scoreBlue || 0, pink: ballState.scorePink || 0 } };
+            } else {
+                this.smoothBall.rawX = rawBx; this.smoothBall.rawY = rawBy;
+                this.smoothBall.vx = ballState.vx || 0; this.smoothBall.vy = ballState.vy || 0;
+                this.smoothBall.score = { blue: ballState.scoreBlue || 0, pink: ballState.scorePink || 0 };
+            }
+        }
+        if (Array.isArray(projectilesList)) {
+            const projs = [];
+            for (const pr of projectilesList) {
+                ents.push({ id: `pr_${pr.id}`, x: Number(pr.x) || 0, y: Number(pr.y) || 0, angle: 0 });
+                projs.push({ id: pr.id, ownerId: pr.ownerId, x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, color: pr.color || '#f472b6' });
+            }
+            this.smoothProjectiles = projs;
+        }
+        if (Array.isArray(cheeseList)) {
+            const cMap = new Map();
+            for (const ch of cheeseList) cMap.set(Number(ch.id), { x: ch.x, y: ch.y });
+            this.smoothCheese = cMap;
+        }
+        if (ents.length > 0) this.SI.addSnapshot(this.SI.snapshot.create(ents));
+    }
+
     update60Fps(dt, peersMap) {
+        const vArr = this.SI.vault?._vault;
+        if (Array.isArray(vArr) && vArr.length >= 2) {
+            vArr.sort((a, b) => b.time - a.time);
+            const newest = vArr[0], older = vArr[1];
+            const span = Math.max(45, Math.min(240, newest.time - older.time));
+            const targetBuf = Math.max(120, Math.min(320, span * 2.1));
+            this.SI._interpolationBuffer += (targetBuf - this.SI._interpolationBuffer) * 0.15;
+            const now = Date.now();
+            const r = now - this.SI._timeOffset - this.SI._interpolationBuffer;
+            if (r >= newest.time) {
+                this.SI._timeOffset = now - this.SI._interpolationBuffer - (newest.time - 0.5);
+            } else if (r < older.time && vArr.length === 2) {
+                this.SI._timeOffset = now - this.SI._interpolationBuffer - (older.time + 0.5);
+            }
+        }
         const interpolated = this.SI.calcInterpolation('x y angle(rad)');
         const interpMap = new Map();
         if (interpolated && Array.isArray(interpolated.state)) {

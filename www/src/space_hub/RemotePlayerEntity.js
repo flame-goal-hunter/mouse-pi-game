@@ -109,6 +109,7 @@ export class RemotePlayerEntity {
 
     applyPacket(pkt) {
         if (this.lastPktTs && pkt.ts && pkt.ts < this.lastPktTs) return;
+        const rx = Number(pkt.x) || 0, ry = Number(pkt.y) || 0, ra = Number(pkt.angle) || 0;
         Object.assign(this, {
             lastPktTs: pkt.ts || this.lastPktTs, lastSeen: Date.now(),
             nickname: pkt.nickname || this.nickname || 'Пи',
@@ -117,18 +118,22 @@ export class RemotePlayerEntity {
             currentLocation: pkt.currentLocation || this.currentLocation || 'space',
             homeSnapshot: pkt.homeSnapshot || this.homeSnapshot,
             homeAngle: pkt.homeAngle ?? this.homeAngle ?? 0, facing: pkt.facing || this.facing || 1, moving: Boolean(pkt.moving),
-            targetX: Number(pkt.x) || 0, targetY: Number(pkt.y) || 0, targetVx: Number(pkt.vx) || 0, targetVy: Number(pkt.vy) || 0,
-            targetAngle: Number(pkt.angle) || 0, isThrusting: Boolean(pkt.isThrusting), isTurbo: Boolean(pkt.isTurbo)
+            rawX: rx, rawY: ry, rawAngle: ra,
+            targetVx: Number(pkt.vx) || 0, targetVy: Number(pkt.vy) || 0,
+            isThrusting: Boolean(pkt.isThrusting), isTurbo: Boolean(pkt.isTurbo)
         });
+        if (!this._hasPos || Math.hypot(rx - this.renderX, ry - this.renderY) > 650) {
+            this._hasPos = true;
+            this.targetX = this.renderX = rx;
+            this.targetY = this.renderY = ry;
+            this.targetAngle = this.renderAngle = ra;
+        }
         if (pkt.paintTimer > 0 && pkt.paintColor) {
             if (this.paintTimer <= 0) this.spinTimer = 1.0;
             this.paintColor = pkt.paintColor; this.paintTimer = pkt.paintTimer;
         }
         if (pkt.spinTimer > this.spinTimer) this.spinTimer = pkt.spinTimer;
         if (pkt.activeEmoji) { this.activeEmoji = pkt.activeEmoji; this.emojiTimer = Math.max(this.emojiTimer, 0.5); }
-        if (Math.hypot(this.targetX - this.renderX, this.targetY - this.renderY) > 600) {
-            this.renderX = this.targetX; this.renderY = this.targetY; this.renderAngle = this.targetAngle;
-        }
     }
 
     update(dt, interp = null) {
@@ -137,13 +142,11 @@ export class RemotePlayerEntity {
             this.targetVx = interp.vx || 0; this.targetVy = interp.vy || 0;
             this.targetAngle = interp.angle || 0;
             this.isThrusting = Boolean(interp.isThrusting); this.isTurbo = Boolean(interp.isTurbo);
-        } else if (Date.now() - this.lastSeen < 450) {
-            this.targetX += this.targetVx * dt; this.targetY += this.targetVy * dt;
         }
-        const k = 1 - Math.exp(-16 * dt);
+        const k = 1 - Math.exp(-22 * dt);
         this.renderX += (this.targetX - this.renderX) * k; this.renderY += (this.targetY - this.renderY) * k;
         const da = Math.atan2(Math.sin(this.targetAngle - this.renderAngle), Math.cos(this.targetAngle - this.renderAngle));
-        this.renderAngle += da * (1 - Math.exp(-18 * dt));
+        this.renderAngle += da * (1 - Math.exp(-20 * dt));
         this.rHomeAngle += ((this.homeAngle || 0) - this.rHomeAngle) * k;
         this.rx = this.x = this.renderX; this.ry = this.y = this.renderY; this.rAngle = this.renderAngle;
 
