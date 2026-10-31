@@ -153,7 +153,7 @@ export class ClientWorldSync {
         stepVisual(this.myBody);
         if (this.world.ball) {
             stepVisual(this.world.ball);
-            SpaceNetDebug.recordEntityFrame('ball', this.world.ball.rawX, this.world.ball.rawY, this.world.ball.renderX, this.world.ball.renderY, this.world.ball.renderAngle, clampedDt, 'SI', this.world.rockets.size);
+            if (SpaceNetDebug.enabled) SpaceNetDebug.recordEntityFrame('ball', this.world.ball.rawX, this.world.ball.rawY, this.world.ball.renderX, this.world.ball.renderY, this.world.ball.renderAngle, clampedDt, Math.hypot(this.world.ball.errorX || 0, this.world.ball.errorY || 0), this.world.rockets.size + 1);
         }
         for (const a of this.world.asteroids) stepVisual(a);
         for (const pr of this.world.projectiles.values()) stepVisual(pr);
@@ -163,8 +163,8 @@ export class ClientWorldSync {
             if (rb) {
                 stepVisual(rb);
                 peer.syncFromBody(clampedDt, rb);
-                if (peer.currentLocation === 'space') {
-                    SpaceNetDebug.recordEntityFrame(`player_${peer.nickname || pid}`, rb.rawX, rb.rawY, peer.renderX, peer.renderY, peer.renderAngle, clampedDt, 'SI', this.world.rockets.size);
+                if (SpaceNetDebug.enabled && peer.currentLocation === 'space') {
+                    SpaceNetDebug.recordEntityFrame(`player_${peer.nickname || pid}`, rb.rawX, rb.rawY, peer.renderX, peer.renderY, peer.renderAngle, clampedDt, Math.hypot(rb.errorX || 0, rb.errorY || 0), this.world.rockets.size + 1);
                 }
             }
         }

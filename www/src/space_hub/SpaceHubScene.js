@@ -87,6 +87,7 @@ export class SpaceHubScene {
                     <input id="shNickInput" type="text" maxlength="16" style="padding:10px 12px;border-radius:12px;border:2px solid #38bdf8;background:#0f172a;color:#fff;font-family:'Nunito',sans-serif;font-weight:900;font-size:15px;">
                     <button type="button" class="sh-set-btn" id="shSoundToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔊 Звук и музыка: ВКЛ</button>
                     <button type="button" class="sh-set-btn" id="shPushToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔔 Включить вызовы на телефон</button>
+                    <button type="button" class="sh-set-btn" id="shNetDebugToggleBtn" style="background:linear-gradient(180deg,#1e293b,#0f172a);font-size:13px;color:#cbd5e1;">🐞 Сетевая диагностика (NetDebug): Выкл</button>
                     <button type="button" class="sh-set-btn" id="shSaveSetBtn" style="background:linear-gradient(180deg,#22c55e,#15803d);border-color:#86efac;">✅ Сохранить</button>
                 </div>
             </div>
@@ -103,11 +104,17 @@ export class SpaceHubScene {
     }
 
     _wireSettings(el) {
-        const modal = el.querySelector('#shSettingsModal'), nickIn = el.querySelector('#shNickInput'), sndBtn = el.querySelector('#shSoundToggleBtn');
+        const modal = el.querySelector('#shSettingsModal'), nickIn = el.querySelector('#shNickInput'), sndBtn = el.querySelector('#shSoundToggleBtn'), dbgBtn = el.querySelector('#shNetDebugToggleBtn');
         const syncSnd = () => { sndBtn.textContent = localStorage.getItem('mousie_muted') === '1' ? '🔇 Звук и музыка: ВЫКЛ' : '🔊 Звук и музыка: ВКЛ'; };
-        el.querySelector('#shSettingsBtn').addEventListener('click', () => { nickIn.value = PlayerProfile.nickname; syncSnd(); modal.classList.add('visible'); });
+        const syncDbg = () => {
+            dbgBtn.textContent = SpaceNetDebug.enabled ? '🐞 Сетевая диагностика (NetDebug): Вкл' : '🐞 Сетевая диагностика (NetDebug): Выкл';
+            dbgBtn.style.borderColor = SpaceNetDebug.enabled ? '#facc15' : 'rgba(255,255,255,0.22)';
+            dbgBtn.style.color = SpaceNetDebug.enabled ? '#fef08a' : '#cbd5e1';
+        };
+        el.querySelector('#shSettingsBtn').addEventListener('click', () => { nickIn.value = PlayerProfile.nickname; syncSnd(); syncDbg(); modal.classList.add('visible'); });
         el.querySelector('#shCloseSetBtn').addEventListener('click', () => modal.classList.remove('visible'));
         sndBtn.addEventListener('click', () => { const next = localStorage.getItem('mousie_muted') === '1' ? '0' : '1'; SpaceAudio.setMuted(next === '1'); window.__applyGlobalMute?.(next === '1'); syncSnd(); });
+        dbgBtn.addEventListener('click', () => { SpaceNetDebug.setEnabled(!SpaceNetDebug.enabled); syncDbg(); });
         el.querySelector('#shSaveSetBtn').addEventListener('click', () => { if (nickIn.value.trim()) { PlayerProfile.setNickname(nickIn.value.trim()); SpaceNetwork.broadcastNow(); } modal.classList.remove('visible'); });
     }
 

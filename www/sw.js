@@ -2,7 +2,7 @@
 // sw.js — Умный Service Worker: строгий Network First (cache: 'no-store'),
 // мгновенный self.skipWaiting() + self.clients.claim() без удержания старого кэша
 // ============================================================================
-const CACHE_VERSION = 'mousiepi-cbe3cbd96e';
+const CACHE_VERSION = 'mousiepi-c1bcc574de';
 const SHELL = [
   './',
   './index.html',
