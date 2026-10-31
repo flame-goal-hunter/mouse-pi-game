@@ -72,6 +72,7 @@ export function upsertPlayerFromPacket(pkt) {
         planetAppearance: snap.planetAppearance || prev.planetAppearance || null,
         storedCheese: snap.storedCheese ?? prev.storedCheese ?? 50,
         homeSnapshot: snap,
+        pushSubscription: pkt.pushSubscription?.endpoint ? pkt.pushSubscription : (prev.pushSubscription || null),
         updatedAt: Date.now()
     };
     playersRegistry.set(pkt.playerId, next);
@@ -123,3 +124,4 @@ export async function sendInvitePush({ fromId, fromNickname, toId }) {
         return { pushed: false, reason: err?.message || 'push_failed' };
     }
 }
+

@@ -67,6 +67,7 @@ app.use('/colyseus', monitor());
 // ============================================================================
 const spacePeers = new Map();
 const spaceSockets = new Set();
+const pendingInvites = new Map();
 let lastBallEvent = null;
 
 function pruneSpacePeers() {
@@ -89,6 +90,7 @@ function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
     }
     if (!pkt || typeof pkt.playerId !== 'string' || !pkt.playerId) return;
     upsertPlayerFromPacket(pkt);
+    delete pkt.pushSubscription;
     pruneSpacePeers();
     spacePeers.set(pkt.playerId, { pkt, updatedAt: Date.now() });
     const raw = JSON.stringify(pkt);
@@ -117,7 +119,9 @@ app.post('/api/invite', async (req, res) => {
     const { fromId, fromNickname, toId } = req.body || {};
     if (!toId) return res.status(400).json({ ok: false });
     const senderName = (fromNickname || 'Друг Пи').slice(0, 24);
-    const liveMsg = JSON.stringify({ inviteEvent: { fromId, fromNickname: senderName, toId, ts: Date.now() } });
+    const ev = { fromId, fromNickname: senderName, toId, ts: Date.now() };
+    pendingInvites.set(toId, [...(pendingInvites.get(toId) || []).slice(-4), ev]);
+    const liveMsg = JSON.stringify({ inviteEvent: ev });
     for (const sock of spaceSockets) {
         if (sock.readyState === 1) {
             try { sock.send(liveMsg); } catch (_) {}
@@ -129,13 +133,16 @@ app.post('/api/invite', async (req, res) => {
 
 app.post('/api/space-sync', (req, res) => {
     const pkt = req.body;
-    if (pkt?.playerId) recordAndBroadcastSpacePkt(pkt, null);
+    const myId = pkt?.playerId;
+    if (myId) recordAndBroadcastSpacePkt(pkt, null);
     else pruneSpacePeers();
     const peers = [];
     for (const [id, entry] of spacePeers) {
-        if (id !== pkt?.playerId) peers.push(entry.pkt);
+        if (id !== myId) peers.push(entry.pkt);
     }
-    res.json({ ok: true, peers, savedHomes: getAllSavedPlayers() });
+    const inviteEvents = myId ? (pendingInvites.get(myId) || []) : [];
+    if (myId && inviteEvents.length) pendingInvites.delete(myId);
+    res.json({ ok: true, peers, savedHomes: getAllSavedPlayers(), inviteEvents });
 });
 
 const httpServer = createServer(app);

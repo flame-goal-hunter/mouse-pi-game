@@ -33,10 +33,10 @@ class PushInviteService {
                 .pim-invite-btn { pointer-events: auto; margin-top: 8px; background: linear-gradient(135deg, #ec4899, #8b5cf6); border: 2.5px solid #fbcfe8; border-radius: 999px; padding: 9px 18px; color: #fff; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 13.5px; cursor: pointer; box-shadow: 0 6px 18px rgba(236,72,153,0.5); display: inline-flex; align-items: center; gap: 6px; transition: transform 0.14s ease, opacity 0.2s; }
                 .pim-invite-btn:active { transform: scale(0.95); }
                 .pim-invite-btn:disabled { opacity: 0.65; cursor: not-allowed; background: #475569; border-color: #94a3b8; box-shadow: none; }
-                .pim-toast { position: fixed; top: max(64px, env(safe-area-inset-top, 64px)); left: 50%; transform: translate(-50%, -160%); background: rgba(15, 23, 42, 0.95); border: 2.5px solid #38bdf8; border-radius: 999px; padding: 10px 22px; color: #fef08a; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 14.5px; z-index: 10020; pointer-events: none; box-shadow: 0 10px 28px rgba(0,0,0,0.65); transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1); white-space: nowrap; }
-                .pim-toast.visible { transform: translate(-50%, 0); }
-                .pim-radio-banner { position: fixed; top: max(14px, env(safe-area-inset-top, 14px)); left: 50%; transform: translate(-50%, -180%); background: linear-gradient(135deg, #0284c7, #4f46e5); border: 3px solid #fde047; border-radius: 20px; padding: 12px 22px; color: #fff; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: clamp(13.5px, 2.8vw, 16px); z-index: 10025; box-shadow: 0 14px 34px rgba(0,0,0,0.75); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); text-align: center; pointer-events: auto; cursor: pointer; }
-                .pim-radio-banner.visible { transform: translate(-50%, 0); }
+                .pim-toast { position: fixed; top: max(64px, env(safe-area-inset-top, 64px)); left: 50%; transform: translate(-50%, -260%); opacity: 0; visibility: hidden; background: rgba(15, 23, 42, 0.95); border: 2.5px solid #38bdf8; border-radius: 999px; padding: 10px 22px; color: #fef08a; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 14.5px; z-index: 10020; pointer-events: none; box-shadow: 0 10px 28px rgba(0,0,0,0.65); transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease, visibility 0.22s; white-space: nowrap; }
+                .pim-toast.visible { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
+                .pim-radio-banner { position: fixed; top: max(14px, env(safe-area-inset-top, 14px)); left: 50%; transform: translate(-50%, -260%); opacity: 0; visibility: hidden; background: linear-gradient(135deg, #0284c7, #4f46e5); border: 3px solid #fde047; border-radius: 20px; padding: 12px 22px; color: #fff; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: clamp(13.5px, 2.8vw, 16px); z-index: 10025; box-shadow: 0 14px 34px rgba(0,0,0,0.75); transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease, visibility 0.22s; text-align: center; pointer-events: auto; cursor: pointer; }
+                .pim-radio-banner.visible { transform: translate(-50%, 0); opacity: 1; visibility: visible; }
             </style>
             <div class="pim-toast" id="pimToast"></div>
             <div class="pim-radio-banner" id="pimRadioBanner"></div>`;
@@ -111,10 +111,12 @@ class PushInviteService {
             if (!publicKey) return false;
             const sub = (await reg.pushManager.getSubscription()) ||
                 await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+            SpaceNetwork.pushSubscription = sub.toJSON ? sub.toJSON() : sub;
             await fetch('/api/push/subscribe', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname, skinId: PlayerProfile.equippedSkinId, subscription: sub })
+                body: JSON.stringify({ playerId: PlayerProfile.playerId, nickname: PlayerProfile.nickname, skinId: PlayerProfile.equippedSkinId, subscription: SpaceNetwork.pushSubscription })
             });
+            SpaceNetwork.broadcastNow();
             return true;
         } catch (_) { return false; }
     }
@@ -127,12 +129,8 @@ class PushInviteService {
         SpaceAudio.playHorn();
         try { navigator.vibrate?.(35); } catch (_) {}
         this.showToast(`Вызов отправлен ${targetNick || 'другу'}! 📡`);
-        try {
-            await fetch('/api/invite', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fromId: PlayerProfile.playerId, fromNickname: PlayerProfile.nickname, toId })
-            });
-        } catch (_) {}
+        try { SpaceNetwork.bc?.postMessage({ inviteEvent: { fromId: PlayerProfile.playerId, fromNickname: PlayerProfile.nickname, toId, ts: Date.now() } }); } catch (_) {}
+        try { await fetch('/api/invite', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fromId: PlayerProfile.playerId, fromNickname: PlayerProfile.nickname, toId }) }); } catch (_) {}
     }
 
     _tickCooldowns() {

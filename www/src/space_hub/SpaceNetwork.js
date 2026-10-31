@@ -111,7 +111,7 @@ class SpaceNetworkManager {
             angle: Number(m.angle.toFixed(2)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
             trailStyle: m.trailStyle || 'stars', paintColor: m.paintColor || null, paintTimer: Number((m.paintTimer || 0).toFixed(2)),
             homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving),
-            homeSnapshot: PlayerProfile.getHomeSnapshot(), ts: Date.now()
+            homeSnapshot: PlayerProfile.getHomeSnapshot(), pushSubscription: this.pushSubscription || null, ts: Date.now()
         };
     }
 
@@ -143,6 +143,7 @@ class SpaceNetworkManager {
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data?.savedHomes)) data.savedHomes.forEach(h => this._saveCachedHome(h));
+                if (Array.isArray(data?.inviteEvents)) data.inviteEvents.forEach(ev => { if (this.onInviteEvent) this.onInviteEvent(ev); });
                 if (Array.isArray(data?.peers)) data.peers.forEach(p => this._onPacket(p));
             }
         } catch (_) {} finally {

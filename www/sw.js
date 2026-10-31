@@ -2,7 +2,7 @@
 // sw.js — Умный Service Worker: строгий Network First (cache: 'no-store'),
 // мгновенный self.skipWaiting() + self.clients.claim() без удержания старого кэша
 // ============================================================================
-const CACHE_VERSION = 'mousiepi-d5aaf80f1d';
+const CACHE_VERSION = 'mousiepi-d12fb72699';
 const SHELL = [
   './',
   './index.html',
@@ -90,7 +90,7 @@ self.addEventListener('push', (e) => {
       body,
       icon: './assets/icons/icon-256-v3.png',
       badge: './assets/icons/favicon-32-v3.png',
-      tag: 'mousie-pi-invite',
+      tag: 'mousie-pi-invite-' + Date.now(),
       renotify: true,
       vibrate: [220, 100, 220, 100, 320],
       data: { url: data.url || './', fromId: data.fromId || '' }
