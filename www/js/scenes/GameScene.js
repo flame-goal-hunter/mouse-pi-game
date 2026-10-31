@@ -21,9 +21,12 @@ export class GameScene extends Phaser.Scene {
     init(data) {
         // Get config from scene data or fallback to global config (for direct launch)
         const config = (data && Object.keys(data).length > 0) ? data : (window.gameConfig || {});
+        this.diffConfig = config.difficulty || window.gameConfig?.difficulty || window.parent?.__currentGameDifficulty || null;
 
         this.gameMode = config.mode || 'single';
-        this.botCount = config.botCount !== undefined ? config.botCount : 2;
+        this.botCount = (this.gameMode === 'solo' || this.gameMode === 'single') && this.diffConfig?.botCount
+            ? this.diffConfig.botCount
+            : (config.botCount !== undefined ? config.botCount : 2);
         this.playerCharacter = config.character || 1; // 1 = brown bunny, 2 = gray bunny
         this.isHost = config.isHost || false;
         this.peerId = config.peerId || null;
@@ -896,6 +899,10 @@ export class GameScene extends Phaser.Scene {
         } else {
             // Solo, Host, and Colyseus Online mode (uses local SimplePhysicsWorld + CharacterCore for client-side prediction & reconciliation)
             this.player = this.createCharacterSprite(spawnIndex, charNum, 'player');
+            if ((this.gameMode === 'solo' || this.gameMode === 'single') && this.diffConfig?.maxHealth) {
+                this.player.setData('maxHealth', this.diffConfig.maxHealth);
+                this.player.setData('health', this.diffConfig.maxHealth);
+            }
         }
         this.player.setData('colorIndex', 0);
         this.player.setData('playerId', (this.isHost || this.gameMode === 'host') ? 'host' : 'guest');

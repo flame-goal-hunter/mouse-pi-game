@@ -430,7 +430,16 @@ function tileAStar(grid, mapW, mapH, sx, sy, ex, ey) {
 export class BotBrain {
     constructor(scene) {
         this.botNav = scene.botNav || null; // bMod navigation engine
-        this.personality = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+        const baseP = PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)];
+        const diff = scene.diffConfig || window.gameConfig?.difficulty || window.parent?.__currentGameDifficulty;
+        const cdScale = diff?.spawnRate || 1.0;
+        this.personality = {
+            ...baseP,
+            scatter: diff?.scatter ?? baseP.scatter,
+            cdMin: Math.round(baseP.cdMin * cdScale),
+            cdMax: Math.round(baseP.cdMax * cdScale),
+            dodgeSkill: Math.min(0.98, baseP.dodgeSkill * (diff?.aiAccuracy ? diff.aiAccuracy / 0.75 : 1))
+        };
 
         // Target tracking
         this.target = null;           // current enemy object

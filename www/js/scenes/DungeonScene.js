@@ -313,7 +313,9 @@ export class DungeonScene extends Phaser.Scene {
             try { this.runLoadout = Progress.spendConsumablesForRun() || []; }
             catch (e) { this.runLoadout = []; }
         }
-        this.maxHp = PLAYER.maxHp;
+        this.diffConfig = data?.diff || window.__transylvaniaDifficulty || window.gameConfig?.difficulty || window.parent?.__currentGameDifficulty || null;
+        this.maxHp = this.diffConfig?.playerLives || PLAYER.maxHp;
+        this.enemySpeedMul = this.diffConfig?.speed || 1;
         this._dmgMul = 1;
         this.floorGoal = 'key';
         this.goalTomes = [];
@@ -4010,10 +4012,12 @@ export class DungeonScene extends Phaser.Scene {
         const shadow = this.add.image(x, y + (kind === 'boss' ? 46 : (kind === 'bat' ? 18 : 26)), 'softShadow')
             .setDisplaySize((kind === 'boss' ? 150 : 84) * def.scale * 1.6,
                             kind === 'boss' ? 32 : 21).setDepth(189);
+        const scaledHp = Math.max(1, Math.round((def.hp || 1) * (this.diffConfig?.obstacleDensity || 1)));
+        const scaledDef = { ...def, speed: Math.round((def.speed || 100) * (this.enemySpeedMul || 1)), hp: scaledHp };
         const enemy = {
-            kind, def, sprite, shadow,
+            kind, def: scaledDef, sprite, shadow,
             x, y, vx: 0, vy: 0,
-            hp: def.hp, maxHp: def.hp,
+            hp: scaledHp, maxHp: scaledHp,
             facing: 1,
             hurtTimer: 0,
             stateTimer: Phaser.Math.Between(500, 1500),

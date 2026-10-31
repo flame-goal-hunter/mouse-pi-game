@@ -14,6 +14,7 @@ import { DungeonScene } from './scenes/DungeonScene.js';
 import { SneakScene } from './scenes/SneakScene.js';
 import { initAudioManager } from './audio/AudioManager.js';
 import { Progress } from './storage/ProgressStore.js';
+import { DifficultyConfig } from '../src/config/DifficultyConfig.js';
 
 // Read URL parameters for direct game launch
 const urlParams = new URLSearchParams(window.location.search);
@@ -45,6 +46,8 @@ const defaultWsHost = (typeof window !== 'undefined' && window.location?.host)
     : 'ws://localhost:8080';
 const serverUrl = urlParams.get('server') || defaultWsHost;
 const runMode = urlParams.get('runMode') || null;
+const diffLevel = urlParams.get('diff') || window.parent?.__currentGameDifficulty?.level || window.parent?.PlayerProfile?.difficulty || 'normal';
+const diffProfile = DifficultyConfig.get(mode === 'transylvania' ? 'transylvania' : 'snowball', diffLevel);
 
 // Store config globally for scenes to access
 window.gameConfig = {
@@ -59,7 +62,8 @@ window.gameConfig = {
     nickname: nickname,
     remoteNickname: remoteNickname,
     serverUrl: serverUrl,
-    runMode: runMode      // 'story' | 'endless' | null (Transylvania mode)
+    runMode: runMode,     // 'story' | 'endless' | null (Transylvania mode)
+    difficulty: diffProfile
 };
 
 // Choose scenes based on mode - skip menu for solo mode

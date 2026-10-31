@@ -21,6 +21,7 @@ import { SPACE_MUSIC_TRACKS } from '../audio/SpaceMusicTracks.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
 import { PushInviteManager } from '../ui/PushInviteManager.js';
 import { SpaceNetDebug } from './SpaceNetDebug.js';
+import { difficultyModal } from '../ui/DifficultyModal.js';
 
 export class SpaceHubScene {
     constructor({ onSelectPlanet } = {}) {
@@ -235,7 +236,18 @@ export class SpaceHubScene {
             this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
             if (target.isMyHome) { this.stop(); this.homeScene.start(null); }
             else if (target.isFriendHome) { this.stop(); this.homeScene.start(target); }
-            else { this.lastOrbitPlanet = target; PlayerProfile.setLocation(target.id); SpaceNetwork.broadcastNow(); this.onSelectPlanet(target.id); }
+            else {
+                this._placeRocketOnOrbit(target);
+                difficultyModal.open(target.id, {
+                    cancelLabel: '✖ Назад в космос',
+                    onConfirm: (diff) => {
+                        this.lastOrbitPlanet = target;
+                        PlayerProfile.setLocation(target.id);
+                        SpaceNetwork.broadcastNow();
+                        this.onSelectPlanet(target.id, diff);
+                    }
+                });
+            }
             return;
         }
 

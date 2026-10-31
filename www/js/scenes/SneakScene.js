@@ -107,9 +107,13 @@ export class SneakScene extends Phaser.Scene {
         this.totalRescuedInRun = data?.totalRescuedInRun ?? 0;
         this.rescuedFollowers = data?.rescuedFollowers ? [...data.rescuedFollowers] : [];
         this.streak = data?.streak ?? 1.0;
-        this.hearts = data?.hearts ?? 3;
-        this.maxHearts = data?.maxHearts ?? 3;
-        this.piesLeft = data?.piesLeft ?? 2;
+        this.diffConfig = data?.diff || window.__transylvaniaDifficulty || window.gameConfig?.difficulty || window.parent?.__currentGameDifficulty || null;
+        const defHearts = this.diffConfig?.sneakHearts || 3;
+        this.hearts = data?.hearts ?? defHearts;
+        this.maxHearts = data?.maxHearts ?? defHearts;
+        this.piesLeft = data?.piesLeft ?? (2 + (this.diffConfig?.bonusPies || 0));
+        this.monsterSpeedMul = this.diffConfig?.speed || 1.0;
+        this.suspicionFillMs = this.diffConfig?.suspicionFillMs || SUSPICION_FILL_MS;
         this.runPerks = data?.runPerks ? { ...data.runPerks } : {};
         this.everSeenInRun = data?.everSeenInRun ?? false;
     }
@@ -1804,7 +1808,7 @@ export class SneakScene extends Phaser.Scene {
             }
 
             if (seesPlayer) {
-                m.suspicion = Math.min(1, m.suspicion + (dt * 1000) / SUSPICION_FILL_MS);
+                m.suspicion = Math.min(1, m.suspicion + (dt * 1000) / (this.suspicionFillMs || SUSPICION_FILL_MS));
                 if (m.suspicion >= 1) {
                     if (m.state !== 'chase') {
                         m.state = 'chase';
@@ -1827,16 +1831,17 @@ export class SneakScene extends Phaser.Scene {
 
             let targetX = m.x;
             let targetY = m.y;
-            let spd = m.cfg.speed;
+            const spdMul = this.monsterSpeedMul || 1.0;
+            let spd = m.cfg.speed * spdMul;
 
             if (m.state === 'chase' && !playerHidden) {
                 targetX = this.player.x;
                 targetY = this.player.y;
-                spd = m.cfg.chaseSpeed;
+                spd = m.cfg.chaseSpeed * spdMul;
             } else if ((m.state === 'alert' || m.state === 'chase') && m.investigateTarget) {
                 targetX = m.investigateTarget.x;
                 targetY = m.investigateTarget.y;
-                spd = m.cfg.speed * 1.15;
+                spd = m.cfg.speed * 1.15 * spdMul;
             } else {
                 const wp = m.cfg.waypoints[m.wpIndex] || m.cfg.waypoints[0];
                 targetX = wp.x;

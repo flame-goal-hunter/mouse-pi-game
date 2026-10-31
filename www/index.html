@@ -1568,34 +1568,48 @@
         // Owl shoots same for all levels, difference is only lava balls and lives
         const DIFFICULTY = {
             easy: {
-                owlShootInterval: 150,
-                owlBulletSpeed: 5,
-                asteroidSpawnMin: 35,
-                asteroidSpawnBase: 70,
-                asteroidSpeedBase: 2,
-                asteroidSpeedRandom: 1.5,
-                lives: 5,
-                lavaBalls: false          // No lava balls on easy
+                owlShootInterval: 170,
+                owlBulletSpeed: 4.2,
+                asteroidSpawnMin: 38,
+                asteroidSpawnBase: 75,
+                asteroidSpeedBase: 1.8,
+                asteroidSpeedRandom: 1.3,
+                lives: 6,
+                lavaBalls: false,
+                lavaInterval: 140
             },
             medium: {
-                owlShootInterval: 150,
-                owlBulletSpeed: 5,
-                asteroidSpawnMin: 25,
-                asteroidSpawnBase: 55,
-                asteroidSpeedBase: 2.5,
-                asteroidSpeedRandom: 2,
-                lives: 5,
-                lavaBalls: true
+                owlShootInterval: 135,
+                owlBulletSpeed: 5.2,
+                asteroidSpawnMin: 24,
+                asteroidSpawnBase: 52,
+                asteroidSpeedBase: 2.6,
+                asteroidSpeedRandom: 2.0,
+                lives: 4,
+                lavaBalls: true,
+                lavaInterval: 90
+            },
+            normal: {
+                owlShootInterval: 135,
+                owlBulletSpeed: 5.2,
+                asteroidSpawnMin: 24,
+                asteroidSpawnBase: 52,
+                asteroidSpeedBase: 2.6,
+                asteroidSpeedRandom: 2.0,
+                lives: 4,
+                lavaBalls: true,
+                lavaInterval: 90
             },
             hard: {
-                owlShootInterval: 150,
-                owlBulletSpeed: 5,
-                asteroidSpawnMin: 15,
-                asteroidSpawnBase: 40,
-                asteroidSpeedBase: 3.5,
-                asteroidSpeedRandom: 3,
+                owlShootInterval: 95,
+                owlBulletSpeed: 6.5,
+                asteroidSpawnMin: 14,
+                asteroidSpawnBase: 34,
+                asteroidSpeedBase: 3.8,
+                asteroidSpeedRandom: 3.0,
                 lives: 3,
-                lavaBalls: true
+                lavaBalls: true,
+                lavaInterval: 50
             }
         };
         let currentDifficulty = 'medium';
@@ -2502,15 +2516,20 @@
         let nyExitOpen = false;
         let nyExitPos = { x: 0, y: 0 };
         let nyStartPos = { x: 0, y: 0 };
-        let nyLives = 5;
+        let nyLives = 4;
+        let nyMaxLives = 4;
         let nyGameTime = 0;
         let nyDifficulty = 'medium'; // 'easy', 'medium', 'hard'
+        let nySpeedMul = 1.0;
         let nyPauseBtnArea = { x: 0, y: 0, w: 0, h: 0 };
 
         function initNewYearMaze() {
+            const nyCfg = window.DifficultyConfig ? window.DifficultyConfig.get('newyear', nyDifficulty) : null;
             nyGiftsCollected = 0;
             nyExitOpen = false;
-            nyLives = 5;
+            nyMaxLives = nyCfg ? nyCfg.playerLives : (nyDifficulty === 'easy' ? 6 : nyDifficulty === 'hard' ? 3 : 4);
+            nyLives = nyMaxLives;
+            nySpeedMul = nyCfg ? nyCfg.speed : (nyDifficulty === 'easy' ? 0.8 : nyDifficulty === 'hard' ? 1.3 : 1.0);
             nyGameTime = 0;
             nySnowballs = [];
 
@@ -2553,14 +2572,14 @@
                 FLOOR_COUNT = 8;
                 SECTION_COUNT = 16;
                 GIFT_COUNT = 12;
-            } else if (nyDifficulty === 'medium') {
+            } else if (nyDifficulty === 'medium' || nyDifficulty === 'normal') {
                 FLOOR_COUNT = 10;
                 SECTION_COUNT = 20;
                 GIFT_COUNT = 18;
             } else { // hard
                 FLOOR_COUNT = 14;
                 SECTION_COUNT = 26;
-                GIFT_COUNT = 28;
+                GIFT_COUNT = 26;
             }
 
             const FLOOR_HEIGHT = 180;
@@ -3527,7 +3546,7 @@
             // Update enemies
             nyEnemies.forEach(enemy => {
                 const prevX = enemy.x;
-                enemy.x += enemy.speed * enemy.dir;
+                enemy.x += enemy.speed * nySpeedMul * enemy.dir;
 
                 // Ground non-jumping enemies
                 if (enemy.type !== ENEMY_PENGUIN) {
@@ -5630,7 +5649,7 @@
             ctx.textAlign = 'right';
             let heartsStr = '';
             for (let i = 0; i < nyLives; i++) heartsStr += '❤️';
-            for (let i = nyLives; i < 5; i++) heartsStr += '🖤';
+            for (let i = nyLives; i < nyMaxLives; i++) heartsStr += '🖤';
             ctx.fillText(heartsStr, w - padding * 2 - 5, topY + fontSize * 1.15);
 
             nyPauseBtnArea = { x: 0, y: 0, w: 0, h: 0 };
@@ -8170,7 +8189,8 @@
                 // Spawn lava balls periodically (only on medium and hard)
                 if (DIFFICULTY[currentDifficulty].lavaBalls) {
                     lavaBallTimer++;
-                    if (lavaBallTimer > 80 + Math.random() * 60) {
+                    const lavaInt = DIFFICULTY[currentDifficulty].lavaInterval || 80;
+                    if (lavaBallTimer > lavaInt + Math.random() * 45) {
                         lavaBallTimer = 0;
                         // Spawn near player but random
                         const spawnX = cameraX + Math.random() * canvas.width;
@@ -11224,11 +11244,12 @@
             stopMenuMusic();
             const frame = document.getElementById('phaserFrame');
             if (phaserRunning) frame.src = 'about:blank';
+            const diffLvl = (window.__currentGameDifficulty && window.__currentGameDifficulty.level) || (window.PlayerProfile && window.PlayerProfile.difficulty) || 'normal';
 
             const launchGame = () => {
                 // Straight to the HTML menu — no Phaser boot just to redirect.
                 // The menu itself navigates the iframe to game-phaser.html on "start run".
-                frame.src = 'transylvania-menu.html?_v=' + Date.now();
+                frame.src = `transylvania-menu.html?diff=${encodeURIComponent(diffLvl)}&_v=${Date.now()}`;
                 frame.style.display = 'block';
                 document.getElementById('startScreen').classList.remove('visible');
                 document.getElementById('gameCanvas').style.display = 'none';
@@ -11249,10 +11270,13 @@
             }
 
             const seed = Math.floor(Math.random() * 1000000);
+            const curDiff = window.__currentGameDifficulty || (window.DifficultyConfig && window.DifficultyConfig.get('snowball', window.PlayerProfile?.difficulty));
+            const diffLvl = (curDiff && curDiff.level) || 'normal';
+            const actualBots = (curDiff && typeof curDiff.botCount === 'number') ? curDiff.botCount : (botCount || 2);
 
             // Build URL for solo mode with bots and character selection
             const eqSkin = (window.PlayerProfile && window.PlayerProfile.equippedSkinId) || 'blue';
-            let url = `game-phaser.html?mode=solo&botCount=${botCount}&character=${character}&skin=${encodeURIComponent(eqSkin)}&seed=${seed}&_v=${Date.now()}`;
+            let url = `game-phaser.html?mode=solo&botCount=${actualBots}&diff=${encodeURIComponent(diffLvl)}&character=${character}&skin=${encodeURIComponent(eqSkin)}&seed=${seed}&_v=${Date.now()}`;
 
             // Small delay to let the old iframe fully unload before loading new game
             const launchGame = () => {
@@ -11942,10 +11966,20 @@
     </script>
     <script type="module">
         const _v = Date.now();
-        const [{ SpaceHubScene }, { GameTopBar }] = await Promise.all([
+        const [{ SpaceHubScene }, { GameTopBar }, { DifficultyConfig }] = await Promise.all([
             import('./src/space_hub/SpaceHubScene.js?v=' + _v),
-            import('./src/ui/GameTopBar.js?v=' + _v)
+            import('./src/ui/GameTopBar.js?v=' + _v),
+            import('./src/config/DifficultyConfig.js?v=' + _v)
         ]);
+
+        function syncLegacyDifficulty(planetId, diff) {
+            const cfg = diff || DifficultyConfig.get(planetId, window.PlayerProfile?.difficulty || 'normal');
+            window.__currentGameDifficulty = cfg;
+            const legacyLvl = cfg.level === 'normal' ? 'medium' : cfg.level;
+            currentDifficulty = DIFFICULTY[cfg.level] ? cfg.level : legacyLvl;
+            nyDifficulty = legacyLvl;
+            return cfg;
+        }
 
         window.__applyGlobalMute = (muted) => {
             try {
@@ -11986,23 +12020,25 @@
                     }
                 } catch (_) {}
             },
-            onRestart: (planetId) => {
+            onRestart: (planetId, newDiff) => {
+                const cfg = syncLegacyDifficulty(planetId, newDiff);
                 if (planetId === 'adventure' || planetId === 'newyear') {
                     if (typeof restartGame === 'function') restartGame();
                     return;
                 }
                 if (planetId === 'snowball') {
-                    if (typeof startSoloSnowball === 'function') startSoloSnowball(1, 1);
+                    if (typeof startSoloSnowball === 'function') startSoloSnowball(cfg.botCount, 1);
                     return;
                 }
                 if (planetId === 'transylvania') {
                     try {
                         const win = frame?.contentWindow;
+                        if (win) win.__transylvaniaDifficulty = cfg;
                         const g = win?.__game || win?.game;
                         const ds = g?.scene?.getScene?.('DungeonScene');
                         const ss = g?.scene?.getScene?.('SneakScene');
-                        if (ds?.scene?.isActive?.()) { ds.runCheeseTotal = 0; ds.scene.restart({ runMode: ds.runMode || 'story', level: 1, score: 0, runCheeseTotal: 0 }); return; }
-                        if (ss?.scene?.isActive?.()) { ss.carriedCheese = 0; ss.scene.restart({ floor: 1, carriedCheese: 0 }); return; }
+                        if (ds?.scene?.isActive?.()) { ds.runCheeseTotal = 0; ds.scene.restart({ runMode: ds.runMode || 'story', level: 1, score: 0, runCheeseTotal: 0, diff: cfg }); return; }
+                        if (ss?.scene?.isActive?.()) { ss.carriedCheese = 0; ss.scene.restart({ floor: 1, carriedCheese: 0, hearts: cfg.sneakHearts, diff: cfg }); return; }
                     } catch (_) {}
                     if (typeof startTransylvaniaPreview === 'function') startTransylvaniaPreview();
                 }
@@ -12026,13 +12062,14 @@
         window.__gameTopBar = topBar;
 
         const spaceHub = new SpaceHubScene({
-            onSelectPlanet: (planetId) => {
+            onSelectPlanet: (planetId, diff) => {
+                const cfg = syncLegacyDifficulty(planetId, diff);
                 spaceHub.stop();
-                topBar.show(planetId);
+                topBar.show(planetId, cfg);
                 if (planetId === 'transylvania') {
                     if (typeof startTransylvaniaPreview === 'function') startTransylvaniaPreview();
                 } else if (planetId === 'snowball') {
-                    if (typeof startSoloSnowball === 'function') startSoloSnowball(1, 1);
+                    if (typeof startSoloSnowball === 'function') startSoloSnowball(cfg.botCount, 1);
                 } else if (planetId === 'adventure') {
                     currentGameMode = 'adventure';
                     if (typeof startGame === 'function') startGame();
