@@ -173,18 +173,18 @@ export function stepWorld(world, dt = FIXED_DT, opts = {}) {
         let hit = false;
         if (b && Math.hypot(pr.x - b.x, pr.y - b.y) < b.radius + pr.radius) {
             resolveBodyCollision(pr, b); hit = true;
-            events.push({ type: 'paint_splat', hitX: pr.x, hitY: pr.y, color: pr.color });
+            events.push({ type: 'paint_splat', projId: id, hitX: pr.x, hitY: pr.y, color: pr.color });
         }
         for (const r of activeRockets) {
             if (!hit && r.id !== pr.ownerSid && r.playerId !== pr.ownerId && Math.hypot(pr.x - r.x, pr.y - r.y) < r.radius + pr.radius) {
                 resolveBodyCollision(pr, r); hit = true;
-                events.push({ type: 'paint_splat', hitX: r.x, hitY: r.y, color: pr.color, targetId: r.playerId || r.id, targetSid: r.sessionId || r.id });
+                events.push({ type: 'paint_splat', projId: id, hitX: r.x, hitY: r.y, color: pr.color, targetId: r.playerId || r.id, targetSid: r.sessionId || r.id });
             }
         }
         for (const a of world.asteroids) {
             if (!hit && Math.abs(pr.x - a.x) < 45 && Math.abs(pr.y - a.y) < 45 && Math.hypot(pr.x - a.x, pr.y - a.y) < a.radius + pr.radius) {
                 resolveBodyCollision(pr, a); a.hitFlash = 1; hit = true;
-                events.push({ type: 'paint_splat', hitX: pr.x, hitY: pr.y, color: pr.color });
+                events.push({ type: 'paint_splat', projId: id, hitX: pr.x, hitY: pr.y, color: pr.color });
             }
         }
         if (hit || pr.ttl <= 0) world.projectiles.delete(id);

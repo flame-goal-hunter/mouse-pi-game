@@ -93,7 +93,7 @@ export class SpaceRoom extends Room {
         });
 
         this.onMessage('peer_bridge', () => {});
-        for (const t of ['shoot_paint', 'hit_asteroid', 'hit_player', 'bumper_hit', 'ball_kick']) {
+        for (const t of ['shoot_paint', 'hit_asteroid', 'hit_player', 'bumper_hit', 'ball_kick', 'cheese_pick']) {
             this.onMessage(t, (client, d) => this.handleAction(client.sessionId, t, d));
         }
     }
@@ -151,6 +151,13 @@ export class SpaceRoom extends Room {
             const nx = Number(d.nx) || 0, ny = Number(d.ny) || 0;
             if (target) this._sendImpulse(target, target.vx * 0.4 + nx * 310, target.vy * 0.4 + ny * 310, target.x + nx * 18, target.y + ny * 18, nx, ny);
             this._emitFx({ type: 'bumper_hit', x: Math.round(Number(d.x) || target?.x || 0), y: Math.round(Number(d.y) || target?.y || 0), targetId: d.targetId || target?.id || '', targetSid: tSid, nx, ny });
+        } else if (type === 'cheese_pick') {
+            const cid = Number(d.id), cb = this.world.cheese.get(cid), p = this.state.players.get(sessionId);
+            if (cb && cb.respawn <= 0) {
+                cb.respawn = 14; cb.vx = cb.vy = 0; cb.x = cb.prevX = cb.homeX; cb.y = cb.prevY = cb.homeY;
+                this._syncCheeseToSchema();
+                this._emitFx({ type: 'cheese_picked', id: cid, byPlayerId: p?.id || sessionId, x: Math.round(Number(d.x) || cb.homeX), y: Math.round(Number(d.y) || cb.homeY) });
+            }
         }
     }
 

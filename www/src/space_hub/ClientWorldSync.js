@@ -111,7 +111,8 @@ export class ClientWorldSync {
         if (state.ball && this.world.ball) {
             const sb = state.ball;
             if (typeof sb.scoreBlue === 'number') this.world.score = { blue: sb.scoreBlue, pink: sb.scorePink || 0 };
-            if (Math.hypot((Number(sb.x) || 0) - this.myBody.x, (Number(sb.y) || 0) - this.myBody.y) > 72 || Math.hypot((Number(sb.x) || 0) - this.world.ball.x, (Number(sb.y) || 0) - this.world.ball.y) > 160) {
+            const recentlyKicked = performance.now() - (this.lastLocalBallKickAt || 0) < 350;
+            if (!recentlyKicked && (Math.hypot((Number(sb.x) || 0) - this.myBody.x, (Number(sb.y) || 0) - this.myBody.y) > 72 || Math.hypot((Number(sb.x) || 0) - this.world.ball.x, (Number(sb.y) || 0) - this.world.ball.y) > 160)) {
                 this._applyServerBody(this.world.ball, sb, false);
             } else {
                 this.world.ball.rawX = Number(sb.x) || 0; this.world.ball.rawY = Number(sb.y) || 0;

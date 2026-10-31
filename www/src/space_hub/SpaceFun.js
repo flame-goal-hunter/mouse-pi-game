@@ -24,7 +24,7 @@ export class SpaceFun {
             SpaceNetwork.worldSync.onWorldEvents = (evs) => this._onLocalWorldEvents(evs);
         }
         SpaceNetwork.onServerImpulse = (imp) => {
-            if (performance.now() - this.lastBumpAt > 200) {
+            if (performance.now() - this.lastBumpAt > 550) {
                 this.lastBumpAt = performance.now();
                 this.rocket.applyServerImpulse(imp);
                 this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 14, false);
@@ -99,6 +99,7 @@ export class SpaceFun {
                 SpaceAudio.playBumperBounce();
                 if (now - this.lastKickAt > 90 && (ev.bodyA?.id === '__local__' || ev.bodyB?.id === '__local__')) {
                     this.lastKickAt = now;
+                    if (SpaceNetwork.worldSync) SpaceNetwork.worldSync.lastLocalBallKickAt = now;
                     const b = SpaceNetwork.worldSync?.world?.ball;
                     if (b) SpaceNetwork.sendAction('ball_kick', { x: Math.round(b.x), y: Math.round(b.y), vx: Math.round(b.vx), vy: Math.round(b.vy) });
                 }
@@ -107,14 +108,19 @@ export class SpaceFun {
                 SpaceAudio.playBumperBounce();
                 try { navigator.vibrate?.(12); } catch (_) {}
             } else if (ev.type === 'paint_splat') {
+                this.lastSplatAt = now;
                 if (ev.targetId || ev.targetSid) {
                     this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.hitX, ev.hitY, ev.targetSid);
-                    SpaceNetwork.sendAction('hit_player', { targetSid: ev.targetSid, targetId: ev.targetId === '__local__' ? PlayerProfile.playerId : ev.targetId, color: ev.color, x: Math.round(ev.hitX), y: Math.round(ev.hitY) });
+                    SpaceNetwork.sendAction('hit_player', { id: ev.projId, targetSid: ev.targetSid, targetId: ev.targetId === '__local__' ? PlayerProfile.playerId : ev.targetId, color: ev.color, x: Math.round(ev.hitX), y: Math.round(ev.hitY) });
                 } else {
                     this._spawnSplat(ev.hitX, ev.hitY, ev.color || '#f472b6', 14, false);
                     SpaceAudio.playPaintSplat();
+                    SpaceNetwork.sendAction('hit_asteroid', { id: ev.projId, color: ev.color, x: Math.round(ev.hitX), y: Math.round(ev.hitY) });
                 }
             } else if (ev.type === 'cheese_picked') {
+                if (ev.byPlayerId === '__local__' || ev.byPlayerId === PlayerProfile.playerId) {
+                    SpaceNetwork.sendAction('cheese_pick', { id: ev.id, x: Math.round(ev.hitX), y: Math.round(ev.hitY) });
+                }
                 this.env?.onServerCheesePicked(ev);
             }
         }
@@ -122,20 +128,22 @@ export class SpaceFun {
 
     _onServerFx(ev) {
         if (!ev?.type) return;
-        const mySid = SpaceNetwork._mySid?.() || '', myPid = PlayerProfile.playerId;
+        const mySid = SpaceNetwork._mySid?.() || '', myPid = PlayerProfile.playerId, now = performance.now();
         if (ev.type === 'paint_splat') {
             if (ev.targetId || ev.targetSid) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y, ev.targetSid);
-            else { this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
+            else if (now - (this.lastSplatAt || 0) > 250) { this.lastSplatAt = now; this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
         } else if (ev.type === 'bumper_hit') {
-            this._spawnSplat(ev.x, ev.y, '#fde047', 12, false, 3.5);
             if ((ev.targetSid && (ev.targetSid === mySid || ev.targetSid === SpaceNetwork.tabSid)) || (ev.targetId && (ev.targetId === myPid || String(ev.targetId).startsWith(myPid + '_')))) {
-                if (performance.now() - this.lastBumpAt > 200) {
-                    this.lastBumpAt = performance.now();
+                if (now - this.lastBumpAt > 550) {
+                    this.lastBumpAt = now;
                     if (ev.nx || ev.ny) this.rocket.bounceOff(ev.nx, ev.ny, 310);
                 }
             }
-            this.shakeTime = Math.max(this.shakeTime, 0.16);
-            SpaceAudio.playBumperBounce();
+            if (now - (this.lastBumpAt || 0) > 350 && now - (this.lastKickAt || 0) > 350) {
+                this._spawnSplat(ev.x, ev.y, '#fde047', 12, false, 3.5);
+                this.shakeTime = Math.max(this.shakeTime, 0.16);
+                SpaceAudio.playBumperBounce();
+            }
         } else if (ev.type === 'goal') {
             if (ev.score) {
                 this.score = ev.score;
