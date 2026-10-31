@@ -19,10 +19,23 @@ class SpaceNetworkManager {
         this.lastHttpSyncAt = 0;
         this.httpSyncInFlight = false;
         this.onFunEvent = null;
+        this.onInviteEvent = null;
         this.localMotion = { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, trailStyle: 'stars', paintColor: null, paintTimer: 0, homeAngle: 0, facing: 1, moving: false };
         this._loadCachedHomes();
+        this._fetchServerHomes();
         this._initLocalChannel();
         this._connect();
+    }
+
+    async _fetchServerHomes() {
+        if (typeof fetch === 'undefined') return;
+        try {
+            const res = await fetch('/api/space-homes');
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data?.homes)) data.homes.forEach(h => this._saveCachedHome(h));
+            }
+        } catch (_) {}
     }
 
     _loadCachedHomes() {
@@ -129,6 +142,7 @@ class SpaceNetworkManager {
             });
             if (res.ok) {
                 const data = await res.json();
+                if (Array.isArray(data?.savedHomes)) data.savedHomes.forEach(h => this._saveCachedHome(h));
                 if (Array.isArray(data?.peers)) data.peers.forEach(p => this._onPacket(p));
             }
         } catch (_) {} finally {
@@ -137,6 +151,14 @@ class SpaceNetworkManager {
     }
 
     _onPacket(pkt) {
+        if (pkt?.savedHomes && Array.isArray(pkt.savedHomes)) {
+            pkt.savedHomes.forEach(h => this._saveCachedHome(h));
+            return;
+        }
+        if (pkt?.inviteEvent) {
+            if (pkt.inviteEvent.toId === PlayerProfile.playerId && this.onInviteEvent) this.onInviteEvent(pkt.inviteEvent);
+            return;
+        }
         if (pkt?.funEvent) {
             if (pkt.funEvent.senderId !== PlayerProfile.playerId && this.onFunEvent) this.onFunEvent(pkt.funEvent);
             return;

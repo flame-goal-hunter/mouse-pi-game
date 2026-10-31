@@ -2,7 +2,7 @@
 // sw.js — Умный Service Worker: строгий Network First (cache: 'no-store'),
 // мгновенный self.skipWaiting() + self.clients.claim() без удержания старого кэша
 // ============================================================================
-const CACHE_VERSION = 'mousiepi-0b86f8a64e';
+const CACHE_VERSION = 'mousiepi-6943b86cf5';
 const SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   './transylvania-menu.html',
   './transylvania-menu.css',
   './transylvania-menu.js',
+  './manifest.json',
   './manifest.webmanifest',
   './lib/phaser-3.70.0.min.js',
   './lib/nipplejs-0.10.2.min.js',
@@ -50,6 +51,7 @@ self.addEventListener('fetch', (e) => {
     url.pathname.startsWith('/colyseus') ||
     url.pathname.startsWith('/health') ||
     url.pathname.startsWith('/matchmake') ||
+    url.pathname.startsWith('/api/') ||
     url.pathname.endsWith('/version.json')
   ) {
     return;
@@ -74,5 +76,38 @@ self.addEventListener('fetch', (e) => {
       }
       return Response.error();
     }
+  })());
+});
+
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) {}
+  const fromNick = data.fromNickname || 'Друг Пи';
+  const title = data.title || '🐭 Мышонок Пи — Зовут в космос!';
+  const body = data.body || `🚀 ${fromNick} прилетел к твоей планете и зовет тебя играть!`;
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: './assets/icons/icon-256-v3.png',
+      badge: './assets/icons/favicon-32-v3.png',
+      tag: 'mousie-pi-invite',
+      renotify: true,
+      vibrate: [220, 100, 220, 100, 320],
+      data: { url: data.url || './', fromId: data.fromId || '' }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const targetUrl = e.notification?.data?.url || './';
+  e.waitUntil((async () => {
+    const winClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of winClients) {
+      if (client.url.includes(self.location.origin) && 'focus' in client) {
+        return client.focus();
+      }
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
   })());
 });

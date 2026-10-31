@@ -1,0 +1,18 @@
+{
+  "name": "Мышонок Пи",
+  "short_name": "Мышонок Пи",
+  "description": "Приключения мышонка Пи в Космосе, на Домашних планетах и в мини-играх.",
+  "lang": "ru",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#0d102b",
+  "theme_color": "#1a0c2e",
+  "icons": [
+    { "src": "assets/icons/icon-256-v3.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512-v3.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable-512-v3.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

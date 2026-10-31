@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SnowballRoom } from './rooms/SnowballRoom.js';
+import { getVapidPublicKey, upsertPlayerFromPacket, savePushSubscription, getAllSavedPlayers, sendInvitePush } from '../pushService.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 const HOST = '0.0.0.0';
@@ -87,6 +88,7 @@ function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
         return;
     }
     if (!pkt || typeof pkt.playerId !== 'string' || !pkt.playerId) return;
+    upsertPlayerFromPacket(pkt);
     pruneSpacePeers();
     spacePeers.set(pkt.playerId, { pkt, updatedAt: Date.now() });
     const raw = JSON.stringify(pkt);
@@ -97,6 +99,34 @@ function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
     }
 }
 
+app.get('/api/space-homes', (_req, res) => {
+    res.json({ ok: true, homes: getAllSavedPlayers() });
+});
+
+app.get('/api/push/vapidPublicKey', (_req, res) => {
+    res.json({ ok: true, publicKey: getVapidPublicKey() });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+    const { playerId, nickname, skinId, subscription } = req.body || {};
+    const ok = savePushSubscription(playerId, subscription, { nickname, skinId });
+    res.json({ ok });
+});
+
+app.post('/api/invite', async (req, res) => {
+    const { fromId, fromNickname, toId } = req.body || {};
+    if (!toId) return res.status(400).json({ ok: false });
+    const senderName = (fromNickname || 'Друг Пи').slice(0, 24);
+    const liveMsg = JSON.stringify({ inviteEvent: { fromId, fromNickname: senderName, toId, ts: Date.now() } });
+    for (const sock of spaceSockets) {
+        if (sock.readyState === 1) {
+            try { sock.send(liveMsg); } catch (_) {}
+        }
+    }
+    const pushRes = await sendInvitePush({ fromId, fromNickname: senderName, toId });
+    res.json({ ok: true, ...pushRes });
+});
+
 app.post('/api/space-sync', (req, res) => {
     const pkt = req.body;
     if (pkt?.playerId) recordAndBroadcastSpacePkt(pkt, null);
@@ -105,7 +135,7 @@ app.post('/api/space-sync', (req, res) => {
     for (const [id, entry] of spacePeers) {
         if (id !== pkt?.playerId) peers.push(entry.pkt);
     }
-    res.json({ ok: true, peers });
+    res.json({ ok: true, peers, savedHomes: getAllSavedPlayers() });
 });
 
 const httpServer = createServer(app);
@@ -120,6 +150,9 @@ wsTransport.wss.on('connection', (rawClient, req) => {
         rawClient.on('error', () => {});
         spaceSockets.add(rawClient);
         pruneSpacePeers();
+        if (rawClient.readyState === 1) {
+            try { rawClient.send(JSON.stringify({ savedHomes: getAllSavedPlayers() })); } catch (_) {}
+        }
         for (const { pkt } of spacePeers.values()) {
             if (rawClient.readyState === 1) {
                 try { rawClient.send(JSON.stringify(pkt)); } catch (_) {}

@@ -171,6 +171,12 @@ class SpaceAudioEngine {
         const f = 660 + Math.random() * 240;
         this._tone(f, f * 1.35, 0.11, 'sine', 0.13, false);
     }
+
+    playRadioCall() {
+        this._tone(980, 1240, 0.08, 'square', 0.12, false, 0);
+        this._tone(1240, 980, 0.08, 'square', 0.12, false, 0.09);
+        this._tone(783.99, 1046.5, 0.24, 'triangle', 0.18, true, 0.19);
+    }
 }
 
 export const SpaceAudio = new SpaceAudioEngine();

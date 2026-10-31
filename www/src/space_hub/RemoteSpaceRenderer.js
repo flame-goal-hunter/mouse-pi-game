@@ -48,14 +48,14 @@ export class RemoteSpaceRenderer {
             const app = snap.planetAppearance || getDefaultAppearance(id, c.nickname);
             map.set(id, {
                 id: `home_planet_${id}`, ownerId: id,
-                ownerNick: c.nickname || 'Друг Пи', ownerSkinId: c.equippedSkinId || 'blue',
+                ownerNick: c.nickname || 'Друг Пи', ownerSkinId: c.equippedSkinId || c.skinId || 'blue',
                 homeSnapshot: snap, planetAppearance: app,
                 name: `Планета ${c.nickname || 'Пи'}`,
-                subtitle: `🧀 Гора сыра: ${snap.storedCheese || 0} · Скинов: ${(snap.unlockedSkins || ['blue']).length}`,
-                badge: '🛸 ДОМ ИГРОКА', actionLabel: 'В ГОСТИ!', actionTheme: 'cyan',
+                subtitle: `💤 Не в сети · 🧀 Гора сыра: ${snap.storedCheese || 0} · Скинов: ${(snap.unlockedSkins || ['blue']).length}`,
+                badge: 'Не в сети 💤', actionLabel: 'В ГОСТИ!', actionTheme: 'cyan',
                 x: pos.x, y: pos.y, radius: 68, dockRadius: 165,
                 coreColor: app.baseColor || '#38bdf8',
-                isFriendHome: true, ownerIsHome: false, locked: false
+                isFriendHome: true, isOffline: true, ownerIsHome: false, locked: false
             });
         }
 
@@ -122,7 +122,7 @@ export class RemoteSpaceRenderer {
         const topLabel = hp.isMyHome ? 'МОЙ ДОМ 🏠' : hp.badge;
         ctx.font = '900 12px "Nunito", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = hp.isMyHome ? '#fde047' : (hp.ownerIsHome ? '#4ade80' : '#38bdf8');
+        ctx.fillStyle = hp.isMyHome ? '#fde047' : (hp.ownerIsHome ? '#4ade80' : (hp.isOffline ? '#cbd5e1' : '#38bdf8'));
         ctx.fillText(topLabel, 0, hp.radius + 22);
 
         const title = hp.name;

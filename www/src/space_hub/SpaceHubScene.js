@@ -18,6 +18,7 @@ import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
+import { PushInviteManager } from '../ui/PushInviteManager.js';
 
 export class SpaceHubScene {
     constructor({ onSelectPlanet } = {}) {
@@ -57,7 +58,7 @@ export class SpaceHubScene {
                 .sh-title-pill, .sh-gear-btn { pointer-events: auto; background: rgba(15, 23, 42, 0.88); border: 2px solid rgba(125, 211, 252, 0.55); border-radius: 999px; padding: 7px 14px; color: #f8fafc; font-weight: 900; font-size: clamp(11.5px, 2.4vw, 13.5px); display: flex; align-items: center; gap: 7px; box-shadow: 0 6px 18px rgba(0,0,0,0.5); }
                 .sh-gear-btn { border-color: #facc15; color: #fef08a; cursor: pointer; font-size: 18px; padding: 7px 13px; background: linear-gradient(180deg, #312e81, #1e1b4b); }
                 .sh-right-tools { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
-                .sh-planet-banner { position: fixed; bottom: max(22px, env(safe-area-inset-bottom, 22px)); left: 50%; transform: translate(-50%, 130%); background: rgba(15, 23, 42, 0.92); border: 2.5px solid #4ade80; border-radius: 20px; padding: 10px 20px; text-align: center; color: #fff; min-width: 250px; max-width: min(440px, 56vw); box-shadow: 0 10px 28px rgba(0,0,0,0.65); transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1); z-index: 9993; pointer-events: none; }
+                .sh-planet-banner { position: fixed; bottom: max(22px, env(safe-area-inset-bottom, 22px)); left: 50%; transform: translate(-50%, 130%); background: rgba(15, 23, 42, 0.92); border: 2.5px solid #4ade80; border-radius: 20px; padding: 10px 20px; text-align: center; color: #fff; min-width: 250px; max-width: min(440px, 56vw); box-shadow: 0 10px 28px rgba(0,0,0,0.65); transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1); z-index: 9993; pointer-events: auto; }
                 .sh-planet-banner.visible { transform: translate(-50%, 0%); }
                 .sh-now-playing { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(148, 163, 184, 0.28); font-size: 11.5px; color: #4ade80; font-weight: 800; }
                 .sh-np-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(30, 41, 59, 0.9); padding: 2px 8px 2px 4px; border-radius: 999px; color: #f8fafc; border: 1px solid #4ade80; }
@@ -83,6 +84,7 @@ export class SpaceHubScene {
                     <label style="font-size:12.5px;font-weight:800;color:#93c5fd;">👤 Твой космический никнейм:</label>
                     <input id="shNickInput" type="text" maxlength="16" style="padding:10px 12px;border-radius:12px;border:2px solid #38bdf8;background:#0f172a;color:#fff;font-family:'Nunito',sans-serif;font-weight:900;font-size:15px;">
                     <button type="button" class="sh-set-btn" id="shSoundToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔊 Звук и музыка: ВКЛ</button>
+                    <button type="button" class="sh-set-btn" id="shPushToggleBtn" style="background:linear-gradient(180deg,#334155,#1e293b);">🔔 Включить вызовы на телефон</button>
                     <button type="button" class="sh-set-btn" id="shSaveSetBtn" style="background:linear-gradient(180deg,#22c55e,#15803d);border-color:#86efac;">✅ Сохранить</button>
                 </div>
             </div>
@@ -90,7 +92,10 @@ export class SpaceHubScene {
         document.body.appendChild(el);
         Object.assign(this, { overlay: el, canvas: el.querySelector('#spaceHubCanvas'), banner: el.querySelector('#shPlanetBanner'), bannerTitle: el.querySelector('#shBannerTitle'), bannerSub: el.querySelector('#shBannerSub'), bannerPlayers: el.querySelector('#shBannerPlayers'), cheeseCounter: el.querySelector('#shCheeseCounter') });
         this.ctx = this.canvas.getContext('2d');
-        el.querySelector('#shRightTools').prepend(AutoUpdater.createReloadButton());
+        const rightTools = el.querySelector('#shRightTools');
+        rightTools.prepend(AutoUpdater.createReloadButton());
+        rightTools.prepend(PushInviteManager.createBellButton());
+        PushInviteManager.bindSettingsButton(el.querySelector('#shPushToggleBtn'));
         this._wireSettings(el);
     }
 
@@ -148,12 +153,24 @@ export class SpaceHubScene {
     stop() { this.running = false; SpaceAudio.setMode('off'); this.overlay.style.display = 'none'; }
 
     _renderBannerExtras(planet) {
-        if (!planet || planet.isMyHome) { this.bannerPlayers.innerHTML = ''; return; }
+        if (!planet || planet.isMyHome) { this.bannerPlayers.dataset.friendId = ''; this.bannerPlayers.innerHTML = ''; return; }
         if (planet.isFriendHome) {
+            if (this.bannerPlayers.dataset.friendId === planet.ownerId) return;
+            this.bannerPlayers.dataset.friendId = planet.ownerId;
             const spr = getPlayerSkinSprite(planet.ownerSkinId);
-            this.bannerPlayers.innerHTML = `<div class="sh-now-playing" style="color:#22d3ee;"><span>🛸 Владелец:</span><span class="sh-np-badge" style="border-color:#22d3ee;"><img src="${spr.svgUrl}" alt="">${planet.ownerNick}</span></div>`;
+            this.bannerPlayers.innerHTML = `
+                <div class="sh-now-playing" style="color:#22d3ee;"><span>🛸 Владелец:</span><span class="sh-np-badge" style="border-color:#22d3ee;"><img src="${spr.svgUrl}" alt="">${planet.ownerNick}</span></div>
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
+                    <button type="button" class="pim-invite-btn" id="shBannerVisitBtn" style="margin-top:0;background:linear-gradient(135deg,#06b6d4,#0284c7);border-color:#a5f3fc;">🏠 В ГОСТИ!</button>
+                    <button type="button" class="pim-invite-btn" id="shBannerInviteBtn" data-invite-target-id="${planet.ownerId}" style="margin-top:0;">📲 ПОЗВАТЬ В ИГРУ!</button>
+                </div>`;
+            this.bannerPlayers.querySelector('#shBannerVisitBtn')?.addEventListener('click', () => this._handleLandTap());
+            const invBtn = this.bannerPlayers.querySelector('#shBannerInviteBtn');
+            invBtn?.addEventListener('click', () => PushInviteManager.sendInvite(planet.ownerId, planet.ownerNick, invBtn));
+            PushInviteManager._tickCooldowns();
             return;
         }
+        this.bannerPlayers.dataset.friendId = '';
         const playing = SpaceNetwork.getOnlinePeers().filter(p => p.currentLocation === planet.id);
         if (!playing.length) { this.bannerPlayers.innerHTML = ''; return; }
         const chips = playing.map(p => `<span class="sh-np-badge"><img src="${getPlayerSkinSprite(p.equippedSkinId).svgUrl}" alt="">${p.nickname || 'Пи'}</span>`).join('');

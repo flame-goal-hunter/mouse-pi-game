@@ -12,6 +12,7 @@ import { normalizeAppearance } from '../space_hub/PersonalPlanetSystem.js';
 import { BIOME_CATALOG, RING_CATALOG } from '../space_hub/PlanetStyleRenderer.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
+import { PushInviteManager } from '../ui/PushInviteManager.js';
 
 export class HomePlanetScene {
     constructor({ onTakeOff } = {}) {
@@ -54,6 +55,7 @@ export class HomePlanetScene {
                 <div class="hp-pill" id="hpTitlePill">🏠 МОЙ ДОМ</div>
                 <div class="hp-pill" id="hpCheeseHud">🎒 0 🧀 · 🏛 0 🧀</div>
                 <button type="button" class="hp-pill hp-paint-btn" id="hpQuickPaintBtn">🎨 Красить планету</button>
+                <button type="button" class="pim-invite-btn" id="hpInviteOwnerBtn" style="display:none;margin-top:0;">📲 ПОЗВАТЬ В ИГРУ!</button>
             </div>
             <div class="hp-zone-banner" id="hpZoneBanner">
                 <div style="font-weight:900;font-size:16px;color:#fef08a;" id="hpBannerTitle"></div>
@@ -73,9 +75,14 @@ export class HomePlanetScene {
             </div>
         `;
         document.body.appendChild(el);
-        Object.assign(this, { overlay: el, canvas: el.querySelector('#homePlanetCanvas'), titlePill: el.querySelector('#hpTitlePill'), hudEl: el.querySelector('#hpCheeseHud'), paintBtn: el.querySelector('#hpQuickPaintBtn'), banner: el.querySelector('#hpZoneBanner'), bannerTitle: el.querySelector('#hpBannerTitle'), bannerSub: el.querySelector('#hpBannerSub'), styleModal: el.querySelector('#hpStyleModal') });
+        Object.assign(this, { overlay: el, canvas: el.querySelector('#homePlanetCanvas'), titlePill: el.querySelector('#hpTitlePill'), hudEl: el.querySelector('#hpCheeseHud'), paintBtn: el.querySelector('#hpQuickPaintBtn'), inviteBtn: el.querySelector('#hpInviteOwnerBtn'), banner: el.querySelector('#hpZoneBanner'), bannerTitle: el.querySelector('#hpBannerTitle'), bannerSub: el.querySelector('#hpBannerSub'), styleModal: el.querySelector('#hpStyleModal') });
         this.ctx = this.canvas.getContext('2d');
         this.paintBtn.addEventListener('click', () => this._openStyleEditor());
+        this.inviteBtn.addEventListener('click', () => {
+            if (this.state.isVisiting && this.state.visitData) {
+                PushInviteManager.sendInvite(this.state.visitData.ownerId, this.state.visitData.ownerNick, this.inviteBtn);
+            }
+        });
         el.querySelector('#hpCloseStyleBtn').addEventListener('click', () => this.styleModal.classList.remove('visible'));
         el.querySelector('.hp-hud-bar').appendChild(AutoUpdater.createReloadButton());
     }
@@ -117,10 +124,14 @@ export class HomePlanetScene {
             this.titlePill.textContent = `🛸 Планета ${this.state.visitData.ownerNick}`;
             this.hudEl.textContent = `🧀 Склад хозяина: ${snap.storedCheese || 0}  |  👗 Скинов: ${(snap.unlockedSkins || ['blue']).length}`;
             this.paintBtn.style.display = 'none';
+            this.inviteBtn.dataset.inviteTargetId = this.state.visitData.ownerId;
+            this.inviteBtn.style.display = 'inline-flex';
+            PushInviteManager._tickCooldowns();
         } else {
             this.titlePill.textContent = `🏠 МОЙ ДОМ · Планета ${PlayerProfile.nickname}`;
             this.hudEl.textContent = `🎒 В кармане: ${PlayerProfile.pocketCheese} 🧀  |  🏛 Склад: ${PlayerProfile.storedCheese} 🧀`;
             this.paintBtn.style.display = 'inline-flex';
+            this.inviteBtn.style.display = 'none';
         }
     }
 
