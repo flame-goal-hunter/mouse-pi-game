@@ -6,9 +6,10 @@
 import { SPACE_CONFIG } from './SpaceConfig.js';
 
 export class TouchControls {
-    constructor(containerEl, onActionTap) {
+    constructor(containerEl, onActionTap, onPaintTap) {
         this.container = containerEl;
         this.onActionTap = onActionTap;
+        this.onPaintTap = onPaintTap || null;
         this.joyVec = { x: 0, y: 0 };
         this.turboHeld = false;
         this.canDock = false;
@@ -66,8 +67,24 @@ export class TouchControls {
                     animation: shPulseDock 0.9s infinite alternate ease-in-out;
                 }
                 @keyframes shPulseDock { from { transform: scale(1); } to { transform: scale(1.08); } }
+                .sh-paint-btn {
+                    position: fixed; right: max(${bR * 2 + 38}px, calc(env(safe-area-inset-right, 24px) + ${bR * 2 + 14}px));
+                    bottom: max(30px, env(safe-area-inset-bottom, 30px));
+                    width: 68px; height: 68px; border-radius: 50%;
+                    border: 2.5px solid #f5d0fe;
+                    background: radial-gradient(circle at 30% 25%, #e879f9, #a855f7 70%, #581c87);
+                    color: #fff; font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 11px;
+                    box-shadow: 0 8px 22px rgba(168, 85, 247, 0.55);
+                    display: ${this.onPaintTap ? 'flex' : 'none'}; flex-direction: column; align-items: center; justify-content: center;
+                    cursor: pointer; z-index: 9992; transition: transform 0.1s;
+                }
+                .sh-paint-btn:active { transform: scale(0.92); }
             </style>
             <div class="sh-joy-zone"><div class="sh-joy-knob"></div></div>
+            <button type="button" class="sh-paint-btn">
+                <span style="font-size:20px;line-height:1">🎨</span>
+                <span>ПЛЮХ!</span>
+            </button>
             <button type="button" class="sh-action-btn">
                 <span style="font-size:22px;line-height:1">🔥</span>
                 <span class="sh-btn-lbl">ТУРБО</span>
@@ -77,6 +94,7 @@ export class TouchControls {
         this.root = wrap;
         this.joyZone = wrap.querySelector('.sh-joy-zone');
         this.joyKnob = wrap.querySelector('.sh-joy-knob');
+        this.paintBtn = wrap.querySelector('.sh-paint-btn');
         this.actionBtn = wrap.querySelector('.sh-action-btn');
         this.btnLabel = wrap.querySelector('.sh-btn-lbl');
         this.btnIcon = this.actionBtn.querySelector('span');
@@ -122,6 +140,13 @@ export class TouchControls {
             e.preventDefault();
             e.stopPropagation();
         });
+        if (this.paintBtn && this.onPaintTap) {
+            this.paintBtn.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); e.stopPropagation();
+                this.onPaintTap();
+            });
+            this.paintBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+        }
         const endTurbo = () => { this.turboHeld = false; };
         this.actionBtn.addEventListener('pointerup', endTurbo);
         this.actionBtn.addEventListener('pointercancel', endTurbo);
@@ -133,6 +158,8 @@ export class TouchControls {
             if ((e.code === 'Space' || e.code === 'Enter') && this.canDock) {
                 e.preventDefault();
                 this.onActionTap();
+            } else if ((e.code === 'KeyE' || e.code === 'KeyC') && this.onPaintTap) {
+                this.onPaintTap();
             }
         };
         this._onKeyUp = (e) => this.keys.delete(e.code);

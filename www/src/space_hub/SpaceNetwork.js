@@ -17,6 +17,7 @@ class SpaceNetworkManager {
         this.lastSendAt = 0;
         this.lastHttpSyncAt = 0;
         this.httpSyncInFlight = false;
+        this.onFunEvent = null;
         this.localMotion = { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, homeAngle: 0, facing: 1, moving: false };
         this._loadCachedHomes();
         this._initLocalChannel();
@@ -106,6 +107,14 @@ class SpaceNetworkManager {
         }
     }
 
+    sendFunEvent(ev) {
+        const msg = { funEvent: { ...ev, senderId: PlayerProfile.playerId, ts: Date.now() } };
+        try { this.bc?.postMessage(msg); } catch (_) {}
+        if (this.connected && this.ws?.readyState === 1) {
+            try { this.ws.send(JSON.stringify(msg)); } catch (_) {}
+        }
+    }
+
     async _syncHttpFallback() {
         if (this.httpSyncInFlight || typeof fetch === 'undefined') return;
         this.httpSyncInFlight = true;
@@ -125,6 +134,10 @@ class SpaceNetworkManager {
     }
 
     _onPacket(pkt) {
+        if (pkt?.funEvent) {
+            if (pkt.funEvent.senderId !== PlayerProfile.playerId && this.onFunEvent) this.onFunEvent(pkt.funEvent);
+            return;
+        }
         if (!pkt?.playerId || pkt.playerId === PlayerProfile.playerId) return;
         const peer = this.peers.get(pkt.playerId) || {
             playerId: pkt.playerId, rx: pkt.x || 0, ry: pkt.y || 0,

@@ -13,6 +13,7 @@ import { SpaceRadar } from './SpaceRadar.js';
 import { SpaceNetwork } from './SpaceNetwork.js';
 import { OnlineHUD } from './OnlineHUD.js';
 import { RemoteSpaceRenderer } from './RemoteSpaceRenderer.js';
+import { SpaceFun } from './SpaceFun.js';
 import { HomePlanetScene } from '../home_planet/HomePlanetScene.js';
 import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
@@ -27,9 +28,10 @@ export class SpaceHubScene {
         this.planets = new PlanetRenderer();
         this.remoteRenderer = new RemoteSpaceRenderer();
         this.rocket = new RocketController();
+        this.fun = new SpaceFun(this.rocket, this.env);
         this.radar = new SpaceRadar();
         this.onlineHud = new OnlineHUD(this.overlay);
-        this.controls = new TouchControls(this.overlay, () => this._handleLandTap());
+        this.controls = new TouchControls(this.overlay, () => this._handleLandTap(), () => this.fun.firePaint());
         this.homeScene = new HomePlanetScene({
             onTakeOff: (visited) => { this._placeRocketOnOrbit(visited || this.remoteRenderer.getMyHomePlanet()); this.start(); }
         });
@@ -151,8 +153,10 @@ export class SpaceHubScene {
     }
 
     _step(dt, timeSec) {
-        const zoomDone = this.rocket.update(dt, this.controls.getInput());
+        const inp = this.controls.getInput();
+        const zoomDone = this.rocket.update(dt, inp);
         this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
+        this.fun.update(dt, inp.turboHeld);
         SpaceNetwork.step(dt, { x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle });
         this.onlineHud.update();
 
@@ -183,17 +187,18 @@ export class SpaceHubScene {
         } else if (nearest) this._renderBannerExtras(nearest);
 
         this.planets.update(dt, this.activePlanet?.id || null);
-        const ctx = this.ctx;
+        const ctx = this.ctx, shk = this.fun.shakeTime > 0 ? (Math.random() - 0.5) * 14 : 0;
         ctx.save(); ctx.scale(this.dpr, this.dpr);
         this.bg.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec);
         ctx.save();
-        ctx.translate(this.viewW / 2, this.viewH / 2);
+        ctx.translate(this.viewW / 2 + shk, this.viewH / 2 - shk);
         ctx.scale(this.rocket.camZoom, this.rocket.camZoom);
         ctx.translate(-this.rocket.camX, -this.rocket.camY);
-        this.env.draw(ctx, timeSec); this.planets.draw(ctx, timeSec);
+        this.env.draw(ctx, timeSec); this.fun.drawWorld(ctx); this.planets.draw(ctx, timeSec);
         this.remoteRenderer.draw(ctx, timeSec, this.activePlanet?.id || null);
         this.rocket.draw(ctx);
         ctx.restore();
+        this.fun.drawScreenBanner(ctx, this.viewW, this.viewH);
         this.radar.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec, this.onlineHud.getTrackedTarget());
         ctx.restore();
     }

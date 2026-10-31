@@ -144,18 +144,29 @@ export class RemoteSpaceRenderer {
 
     _drawRemoteRocket(ctx, peer, timeSec) {
         const skin = getPlayerSkinSprite(peer.equippedSkinId);
+        const isPainted = peer.paintUntil && Date.now() < peer.paintUntil;
+        const pCol = isPainted ? peer.paintColor : null;
+        const flipAge = peer.flipStart ? (performance.now() - peer.flipStart) / 650 : 1;
+        const spin = flipAge < 1 ? flipAge * Math.PI * 2 : 0;
         ctx.save();
         ctx.translate(peer.rx, peer.ry);
         ctx.save();
-        ctx.rotate(peer.rAngle);
-        ctx.fillStyle = '#38bdf8';
+        ctx.rotate(peer.rAngle + spin);
+        ctx.fillStyle = pCol || '#38bdf8';
         ctx.beginPath(); ctx.arc(-25, 0, 6 + Math.sin(timeSec * 24) * 2.5, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#a855f7';
+        if (isPainted) {
+            ctx.strokeStyle = pCol; ctx.lineWidth = 2;
+            for (let i = 1; i <= 3; i++) {
+                const bx = -26 - ((timeSec * 65 + i * 16) % 38), by = Math.sin(timeSec * 7 + i * 2) * 8;
+                ctx.beginPath(); ctx.arc(bx, by, 4 + i, 0, Math.PI * 2); ctx.stroke();
+            }
+        }
+        ctx.fillStyle = pCol || '#a855f7';
         ctx.beginPath();
         ctx.moveTo(-9, -12); ctx.lineTo(-22, -21); ctx.lineTo(-16, -7); ctx.closePath();
         ctx.moveTo(-9, 12);  ctx.lineTo(-22, 21);  ctx.lineTo(-16, 7);  ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#f1f5f9'; ctx.strokeStyle = skin.bodyColor || '#38bdf8'; ctx.lineWidth = 2.5;
+        ctx.fillStyle = pCol || '#f1f5f9'; ctx.strokeStyle = skin.bodyColor || '#38bdf8'; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.ellipse(2, 0, 23, 13, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#0f172a';
         ctx.beginPath(); ctx.arc(3, 0, 8.5, 0, Math.PI * 2); ctx.fill();
@@ -166,6 +177,10 @@ export class RemoteSpaceRenderer {
         ctx.restore();
 
         ctx.font = '900 12px "Nunito", sans-serif'; ctx.textAlign = 'center';
+        if (isPainted) {
+            ctx.fillStyle = pCol;
+            ctx.fillText('Догоняй! 😜', 0, -42);
+        }
         ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
         const w = Math.max(48, ctx.measureText(peer.nickname || 'Пи').width + 14);
         ctx.beginPath(); ctx.roundRect(-w / 2, -36, w, 18, 9); ctx.fill();

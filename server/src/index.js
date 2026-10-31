@@ -66,6 +66,7 @@ app.use('/colyseus', monitor());
 // ============================================================================
 const spacePeers = new Map();
 const spaceSockets = new Set();
+let lastBallEvent = null;
 
 function pruneSpacePeers() {
     const cutoff = Date.now() - 16000;
@@ -75,6 +76,16 @@ function pruneSpacePeers() {
 }
 
 function recordAndBroadcastSpacePkt(pkt, senderWs = null) {
+    if (pkt?.funEvent) {
+        if (pkt.funEvent.type === 'ballKick' || pkt.funEvent.type === 'goal') lastBallEvent = pkt;
+        const raw = JSON.stringify(pkt);
+        for (const sock of spaceSockets) {
+            if (sock !== senderWs && sock.readyState === 1) {
+                try { sock.send(raw); } catch (_) {}
+            }
+        }
+        return;
+    }
     if (!pkt || typeof pkt.playerId !== 'string' || !pkt.playerId) return;
     pruneSpacePeers();
     spacePeers.set(pkt.playerId, { pkt, updatedAt: Date.now() });
@@ -113,6 +124,9 @@ wsTransport.wss.on('connection', (rawClient, req) => {
             if (rawClient.readyState === 1) {
                 try { rawClient.send(JSON.stringify(pkt)); } catch (_) {}
             }
+        }
+        if (lastBallEvent && rawClient.readyState === 1) {
+            try { rawClient.send(JSON.stringify(lastBallEvent)); } catch (_) {}
         }
         rawClient.on('message', (data) => {
             try {

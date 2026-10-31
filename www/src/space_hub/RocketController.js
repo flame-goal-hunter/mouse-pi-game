@@ -21,6 +21,10 @@ export class RocketController {
         this.exhaustAccum = 0;
         this.zoomTargetPlanet = null;
         this.zoomElapsedMs = 0;
+        this.paintColor = null;
+        this.paintTimer = 0;
+        this.flipTimer = 0;
+        this.hopScale = 0;
     }
 
     startPlanetZoom(planet) {
@@ -92,6 +96,9 @@ export class RocketController {
             }
         }
 
+        if (this.paintTimer > 0 && (this.paintTimer = Math.max(0, this.paintTimer - dt)) === 0) this.paintColor = null;
+        if (this.flipTimer > 0) this.flipTimer = Math.max(0, this.flipTimer - dt);
+        if (this.hopScale > 0) this.hopScale = Math.max(0, this.hopScale - dt * 2.2);
         this._updateParticles(dt);
         const lerpF = Math.min(1, cfg.cameraLerp * dt);
         this.camX += (this.x - this.camX) * lerpF;
@@ -114,7 +121,8 @@ export class RocketController {
             life: 1,
             decay: 1.5 + Math.random() * 0.9,
             rot: Math.random() * Math.PI * 2,
-            color: colors[Math.floor(Math.random() * colors.length)]
+            bubble: this.paintTimer > 0,
+            color: this.paintColor || colors[Math.floor(Math.random() * colors.length)]
         });
     }
 
@@ -138,29 +146,39 @@ export class RocketController {
             ctx.fillStyle = p.color;
             const r = p.size * p.life;
             ctx.beginPath();
-            for (let i = 0; i < 10; i++) {
-                const rad = i % 2 === 0 ? r : r * 0.44;
-                const a = (i * Math.PI) / 5;
-                if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
-                else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+            if (p.bubble) {
+                ctx.strokeStyle = p.color; ctx.lineWidth = 2;
+                ctx.arc(0, 0, r * 1.1, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                for (let i = 0; i < 10; i++) {
+                    const rad = i % 2 === 0 ? r : r * 0.44;
+                    const a = (i * Math.PI) / 5;
+                    if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                    else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+                }
+                ctx.closePath();
+                ctx.fill();
             }
-            ctx.closePath();
-            ctx.fill();
             ctx.restore();
         }
 
         ctx.save();
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.angle);
+        const sc = 1 + this.hopScale;
+        ctx.scale(sc, sc);
+        const spin = this.flipTimer > 0 ? (1 - this.flipTimer / 0.65) * Math.PI * 2 : 0;
+        ctx.save();
+        ctx.rotate(this.angle + spin);
 
-        ctx.fillStyle = '#ef4444';
+        ctx.fillStyle = this.paintColor || '#ef4444';
         ctx.beginPath();
         ctx.moveTo(-10, -14); ctx.lineTo(-24, -24); ctx.lineTo(-18, -8); ctx.closePath();
         ctx.moveTo(-10, 14);  ctx.lineTo(-24, 24);  ctx.lineTo(-18, 8);  ctx.closePath();
         ctx.fill();
 
-        ctx.fillStyle = '#f8fafc';
-        ctx.strokeStyle = '#38bdf8';
+        ctx.fillStyle = this.paintColor || '#f8fafc';
+        ctx.strokeStyle = this.paintColor ? '#fde047' : '#38bdf8';
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.ellipse(2, 0, 25, 14, 0, 0, Math.PI * 2);
@@ -194,6 +212,12 @@ export class RocketController {
             ctx.beginPath();
             ctx.arc(3, 1, 5, 0, Math.PI * 2);
             ctx.fill();
+        }
+        ctx.restore();
+        if (this.paintTimer > 0) {
+            ctx.font = '900 12px "Nunito", sans-serif'; ctx.textAlign = 'center';
+            ctx.fillStyle = this.paintColor || '#f472b6';
+            ctx.fillText('Догоняй! 😜', 0, -28);
         }
         ctx.restore();
     }
