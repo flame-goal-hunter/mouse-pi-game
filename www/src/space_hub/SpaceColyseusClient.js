@@ -7,6 +7,7 @@ import * as ColyseusMod from '../../lib/colyseus.esm.js';
 import { PlayerProfile } from '../core/PlayerProfile.js';
 import { getPersonalPlanetCoords } from './PersonalPlanetSystem.js';
 import { SpaceSmoothRender } from './SpaceSmoothRender.js';
+import { SpaceNetDebug } from './SpaceNetDebug.js';
 
 const Colyseus = ColyseusMod.default || ColyseusMod;
 const FRIENDS_CACHE_KEY = 'mousiePi.friendsHomes.v1';
@@ -117,7 +118,10 @@ export class SpaceColyseusClient {
         const room = this.room;
         if (!room) return;
         const applyState = (state) => {
-            if (state) this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt), this.tabSid);
+            if (state) {
+                SpaceNetDebug.onPatch('colyseus');
+                this.smoother.onColyseusState(state, room.sessionId, this.peers, (pkt) => this._saveCachedHome(pkt), this.tabSid);
+            }
         };
         if (room.state) applyState(room.state);
         room.onStateChange(applyState);
@@ -199,6 +203,7 @@ export class SpaceColyseusClient {
                         angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
                         homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving)
                     });
+                    SpaceNetDebug.onSend();
                 } catch (_) {}
                 const curStatus = `${PlayerProfile.currentLocation}|${PlayerProfile.equippedSkinId}|${PlayerProfile.nickname}|${PlayerProfile.storedCheese}`;
                 if (curStatus !== this.lastStatusSent) { this.lastStatusSent = curStatus; this.broadcastNow(); }

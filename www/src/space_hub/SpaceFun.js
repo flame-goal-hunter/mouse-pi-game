@@ -97,6 +97,8 @@ export class SpaceFun {
             if (srvBall.score) this.score = srvBall.score;
             b.x = srvBall.x;
             b.y = srvBall.y;
+            b.rawX = srvBall.rawX ?? srvBall.x;
+            b.rawY = srvBall.rawY ?? srvBall.y;
             b.vx = srvBall.vx;
             b.vy = srvBall.vy;
             b.angle = srvBall.angle;

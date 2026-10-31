@@ -6,6 +6,7 @@
 
 import { SnapshotInterpolation } from '../../lib/snapshot-interpolation.esm.js';
 import { RemotePlayerEntity } from './RemotePlayerEntity.js';
+import { SpaceNetDebug } from './SpaceNetDebug.js';
 
 export class SpaceSmoothRender {
     constructor() {
@@ -64,6 +65,8 @@ export class SpaceSmoothRender {
                 } else {
                     peer.applyPacket(pkt);
                 }
+                peer.rawX = Number(p.x) || 0;
+                peer.rawY = Number(p.y) || 0;
                 if (onSaveHome) onSaveHome(pkt);
             });
         }
@@ -81,15 +84,19 @@ export class SpaceSmoothRender {
         }
 
         if (state.ball) {
+            const rawBx = Number.isFinite(Number(state.ball.x)) ? Number(state.ball.x) : 0;
+            const rawBy = Number.isFinite(Number(state.ball.y)) ? Number(state.ball.y) : 110;
             entities.push({
                 id: 'ball',
-                x: Number.isFinite(Number(state.ball.x)) ? Number(state.ball.x) : 0,
-                y: Number.isFinite(Number(state.ball.y)) ? Number(state.ball.y) : 110,
+                x: rawBx,
+                y: rawBy,
                 angle: Number(state.ball.angle) || 0
             });
             if (!this.smoothBall) {
-                this.smoothBall = { x: state.ball.x, y: state.ball.y, vx: state.ball.vx, vy: state.ball.vy, angle: state.ball.angle, score: { blue: state.ball.scoreBlue || 0, pink: state.ball.scorePink || 0 } };
+                this.smoothBall = { x: rawBx, y: rawBy, rawX: rawBx, rawY: rawBy, vx: state.ball.vx, vy: state.ball.vy, angle: state.ball.angle, score: { blue: state.ball.scoreBlue || 0, pink: state.ball.scorePink || 0 } };
             } else {
+                this.smoothBall.rawX = rawBx;
+                this.smoothBall.rawY = rawBy;
                 this.smoothBall.vx = state.ball.vx;
                 this.smoothBall.vy = state.ball.vy;
                 this.smoothBall.score = { blue: state.ball.scoreBlue || 0, pink: state.ball.scorePink || 0 };
@@ -133,6 +140,8 @@ export class SpaceSmoothRender {
         };
         if (!peer) { peer = new RemotePlayerEntity(fullPkt); peersMap.set(pid, peer); }
         else peer.applyPacket(fullPkt);
+        peer.rawX = Number(pkt.x) || 0;
+        peer.rawY = Number(pkt.y) || 0;
         peer.isExternal = true;
         peer.sessionId = sid;
         if (onSaveHome) onSaveHome(fullPkt);
@@ -149,12 +158,16 @@ export class SpaceSmoothRender {
         if (interpolated && Array.isArray(interpolated.state)) {
             for (const ent of interpolated.state) interpMap.set(ent.id, ent);
         }
+        const vSize = this.SI.vault?.size || 0;
 
         const bEnt = interpMap.get('ball');
-        if (bEnt && this.smoothBall) {
-            this.smoothBall.x = bEnt.x;
-            this.smoothBall.y = bEnt.y;
-            this.smoothBall.angle = bEnt.angle;
+        if (this.smoothBall) {
+            if (bEnt) {
+                this.smoothBall.x = bEnt.x;
+                this.smoothBall.y = bEnt.y;
+                this.smoothBall.angle = bEnt.angle;
+            }
+            SpaceNetDebug.recordEntityFrame('ball', this.smoothBall.rawX ?? this.smoothBall.x, this.smoothBall.rawY ?? this.smoothBall.y, this.smoothBall.x, this.smoothBall.y, this.smoothBall.angle || 0, dt, bEnt ? 'SI' : 'fallback_raw', vSize);
         }
 
         for (const pr of this.smoothProjectiles) {
@@ -166,6 +179,9 @@ export class SpaceSmoothRender {
         for (const [pid, peer] of peersMap) {
             const ent = interpMap.get(`p_${pid}`);
             peer.update(dt, ent ? { x: ent.x, y: ent.y, angle: ent.angle, vx: peer.targetVx, vy: peer.targetVy, isThrusting: peer.isThrusting, isTurbo: peer.isTurbo } : null);
+            if (peer.currentLocation === 'space') {
+                SpaceNetDebug.recordEntityFrame(`player_${peer.nickname || pid}`, peer.rawX ?? peer.targetX, peer.rawY ?? peer.targetY, peer.renderX, peer.renderY, peer.renderAngle, dt, ent ? 'SI' : 'fallback_raw', vSize);
+            }
         }
     }
 }

@@ -19,6 +19,7 @@ import { PlayerProfile, getPlayerSkinSprite } from '../core/PlayerProfile.js';
 import { SpaceAudio } from '../core/SpaceAudio.js';
 import { AutoUpdater } from '../core/AutoUpdater.js';
 import { PushInviteManager } from '../ui/PushInviteManager.js';
+import { SpaceNetDebug } from './SpaceNetDebug.js';
 
 export class SpaceHubScene {
     constructor({ onSelectPlanet } = {}) {
@@ -96,6 +97,7 @@ export class SpaceHubScene {
         rightTools.prepend(AutoUpdater.createReloadButton());
         rightTools.prepend(PushInviteManager.createBellButton());
         PushInviteManager.bindSettingsButton(el.querySelector('#shPushToggleBtn'));
+        SpaceNetDebug.mountUI(el);
         this._wireSettings(el);
     }
 
@@ -140,11 +142,12 @@ export class SpaceHubScene {
         this.dockingPlanet = null; this.rocket.zoomTargetPlanet = null; this.rocket.camZoom = 1;
         SpaceAudio.setMode('space');
         this.running = true; this.lastTime = performance.now();
+        SpaceNetDebug.activeRAFLoopsCount++;
         const loop = (now) => {
-            if (!this.running) return;
+            if (!this.running) { SpaceNetDebug.activeRAFLoopsCount = Math.max(0, SpaceNetDebug.activeRAFLoopsCount - 1); return; }
             const dt = Math.min(0.05, (now - this.lastTime) / 1000);
             this.lastTime = now;
-            this._step(dt, now / 1000);
+            this._step(dt, now / 1000, now);
             requestAnimationFrame(loop);
         };
         requestAnimationFrame(loop);
@@ -177,18 +180,21 @@ export class SpaceHubScene {
         this.bannerPlayers.innerHTML = `<div class="sh-now-playing"><span>🎮 Сейчас тут играют:</span>${chips}</div>`;
     }
 
-    _step(dt, timeSec) {
+    _step(dt, timeSec, rawNow = performance.now()) {
+        SpaceNetDebug.onFrameStep(dt, rawNow);
         this._resize();
         const inp = this.controls.getInput();
         const zoomDone = this.rocket.update(dt, inp);
         SpaceAudio.updateEngine(Math.hypot(this.rocket.vx, this.rocket.vy), SPACE_CONFIG.rocket.maxSpeed, inp.turboHeld);
         this.env.update(dt, this.rocket, () => this._updateCheeseHUD());
         this.fun.update(dt, inp.turboHeld);
+        const prevRx = this.rocket.x, prevRy = this.rocket.y;
         SpaceNetwork.step(dt, {
             x: this.rocket.x, y: this.rocket.y, vx: this.rocket.vx, vy: this.rocket.vy, angle: this.rocket.angle,
             isThrusting: this.rocket.isThrusting, isTurbo: this.rocket.isTurbo,
             trailStyle: this.rocket.trailStyle || 'stars', paintColor: this.rocket.paintColor, paintTimer: this.rocket.paintTimer
         });
+        SpaceNetDebug.checkMyRocketOverride(prevRx, prevRy, this.rocket.x, this.rocket.y, 'SpaceNetwork.step');
         this.onlineHud.update();
 
         if (zoomDone && this.dockingPlanet) {
@@ -228,6 +234,7 @@ export class SpaceHubScene {
         this.env.draw(ctx, timeSec); this.fun.drawWorld(ctx); this.planets.draw(ctx, timeSec);
         this.remoteRenderer.draw(ctx, timeSec, this.activePlanet?.id || null);
         this.rocket.draw(ctx);
+        SpaceNetDebug.drawWorldOverlay(ctx, SpaceNetwork.getOnlinePeers(), this.fun.ball);
         ctx.restore();
         this.fun.drawScreenBanner(ctx, this.viewW, this.viewH);
         this.radar.draw(ctx, this.rocket.camX, this.rocket.camY, this.viewW, this.viewH, timeSec, this.onlineHud.getTrackedTarget());
