@@ -23,7 +23,7 @@ export class SpaceRoom extends Room {
         this.maxClients = 64;
         this.setState(new SpaceState());
         this.setPatchRate(50);
-        Object.assign(this, { projMeta: new Map(), cheeseMeta: new Map(), bumpCooldowns: new Map(), kickCooldowns: new Map(), externalSeen: new Map(), recentFx: [], fxSeq: 0, pendingImpulses: new Map(), nextProjId: 1 });
+        Object.assign(this, { projMeta: new Map(), cheeseMeta: new Map(), bumpCooldowns: new Map(), kickCooldowns: new Map(), externalSeen: new Map(), recentFx: [], fxSeq: 1, pendingImpulses: new Map(), processedActs: new Set(), nextProjId: 1 });
         this._initCheese();
         this._registerMessages();
         this.setSimulationInterval((dtMs) => this.update(dtMs / 1000), 33.3);
@@ -46,10 +46,12 @@ export class SpaceRoom extends Room {
         this.onMessage('move', (client, m) => {
             const p = this.state.players.get(client.sessionId);
             if (!p || !m) return;
+            this.externalSeen.set(client.sessionId, Date.now());
             for (const k of ['x', 'y', 'vx', 'vy']) if (typeof m[k] === 'number') p[k] = Math.round(m[k]);
             if (typeof m.angle === 'number') p.angle = Number(m.angle.toFixed(3));
             if (typeof m.isThrusting === 'boolean') p.isThrusting = m.isThrusting;
             if (typeof m.isTurbo === 'boolean') p.isTurbo = m.isTurbo;
+            if (typeof m.paintTimer === 'number' && m.paintTimer > 0 && m.paintColor) { p.paintColor = String(m.paintColor); p.paintTimer = Number(m.paintTimer); }
             if (typeof m.homeAngle === 'number') p.homeAngle = Number(m.homeAngle.toFixed(3));
             if (typeof m.facing === 'number') p.facing = m.facing;
             if (typeof m.moving === 'boolean') p.moving = m.moving;
@@ -58,10 +60,16 @@ export class SpaceRoom extends Room {
         this.onMessage('status', (client, s) => {
             const p = this.state.players.get(client.sessionId);
             if (!p || !s) return;
+            this.externalSeen.set(client.sessionId, Date.now());
             if (s.tabSid && this.state.players.has(s.tabSid)) { this.state.players.delete(s.tabSid); this.externalSeen.delete(s.tabSid); }
             if (s.playerId && p.id === client.sessionId) {
                 let pid = String(s.playerId);
-                for (const ep of this.state.players.values()) if (ep !== p && ep.id === pid) { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
+                for (const [esid, ep] of this.state.players.entries()) {
+                    if (ep !== p && ep.id === pid) {
+                        if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) { this.state.players.delete(esid); this.externalSeen.delete(esid); }
+                        else { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
+                    }
+                }
                 p.id = pid;
             }
             if (s.nickname) p.nickname = String(s.nickname).slice(0, 18);
@@ -74,9 +82,7 @@ export class SpaceRoom extends Room {
             });
         });
 
-        this.onMessage('peer_bridge', (_client, list) => {
-            if (Array.isArray(list)) list.forEach(pkt => this.syncExternalPlayer(pkt));
-        });
+        this.onMessage('peer_bridge', () => {});
 
         this.onMessage('shoot_paint', (client, d) => this.handleAction(client.sessionId, 'shoot_paint', d));
         this.onMessage('hit_asteroid', (client, d) => this.handleAction(client.sessionId, 'hit_asteroid', d));
@@ -85,33 +91,37 @@ export class SpaceRoom extends Room {
     }
 
     _emitFx(ev) {
-        this.broadcast('fx_event', ev);
-        this.recentFx.push({ ...ev, seq: ++this.fxSeq, ts: Date.now() });
+        const fullEv = { ...ev, seq: ++this.fxSeq, ts: Date.now() };
+        this.broadcast('fx_event', fullEv);
+        this.recentFx.push(fullEv);
         if (this.recentFx.length > 30) this.recentFx.shift();
     }
 
     handleAction(sessionId, type, d) {
         if (!d || !type) return;
+        if (d.actId) {
+            if (this.processedActs.has(d.actId)) return;
+            this.processedActs.add(d.actId);
+            if (this.processedActs.size > 80) this.processedActs.delete(this.processedActs.values().next().value);
+        }
         if (type === 'shoot_paint') {
-            const p = this.state.players.get(sessionId);
-            if (!p) return;
+            const p = this.state.players.get(sessionId) || Array.from(this.state.players.values()).find(ep => ep.id === d.ownerId);
             const id = String(this.nextProjId++), pr = new ProjectileState();
-            pr.id = id; pr.ownerId = sessionId;
-            pr.x = Math.round(Number(d.x) || p.x); pr.y = Math.round(Number(d.y) || p.y);
+            pr.id = id; pr.ownerId = sessionId || d.ownerId || '';
+            pr.x = Math.round(Number(d.x) || p?.x || 0); pr.y = Math.round(Number(d.y) || p?.y || 0);
             pr.vx = Math.round(Number(d.vx) || 0); pr.vy = Math.round(Number(d.vy) || 0);
             pr.color = d.color || '#f472b6';
             this.state.projectiles.set(id, pr);
-            this.projMeta.set(id, { ttl: 1.35, sessionId });
-            this._emitFx({ type: 'horn', playerId: p.id, sessionId, emoji: d.emoji || '😜', x: pr.x, y: pr.y });
+            this.projMeta.set(id, { ttl: 1.35, sessionId: pr.ownerId });
+            this._emitFx({ type: 'horn', playerId: p?.id || d.ownerId || '', sessionId: pr.ownerId, emoji: d.emoji || '😜', x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, color: pr.color, projId: id });
         } else if (type === 'hit_asteroid') {
             const id = String(d.id || ''), pr = this.state.projectiles.get(id);
-            if (!pr) return;
-            this.state.projectiles.delete(id); this.projMeta.delete(id);
-            this._emitFx({ type: 'paint_splat', x: Math.round(Number(d.x) || pr.x), y: Math.round(Number(d.y) || pr.y), color: pr.color });
+            if (pr) { this.state.projectiles.delete(id); this.projMeta.delete(id); }
+            this._emitFx({ type: 'paint_splat', x: Math.round(Number(d.x) || pr?.x || 0), y: Math.round(Number(d.y) || pr?.y || 0), color: d.color || pr?.color || '#f472b6' });
         } else if (type === 'hit_player') {
             const id = String(d.id || ''), pr = this.state.projectiles.get(id);
             if (pr) { this.state.projectiles.delete(id); this.projMeta.delete(id); }
-            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId && p.sessionId !== sessionId);
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => (p.id === d.targetId || p.id.startsWith(d.targetId + '_')) && p.sessionId !== sessionId);
             const color = d.color || pr?.color || '#f472b6';
             if (target) { target.paintColor = color; target.paintTimer = 6.0; }
             this._emitFx({
@@ -119,18 +129,19 @@ export class SpaceRoom extends Room {
                 x: Math.round(Number(d.x) || target?.x || pr?.x || 0),
                 y: Math.round(Number(d.y) || target?.y || pr?.y || 0),
                 color,
-                targetId: target?.id || d.targetId || '',
+                targetId: d.targetId || target?.id || '',
                 targetSid: target?.sessionId || d.targetSid || ''
             });
         } else if (type === 'bumper_hit') {
             const now = Date.now();
-            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => p.id === d.targetId && p.sessionId !== sessionId);
-            if (target && now - (this.bumpCooldowns.get(target.sessionId) || 0) > 220) {
-                this.bumpCooldowns.set(target.sessionId, now);
-                this.bumpCooldowns.set(sessionId, now);
+            const target = (d.targetSid && this.state.players.get(d.targetSid)) || Array.from(this.state.players.values()).find(p => (p.id === d.targetId || p.id.startsWith(d.targetId + '_')) && p.sessionId !== sessionId);
+            const tSid = target?.sessionId || d.targetSid || d.targetId || '';
+            if (now - (this.bumpCooldowns.get(tSid) || 0) > 200) {
+                this.bumpCooldowns.set(tSid, now);
+                if (sessionId) this.bumpCooldowns.set(sessionId, now);
                 const nx = Number(d.nx) || 0, ny = Number(d.ny) || 0;
-                this._sendImpulse(target, target.vx * 0.4 + nx * 320, target.vy * 0.4 + ny * 320, target.x + nx * 24, target.y + ny * 24);
-                this._emitFx({ type: 'bumper_hit', x: Math.round(Number(d.x) || target.x), y: Math.round(Number(d.y) || target.y) });
+                if (target) this._sendImpulse(target, target.vx * 0.4 + nx * 320, target.vy * 0.4 + ny * 320, target.x + nx * 24, target.y + ny * 24, nx, ny);
+                this._emitFx({ type: 'bumper_hit', x: Math.round(Number(d.x) || target?.x || 0), y: Math.round(Number(d.y) || target?.y || 0), targetId: d.targetId || target?.id || '', targetSid: tSid, nx, ny });
             }
         }
     }
@@ -138,7 +149,12 @@ export class SpaceRoom extends Room {
     onJoin(client, opts = {}) {
         if (opts.tabSid && this.state.players.has(opts.tabSid)) { this.state.players.delete(opts.tabSid); this.externalSeen.delete(opts.tabSid); }
         let pid = String(opts.playerId || client.sessionId);
-        for (const ep of this.state.players.values()) if (ep.id === pid) { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
+        for (const [esid, ep] of this.state.players.entries()) {
+            if (ep.id === pid) {
+                if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) { this.state.players.delete(esid); this.externalSeen.delete(esid); }
+                else { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
+            }
+        }
         const p = new PlayerState();
         Object.assign(p, {
             sessionId: client.sessionId, id: pid,
@@ -148,6 +164,7 @@ export class SpaceRoom extends Room {
             x: Number(opts.x) || 0, y: Number(opts.y) || 165
         });
         this.state.players.set(client.sessionId, p);
+        this.externalSeen.set(client.sessionId, Date.now());
         upsertPlayerFromPacket({
             playerId: p.id, nickname: p.nickname, skinId: p.skinId, equippedSkinId: p.skinId,
             homeSnapshot: opts.homeSnapshot || { storedCheese: p.storedCheese, planetAppearance: { biome: p.planetBiome, ringType: p.planetRing } }
@@ -157,12 +174,36 @@ export class SpaceRoom extends Room {
 
     onLeave(client) { this.state.players.delete(client.sessionId); this.externalSeen.delete(client.sessionId); }
 
+    removePlayer(sid = '', pid = '', tabSid = '') {
+        if (sid) { this.state.players.delete(sid); this.externalSeen.delete(sid); }
+        if (tabSid) { this.state.players.delete(tabSid); this.externalSeen.delete(tabSid); }
+        if (pid) {
+            for (const [esid, ep] of this.state.players.entries()) {
+                if (ep.id === pid || ep.id.startsWith(pid + '_')) { this.state.players.delete(esid); this.externalSeen.delete(esid); }
+            }
+        }
+    }
+
     syncExternalPlayer(pkt) {
-        if (!pkt?.sessionId || this.clients.some(c => c.sessionId === pkt.sessionId)) return;
+        if (!pkt?.sessionId) return;
+        this.externalSeen.set(pkt.sessionId, Date.now());
+        if (pkt.tabSid && pkt.tabSid !== pkt.sessionId && this.state.players.has(pkt.tabSid)) {
+            this.state.players.delete(pkt.tabSid); this.externalSeen.delete(pkt.tabSid);
+        }
+        if (this.clients.some(c => c.sessionId === pkt.sessionId)) {
+            const wp = this.state.players.get(pkt.sessionId);
+            if (wp && typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { wp.paintColor = String(pkt.paintColor); wp.paintTimer = Number(pkt.paintTimer); }
+            return;
+        }
         let p = this.state.players.get(pkt.sessionId);
         if (!p) {
             let pid = String(pkt.playerId || pkt.sessionId);
-            for (const ep of this.state.players.values()) if (ep.id === pid) { pid = `${pid}_${pkt.sessionId.slice(0, 4)}`; break; }
+            for (const [esid, ep] of this.state.players.entries()) {
+                if (ep.id === pid) {
+                    if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) { this.state.players.delete(esid); this.externalSeen.delete(esid); }
+                    else { pid = `${pid}_${pkt.sessionId.slice(0, 4)}`; break; }
+                }
+            }
             p = new PlayerState(); p.sessionId = pkt.sessionId; p.id = pid;
             this.state.players.set(pkt.sessionId, p);
         }
@@ -172,8 +213,8 @@ export class SpaceRoom extends Room {
         if (typeof pkt.angle === 'number') p.angle = Number(pkt.angle.toFixed(3));
         if (typeof pkt.isThrusting === 'boolean') p.isThrusting = pkt.isThrusting;
         if (typeof pkt.isTurbo === 'boolean') p.isTurbo = pkt.isTurbo;
+        if (typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { p.paintColor = String(pkt.paintColor); p.paintTimer = Number(pkt.paintTimer); }
         if (typeof pkt.storedCheese === 'number') p.storedCheese = pkt.storedCheese;
-        this.externalSeen.set(pkt.sessionId, Date.now());
     }
 
     getSyncSnapshot() {
@@ -186,18 +227,21 @@ export class SpaceRoom extends Room {
         return out;
     }
 
-    getFullSyncState(mySid = '', sinceFxSeq = 0) {
-        const b = this.state.ball, projs = [], cheese = [];
+    getFullSyncState(mySid = '', sinceFxSeq = 0, myPid = '') {
+        const b = this.state.ball, projs = [], cheese = [], now = Date.now();
         this.state.projectiles.forEach((pr, id) => projs.push({ id, ownerId: pr.ownerId, x: pr.x, y: pr.y, vx: pr.vx, vy: pr.vy, color: pr.color }));
         this.state.spaceCheese.forEach((ch, id) => cheese.push({ id: Number(id), x: ch.x, y: ch.y }));
-        const imp = mySid ? (this.pendingImpulses.get(mySid) || null) : null;
-        if (mySid && imp) this.pendingImpulses.delete(mySid);
+        const imp = (mySid && this.pendingImpulses.get(mySid)) || (myPid && this.pendingImpulses.get(myPid)) || null;
+        if (imp) {
+            if (mySid) this.pendingImpulses.delete(mySid);
+            if (myPid) this.pendingImpulses.delete(myPid);
+        }
         return {
             players: this.getSyncSnapshot(),
             ball: b ? { x: b.x, y: b.y, vx: b.vx, vy: b.vy, angle: b.angle, scoreBlue: b.scoreBlue, scorePink: b.scorePink } : null,
             projectiles: projs,
             spaceCheese: cheese,
-            fxEvents: sinceFxSeq > 0 ? this.recentFx.filter(e => e.seq > sinceFxSeq) : [],
+            fxEvents: this.recentFx.filter(e => now - e.ts < 2500 && e.seq > sinceFxSeq),
             fxSeq: this.fxSeq,
             impulse: imp
         };
@@ -206,8 +250,14 @@ export class SpaceRoom extends Room {
     update(dt) {
         this.state.serverTick = (this.state.serverTick + 1) % 1000000;
         const now = Date.now(), spacePlayers = [];
-        for (const [sid, seenAt] of this.externalSeen.entries()) {
-            if (now - seenAt > 6000) { this.state.players.delete(sid); this.externalSeen.delete(sid); }
+        for (const sid of Array.from(this.state.players.keys())) {
+            const seenAt = this.externalSeen.get(sid) || 0;
+            if (now - seenAt > 4500) {
+                this.state.players.delete(sid);
+                this.externalSeen.delete(sid);
+                const deadClient = this.clients.find(c => c.sessionId === sid);
+                if (deadClient) { try { deadClient.leave(); } catch (_) {} }
+            }
         }
         for (const p of this.state.players.values()) {
             if (p.paintTimer > 0 && (p.paintTimer = Math.max(0, Number((p.paintTimer - dt).toFixed(2)))) === 0) p.paintColor = '';
@@ -221,8 +271,8 @@ export class SpaceRoom extends Room {
                 if (d < 52 && d > 0.01 && now - lastB > 250) {
                     this.bumpCooldowns.set(a.sessionId, now); this.bumpCooldowns.set(b.sessionId, now);
                     const nx = dx / d, ny = dy / d, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-                    this._sendImpulse(a, a.vx * 0.4 + nx * 320, a.vy * 0.4 + ny * 320, mx + nx * 28, my + ny * 28);
-                    this._sendImpulse(b, b.vx * 0.4 - nx * 320, b.vy * 0.4 - ny * 320, mx - nx * 28, my - ny * 28);
+                    this._sendImpulse(a, a.vx * 0.4 + nx * 320, a.vy * 0.4 + ny * 320, mx + nx * 28, my + ny * 28, nx, ny);
+                    this._sendImpulse(b, b.vx * 0.4 - nx * 320, b.vy * 0.4 - ny * 320, mx - nx * 28, my - ny * 28, -nx, -ny);
                     this._emitFx({ type: 'bumper_hit', x: Math.round(mx), y: Math.round(my) });
                 }
             }
@@ -283,10 +333,11 @@ export class SpaceRoom extends Room {
         }
     }
 
-    _sendImpulse(p, vx, vy, x, y) {
+    _sendImpulse(p, vx, vy, x, y, nx = 0, ny = 0) {
         p.vx = Math.round(vx); p.vy = Math.round(vy); p.x = Math.round(x); p.y = Math.round(y);
-        const imp = { vx: p.vx, vy: p.vy, x: p.x, y: p.y };
+        const imp = { vx: p.vx, vy: p.vy, x: p.x, y: p.y, nx, ny };
         this.pendingImpulses.set(p.sessionId, imp);
+        if (p.id) this.pendingImpulses.set(p.id, imp);
         const client = this.clients.find(c => c.sessionId === p.sessionId);
         if (client) client.send('bumper_impulse', imp);
     }

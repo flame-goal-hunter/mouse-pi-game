@@ -19,17 +19,31 @@ export class SpaceColyseusClient {
         Object.assign(this, {
             peers: new Map(), cachedHomes: new Map(), smoother: new SpaceSmoothRender(),
             client: null, room: null, connected: false, connecting: false, tabSid,
-            lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastFxSeq: 0, pendingActions: [],
+            lastSendAt: 0, lastSyncAt: 0, syncBusy: false, lastFxSeq: 0, seenFx: new Set(), pendingActions: [],
             lastStatusSent: '', onFunEvent: null, onFxEvent: null,
             onServerImpulse: null, onInviteEvent: null, pushSubscription: null,
-            localMotion: { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, homeAngle: 0, facing: 1, moving: false }
+            localMotion: { x: 0, y: 165, vx: 0, vy: 0, angle: -Math.PI / 2, isThrusting: false, isTurbo: false, paintColor: '', paintTimer: 0, homeAngle: 0, facing: 1, moving: false }
         });
         this._loadCachedHomes();
         this._initLocalChannel();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('pagehide', () => this._sendLeave());
+            window.addEventListener('beforeunload', () => this._sendLeave());
+            document.addEventListener?.('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') this._sendLeave();
+                else { this._connect(); this._syncCrossContainer(); }
+            });
+        }
         setTimeout(() => { this._connect(); this._fetchServerHomes(); }, 50);
     }
 
     _mySid() { return this.room?.sessionId || this.tabSid; }
+
+    _sendLeave() {
+        const body = JSON.stringify({ leave: true, sessionId: this._mySid(), tabSid: this.tabSid, playerId: PlayerProfile.playerId });
+        try { navigator.sendBeacon?.('/api/space-sync', new Blob([body], { type: 'application/json' })); } catch (_) {}
+        if (this.room) { try { this.room.leave(); } catch (_) {} this.room = null; this.connected = false; }
+    }
 
     _initLocalChannel() {
         try {
@@ -37,9 +51,6 @@ export class SpaceColyseusClient {
             this.bc.onmessage = (e) => {
                 if (e.data && e.data.sessionId !== this._mySid() && e.data.tabSid !== this.tabSid) {
                     this.smoother.onExternalPeer(e.data, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid);
-                    if (this.connected && this.room && !this.room.state?.players?.has?.(e.data.sessionId)) {
-                        try { this.room.send('peer_bridge', [e.data]); } catch (_) {}
-                    }
                 }
             };
         } catch (_) {}
@@ -52,7 +63,8 @@ export class SpaceColyseusClient {
             skinId: PlayerProfile.equippedSkinId, activityStatus: PlayerProfile.currentLocation || 'space',
             storedCheese: PlayerProfile.storedCheese, planetBiome: snap.planetAppearance?.biome || 'cheese', planetRing: snap.planetAppearance?.ringType || 'none',
             x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
-            angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo), homeSnapshot: snap
+            angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
+            paintColor: m.paintColor || '', paintTimer: Number(m.paintTimer) || 0, homeSnapshot: snap
         };
     }
 
@@ -146,12 +158,19 @@ export class SpaceColyseusClient {
 
     _handleFxEvent(ev) {
         if (!ev) return;
+        const fxKey = ev.seq ? `${ev.type}_${ev.seq}_${ev.ts || 0}` : '';
+        if (fxKey) {
+            if (this.seenFx.has(fxKey)) return;
+            this.seenFx.add(fxKey);
+            if (this.seenFx.size > 80) this.seenFx.delete(this.seenFx.values().next().value);
+        }
         if (ev.type === 'invite') {
             if (ev.toId === PlayerProfile.playerId && this.onInviteEvent) this.onInviteEvent(ev);
             return;
         }
         if (ev.type === 'horn' && ev.playerId && ev.playerId !== PlayerProfile.playerId) {
-            this.peers.get(ev.playerId)?.triggerHorn(ev.emoji);
+            const peer = this.peers.get(ev.playerId) || Array.from(this.peers.values()).find(p => p.sessionId === ev.sessionId || p.playerId === ev.playerId);
+            peer?.triggerHorn(ev.emoji);
         }
         if (this.onFxEvent) this.onFxEvent(ev);
     }
@@ -179,23 +198,23 @@ export class SpaceColyseusClient {
             if (res.ok) {
                 const data = await res.json();
                 if (!this.connected) SpaceNetDebug.onPatch('http_sync');
-                if (typeof data?.fxSeq === 'number') {
-                    if (this.lastFxSeq > 0 && Array.isArray(data.fxEvents)) data.fxEvents.forEach(ev => this._handleFxEvent(ev));
-                    this.lastFxSeq = data.fxSeq;
-                }
+                if (Array.isArray(data?.fxEvents)) data.fxEvents.forEach(ev => this._handleFxEvent(ev));
+                if (typeof data?.fxSeq === 'number') this.lastFxSeq = data.fxSeq;
                 if (data?.impulse && this.onServerImpulse) this.onServerImpulse(data.impulse);
                 if (Array.isArray(data?.players)) {
-                    const missing = [];
+                    const seenSids = new Set();
                     for (const p of data.players) {
                         if (!p || p.sessionId === this._mySid() || p.sessionId === this.tabSid || p.tabSid === this.tabSid) continue;
+                        seenSids.add(p.sessionId || p.playerId);
                         this.smoother.onExternalPeer(p, this._mySid(), this.peers, (h) => this._saveCachedHome(h), this.connected, this.tabSid, true);
-                        if (this.connected && this.room && !this.room.state?.players?.has?.(p.sessionId)) missing.push(p);
+                    }
+                    for (const [k, pr] of Array.from(this.peers.entries())) {
+                        if ((pr.isExternal || !this.connected) && !seenSids.has(pr.sessionId) && !seenSids.has(k) && Date.now() - (pr.lastSeen || 0) > 1500) {
+                            this.peers.delete(k);
+                        }
                     }
                     if (!this.connected) {
                         this.smoother.commitExternalSnapshot(this.peers, data.ball, data.projectiles, data.spaceCheese);
-                    }
-                    if (missing.length && this.connected && this.room) {
-                        try { this.room.send('peer_bridge', missing); } catch (_) {}
                     }
                 }
             }
@@ -203,10 +222,11 @@ export class SpaceColyseusClient {
     }
 
     sendAction(type, data) {
+        const payload = { ...data, actId: Math.random().toString(36).slice(2, 9) };
         if (this.connected && this.room) {
-            try { this.room.send(type, data); return; } catch (_) {}
+            try { this.room.send(type, payload); } catch (_) {}
         }
-        this.pendingActions.push({ type, data });
+        this.pendingActions.push({ type, data: payload });
     }
 
     shootPaint(shot) {
@@ -226,6 +246,7 @@ export class SpaceColyseusClient {
                     this.room.send('move', {
                         x: Math.round(m.x), y: Math.round(m.y), vx: Math.round(m.vx), vy: Math.round(m.vy),
                         angle: Number(m.angle.toFixed(3)), isThrusting: Boolean(m.isThrusting), isTurbo: Boolean(m.isTurbo),
+                        paintColor: m.paintColor || '', paintTimer: Number(m.paintTimer) || 0,
                         homeAngle: Number((m.homeAngle || 0).toFixed(3)), facing: m.facing || 1, moving: Boolean(m.moving)
                     });
                     SpaceNetDebug.onSend();

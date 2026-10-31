@@ -21,9 +21,14 @@ export class SpaceFun {
         SpaceNetwork.onFunEvent = (ev) => this._onNetEvent(ev);
         SpaceNetwork.onFxEvent = (ev) => this._onServerFx(ev);
         SpaceNetwork.onServerImpulse = (imp) => {
-            this.rocket.applyServerImpulse(imp);
-            this.shakeTime = 0.22;
-            SpaceAudio.playBumperBounce();
+            if (performance.now() - this.lastBumpAt > 200) {
+                this.lastBumpAt = performance.now();
+                if (imp.nx || imp.ny) this.rocket.bounceOff(imp.nx, imp.ny, 310);
+                else this.rocket.applyServerImpulse(imp);
+                this._spawnSplat(this.rocket.x, this.rocket.y, '#fde047', 14, false);
+                this.shakeTime = 0.22;
+                SpaceAudio.playBumperBounce();
+            }
         };
     }
 
@@ -33,8 +38,8 @@ export class SpaceFun {
         SpaceAudio.playHorn();
         SpaceAudio.playPaintShoot();
         const sx = r.x + Math.cos(r.angle) * 30, sy = r.y + Math.sin(r.angle) * 30;
-        const shot = { ownerId: PlayerProfile.playerId, x: Math.round(sx), y: Math.round(sy), vx: Math.round(r.vx * 0.35 + Math.cos(r.angle) * 690), vy: Math.round(r.vy * 0.35 + Math.sin(r.angle) * 690), color, emoji, life: 1.35 };
-        if (!SpaceNetwork.connected) this._spawnShot(shot);
+        const shot = { ownerId: PlayerProfile.playerId, ownerSid: SpaceNetwork._mySid?.() || '', x: Math.round(sx), y: Math.round(sy), vx: Math.round(r.vx * 0.35 + Math.cos(r.angle) * 690), vy: Math.round(r.vy * 0.35 + Math.sin(r.angle) * 690), color, emoji, life: 1.35 };
+        this._spawnShot(shot);
         SpaceNetwork.shootPaint(shot);
     }
 
@@ -51,9 +56,12 @@ export class SpaceFun {
     }
 
     _applyPaintToRocket(targetId, color, x, y, targetSid = '') {
+        const now = performance.now(), key = `${targetId || targetSid}_${color}`;
+        if (this.lastPaintKey === key && now - (this.lastPaintAt || 0) < 220) return;
+        this.lastPaintKey = key; this.lastPaintAt = now;
         this._spawnSplat(x, y, color, 20, false); SpaceAudio.playPaintSplat();
-        const mySid = SpaceNetwork._mySid?.() || '';
-        if ((targetSid && targetSid === mySid) || (!targetSid && targetId === PlayerProfile.playerId)) {
+        const mySid = SpaceNetwork._mySid?.() || '', myPid = PlayerProfile.playerId;
+        if ((targetSid && (targetSid === mySid || targetSid === SpaceNetwork.tabSid)) || (targetId && (targetId === myPid || String(targetId).startsWith(myPid + '_')))) {
             Object.assign(this.rocket, { paintColor: color, paintTimer: 6.0, spinTimer: 1.0, flipTimer: 0.65 });
         } else {
             const peer = SpaceNetwork.peers.get(targetId) || Array.from(SpaceNetwork.peers.values()).find(p => p.sessionId === targetSid || p.playerId === targetId);
@@ -63,12 +71,19 @@ export class SpaceFun {
 
     _onServerFx(ev) {
         if (!ev?.type) return;
+        const mySid = SpaceNetwork._mySid?.() || '', myPid = PlayerProfile.playerId;
         if (ev.type === 'paint_splat') {
             if (ev.targetId || ev.targetSid) this._applyPaintToRocket(ev.targetId, ev.color || '#f472b6', ev.x, ev.y, ev.targetSid);
             else { this._spawnSplat(ev.x, ev.y, ev.color || '#f472b6', 14, false); SpaceAudio.playPaintSplat(); }
         } else if (ev.type === 'bumper_hit') {
-            this._spawnSplat(ev.x, ev.y, '#fde047', 8, false, 3.5);
-            this.shakeTime = Math.max(this.shakeTime, 0.14);
+            this._spawnSplat(ev.x, ev.y, '#fde047', 14, false, 3.5);
+            if ((ev.targetSid && (ev.targetSid === mySid || ev.targetSid === SpaceNetwork.tabSid)) || (ev.targetId && (ev.targetId === myPid || String(ev.targetId).startsWith(myPid + '_')))) {
+                if (performance.now() - this.lastBumpAt > 200) {
+                    this.lastBumpAt = performance.now();
+                    if (ev.nx || ev.ny) this.rocket.bounceOff(ev.nx, ev.ny, 310);
+                }
+            }
+            this.shakeTime = Math.max(this.shakeTime, 0.18);
             SpaceAudio.playBumperBounce();
         } else if (ev.type === 'goal') {
             if (ev.score) this.score = ev.score;
@@ -79,7 +94,13 @@ export class SpaceFun {
         } else if (ev.type === 'cheese_picked') {
             this.env?.onServerCheesePicked(ev);
         } else if (ev.type === 'horn') {
-            if (ev.playerId !== PlayerProfile.playerId) SpaceAudio.playHorn();
+            if (ev.playerId !== myPid && ev.sessionId !== mySid) {
+                SpaceAudio.playHorn();
+                SpaceAudio.playPaintShoot();
+                if (typeof ev.vx === 'number' && typeof ev.vy === 'number') {
+                    this.shots.push({ id: ev.projId, ownerId: ev.playerId || ev.sessionId, ownerSid: ev.sessionId, x: ev.x, y: ev.y, vx: ev.vx, vy: ev.vy, color: ev.color || '#f472b6', life: 1.35 });
+                }
+            }
             this.Emotes.push({ x: ev.x || 0, y: (ev.y || 0) - 36, text: ev.emoji || '😜', life: 1.2 });
         }
     }
@@ -170,9 +191,16 @@ export class SpaceFun {
         for (let i = this.shots.length - 1; i >= 0; i--) {
             const s = this.shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
             let hit = false;
-            const hitPeer = peers.find(p => p.playerId !== s.ownerId && Math.hypot(s.x - (p.renderX ?? p.x), s.y - (p.renderY ?? p.y)) < 36);
+            if (s.ownerId !== PlayerProfile.playerId && s.ownerSid !== mySid && Math.hypot(s.x - r.x, s.y - r.y) < 36) {
+                this._applyPaintToRocket(PlayerProfile.playerId, s.color, r.x, r.y, mySid);
+                SpaceNetwork.sendAction('hit_player', { id: s.id, targetSid: mySid, targetId: PlayerProfile.playerId, color: s.color, x: Math.round(r.x), y: Math.round(r.y) });
+                hit = true;
+            }
+            const hitPeer = !hit && peers.find(p => p.playerId !== s.ownerId && p.sessionId !== s.ownerSid && Math.hypot(s.x - (p.renderX ?? p.x), s.y - (p.renderY ?? p.y)) < 36);
             if (hitPeer) {
-                this._applyPaintToRocket(hitPeer.playerId, s.color, hitPeer.renderX ?? hitPeer.x, hitPeer.renderY ?? hitPeer.y, hitPeer.sessionId);
+                const hx = hitPeer.renderX ?? hitPeer.x, hy = hitPeer.renderY ?? hitPeer.y;
+                this._applyPaintToRocket(hitPeer.playerId, s.color, hx, hy, hitPeer.sessionId);
+                SpaceNetwork.sendAction('hit_player', { id: s.id, targetSid: hitPeer.sessionId, targetId: hitPeer.playerId, color: s.color, x: Math.round(hx), y: Math.round(hy) });
                 hit = true;
             }
             if (!hit && this.env?.asteroids) for (const a of this.env.asteroids) if (Math.hypot(s.x - a.x, s.y - a.y) < a.r + 8) {
@@ -210,8 +238,8 @@ export class SpaceFun {
         ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
 
-        const netProjectiles = SpaceNetwork.smoother?.smoothProjectiles || [];
-        const allShots = netProjectiles.length ? netProjectiles : this.shots;
+        const netProjectiles = (SpaceNetwork.smoother?.smoothProjectiles || []).filter(np => !this.shots.some(ls => ls.id && String(ls.id) === String(np.id)));
+        const allShots = [...this.shots, ...netProjectiles];
         for (const s of allShots) { ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
         for (const f of this.fx) { ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.color; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * f.life, 0, Math.PI * 2); ctx.fill(); }
         ctx.globalAlpha = 1;

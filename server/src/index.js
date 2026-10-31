@@ -93,11 +93,14 @@ app.post('/api/invite', async (req, res) => {
 
 app.post('/api/space-sync', (req, res) => {
     if (activeSpaceRoom) {
-        const sid = req.body?.player?.sessionId || '';
+        if (req.body?.leave) {
+            activeSpaceRoom.removePlayer(req.body.sessionId || '', req.body.playerId || '', req.body.tabSid || '');
+            return res.json({ ok: true });
+        }
+        const sid = req.body?.player?.sessionId || '', pid = req.body?.player?.playerId || '';
         if (req.body?.player) activeSpaceRoom.syncExternalPlayer(req.body.player);
-        if (Array.isArray(req.body?.peers)) req.body.peers.forEach(p => activeSpaceRoom.syncExternalPlayer(p));
         if (Array.isArray(req.body?.actions)) req.body.actions.forEach(a => activeSpaceRoom.handleAction(sid, a.type, a.data));
-        return res.json({ ok: true, ...activeSpaceRoom.getFullSyncState(sid, Number(req.body?.fxSeq) || 0) });
+        return res.json({ ok: true, ...activeSpaceRoom.getFullSyncState(sid, Number(req.body?.fxSeq) || 0, pid) });
     }
     res.json({ ok: true, players: [] });
 });
