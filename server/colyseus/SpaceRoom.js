@@ -74,13 +74,10 @@ export class SpaceRoom extends Room {
             if (!p || !s) return;
             this.externalSeen.set(client.sessionId, Date.now());
             if (s.tabSid && this.state.players.has(s.tabSid)) this.removePlayer(s.tabSid);
-            if (s.playerId && p.id === client.sessionId) {
-                let pid = String(s.playerId);
+            if (s.playerId) {
+                const pid = String(s.playerId);
                 for (const [esid, ep] of this.state.players.entries()) {
-                    if (ep !== p && ep.id === pid) {
-                        if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) this.removePlayer(esid);
-                        else { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
-                    }
+                    if (ep !== p && (ep.id === pid || ep.id.startsWith(pid + '_'))) this.removePlayer(esid);
                 }
                 p.id = pid;
             }
@@ -159,12 +156,9 @@ export class SpaceRoom extends Room {
 
     onJoin(client, opts = {}) {
         if (opts.tabSid && this.state.players.has(opts.tabSid)) this.removePlayer(opts.tabSid);
-        let pid = String(opts.playerId || client.sessionId);
+        const pid = String(opts.playerId || client.sessionId);
         for (const [esid, ep] of this.state.players.entries()) {
-            if (ep.id === pid) {
-                if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) this.removePlayer(esid);
-                else { pid = `${pid}_${client.sessionId.slice(0, 4)}`; break; }
-            }
+            if (ep.id === pid || ep.id.startsWith(pid + '_')) this.removePlayer(esid);
         }
         const p = new PlayerState();
         Object.assign(p, {
@@ -199,21 +193,21 @@ export class SpaceRoom extends Room {
 
     syncExternalPlayer(pkt) {
         if (!pkt?.sessionId) return;
-        this.externalSeen.set(pkt.sessionId, Date.now());
+        const pid = String(pkt.playerId || pkt.sessionId);
         if (pkt.tabSid && pkt.tabSid !== pkt.sessionId && this.state.players.has(pkt.tabSid)) this.removePlayer(pkt.tabSid);
-        if (this.clients.some(c => c.sessionId === pkt.sessionId)) {
-            const wp = this.state.players.get(pkt.sessionId);
-            if (wp && typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { wp.paintColor = String(pkt.paintColor); wp.paintTimer = Number(pkt.paintTimer); }
+        const wsEntry = Array.from(this.state.players.entries()).find(([sid, ep]) => (sid === pkt.sessionId || ep.id === pid) && this.clients.some(c => c.sessionId === sid));
+        if (wsEntry) {
+            const [wsSid, wp] = wsEntry;
+            this.externalSeen.set(wsSid, Date.now());
+            if (pkt.sessionId !== wsSid && this.state.players.has(pkt.sessionId)) this.removePlayer(pkt.sessionId);
+            if (typeof pkt.paintTimer === 'number' && pkt.paintTimer > 0 && pkt.paintColor) { wp.paintColor = String(pkt.paintColor); wp.paintTimer = Number(pkt.paintTimer); }
             return;
         }
+        this.externalSeen.set(pkt.sessionId, Date.now());
         let p = this.state.players.get(pkt.sessionId);
         if (!p) {
-            let pid = String(pkt.playerId || pkt.sessionId);
             for (const [esid, ep] of this.state.players.entries()) {
-                if (ep.id === pid) {
-                    if (Date.now() - (this.externalSeen.get(esid) || 0) > 2500) this.removePlayer(esid);
-                    else { pid = `${pid}_${pkt.sessionId.slice(0, 4)}`; break; }
-                }
+                if (ep.id === pid || ep.id.startsWith(pid + '_')) this.removePlayer(esid);
             }
             p = new PlayerState(); p.sessionId = pkt.sessionId; p.id = pid;
             this.state.players.set(pkt.sessionId, p);

@@ -56,14 +56,14 @@ export class ClientWorldSync {
 
     _syncPeer(p, sessionId, mySessionId, myTabSid, peersMap, onSaveHome) {
         if (!p) return null;
-        if (sessionId === mySessionId || (myTabSid && (sessionId === myTabSid || p.tabSid === myTabSid))) {
-            if (!this.myBody.docking && Math.hypot((Number(p.x) || 0) - this.myBody.x, (Number(p.y) || 0) - this.myBody.y) > 300) {
+        const pid = String(p.playerId || p.id || sessionId);
+        const myPid = typeof window !== 'undefined' ? window.PlayerProfile?.playerId : '';
+        if (sessionId === mySessionId || (myTabSid && (sessionId === myTabSid || p.tabSid === myTabSid)) || (myPid && (pid === myPid || pid.startsWith(myPid + '_')))) {
+            if (sessionId === mySessionId && !this.myBody.docking && Math.hypot((Number(p.x) || 0) - this.myBody.x, (Number(p.y) || 0) - this.myBody.y) > 300) {
                 this._applyServerBody(this.myBody, p, false);
             }
             return null;
         }
-        const rawId = p.playerId || p.id || sessionId;
-        const pid = (typeof window !== 'undefined' && rawId === window.PlayerProfile?.playerId) ? `${rawId}_${String(sessionId).slice(0, 4)}` : rawId;
         const pkt = {
             playerId: pid, sessionId, nickname: p.nickname || 'Пи',
             skinId: p.skinId || p.equippedSkinId || 'blue', equippedSkinId: p.skinId || p.equippedSkinId || 'blue',
@@ -169,3 +169,4 @@ export class ClientWorldSync {
         }
     }
 }
+
